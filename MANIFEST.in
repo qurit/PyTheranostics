@@ -1,0 +1,3 @@
+include doodle/kernels/*.hdr
+include doodle/kernels/*.img
+include doodle/kernels/*.dcm
