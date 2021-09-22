@@ -1,0 +1,18 @@
+{
+    "Lu177":{
+        "half_life":6.647,
+        "half_life_units":"days",
+        "nwin":4,
+        "windows_kev":{
+            "photopeak":[187.2,208,228.8],
+            "low_scatter":[166.4,176.8,187.2],
+            "upper_scatter":[228.8,239.2,249.6],
+            "general_scatter":[55,110,165] 
+        },
+        "planar":{
+            "duration":5,
+            "matrix":[256,256],
+            "zoom":[1, 1]
+        }
+    }
+}
