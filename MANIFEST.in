@@ -1,3 +1,4 @@
 include doodle/kernels/*.hdr
 include doodle/kernels/*.img
 include doodle/kernels/*.dcm
+include doodle/isotope_data/*.json
