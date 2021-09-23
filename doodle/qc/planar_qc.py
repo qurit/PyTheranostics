@@ -67,13 +67,13 @@ class PlanarQC(QC):
         # check if any perc_diff are higher than 2%
         if (perc_diff_df.abs()>win_perdiff_max).any(axis=None):
             self.append_to_summary(f'There are differences in the energy window settings that are higher than {win_perdiff_max} %.\nPlease see below:      MISMATCH\n\n')
-            self.append_to_summary(f'{self.window_check_df.to_string()}')
+            # self.append_to_summary(f'{self.window_check_df.to_string()}')
         elif (perc_diff_df.abs()!=0).any(axis=None):
             self.append_to_summary(f'There are differences in the energy window settings but are minimal and acceptable.\nPlease see below:      VERIFY\n\n')
-            self.append_to_summary(f'{self.window_check_df.to_string()}')
+            # self.append_to_summary(f'{self.window_check_df.to_string()}')
         else:
             self.append_to_summary(f'The energy window settings are set as expected      OK\n\n')
-            self.append_to_summary(f'{self.window_check_df.to_string()}')
+            # self.append_to_summary(f'{self.window_check_df.to_string()}')
 
         self.print_summary()
 
