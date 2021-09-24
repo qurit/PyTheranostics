@@ -7,23 +7,10 @@ import numpy as np
 
 class DosecalQC(QC):
     
-    def __init__(self,isotope,db_file,sheet_names,header,site_id):
+    def __init__(self,isotope,db_dic,cal_type='dc'):
         self.db_df = {}
-        super().__init__(isotope)
-        db_df = pd.read_excel(db_file,sheet_name=sheet_names,header=header)
-        cal_forms = db_df[sheet_names[0]]
-        ref_shipped = db_df[sheet_names[1]]
-
-   
-        #convert columns of date and time to datetime
-        cal_forms['measurement_datetime'] = pd.to_datetime(cal_forms['measurement_datetime'], format='%Y%m%d %H:%M')
-        ref_shipped['ref_datetime'] = pd.to_datetime(ref_shipped['ref_datetime'], format='%Y%m%d %H:%M')
-
-        # only look at the center being qualified
-        self.db_df['cal_data'] = cal_forms[(cal_forms.site_id == site_id) & (cal_forms.cal_type == 'dc')]
-        self.db_df['shipped_data'] = ref_shipped[(ref_shipped.site_id == site_id)]
-
-        
+        super().__init__(isotope,db_dic=db_dic,cal_type=cal_type)
+                
 
     def check_calibration(self,accepted_percent=1.5,accepted_recovery=(97,103)):
 
