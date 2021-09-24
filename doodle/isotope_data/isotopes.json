@@ -9,9 +9,21 @@
             "upper_scatter":[228.8,239.2,249.6],
             "general_scatter":[55,110,165] 
         },
+        "accepted_collimators":["MELP"],
         "planar":{
             "duration":5,
             "matrix":[256,256],
+            "zoom":[1, 1]
+        },
+        "raw":{
+            "n_proj":{"siemens":96,"ge":90},
+            "matrix":[128,128],
+            "duration_per_proj":15,
+            "detector_motion":"STEP AND SHOOT"
+        },
+        "spect":{
+            "corrections":["ATTN","SCAT"],
+            "matrix":[128,128],
             "zoom":[1, 1]
         }
     }
