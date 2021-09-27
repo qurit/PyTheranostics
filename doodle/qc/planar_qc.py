@@ -33,15 +33,15 @@ class PlanarQC(QC):
         cols = self.ds.Columns
         zoom = self.ds.DetectorInformationSequence[0].ZoomFactor
 
-        self.append_to_summary(f'CAMERA: {camera_manufacturer} {camera_model}\n')
-        self.append_to_summary(f'MODALITY: {modality}\n')
-        self.append_to_summary(f'Scan performed on {acquisition_date} at {acquisition_time}\n\n')
+        self.append_to_summary(f'CAMERA: {camera_manufacturer} {camera_model}\t \n')
+        self.append_to_summary(f'MODALITY: {modality}\t \n')
+        self.append_to_summary(f'Scan performed on: {acquisition_date} at {acquisition_time}\t \n\n')
 
         #check duration
         if round(duration) == self.isotope_dic['planar']['duration']:
-            self.append_to_summary(f'SCAN DURATION: {round(duration)} minutes       OK\n\n')
+            self.append_to_summary(f'SCAN DURATION: {round(duration)} minutes\tOK\n\n')
         else:
-            self.append_to_summary(f'SCAN DURATION: {duration} minutes     MISMATCH (should be {self.isotope_dic["planar"]["duration"]} mins)\n\n')
+            self.append_to_summary(f'SCAN DURATION: {duration} minutes (should be {self.isotope_dic["planar"]["duration"]} mins)\tMISMATCH\n\n')
                 
         #check windows
         self.window_check_df = self.window_check(type='planar') 
@@ -49,18 +49,18 @@ class PlanarQC(QC):
         #check collimator
         accepted_collimators = self.isotope_dic['accepted_collimators']
         if (len(self.db_df['cal_data']['collimator'].unique()) == 1) & (self.db_df['cal_data']['collimator'].unique()[0] in accepted_collimators):
-            self.append_to_summary(f"COLLIMATOR: {self.db_df['cal_data']['collimator'].unique()[0]}         OK\n\n")
+            self.append_to_summary(f"COLLIMATOR: {self.db_df['cal_data']['collimator'].unique()[0]}\t         OK\n\n")
         else:
-            self.append_to_summary(f"COLLIMATOR: {self.db_df['cal_data']['collimator'].unique()[0]} is not in the accepted collimator list.         VERIFY\n\n")
+            self.append_to_summary(f"COLLIMATOR: {self.db_df['cal_data']['collimator'].unique()[0]} is not in the accepted collimator list.\t         VERIFY\n\n")
 
         #check matrix size
         if [rows,cols] == self.isotope_dic['planar']['matrix']:
-            self.append_to_summary(f'MATRIX SIZE: {rows} x {cols}         OK\n')
+            self.append_to_summary(f'MATRIX SIZE: {rows} x {cols}\t         OK\n')
         else:
-            self.append_to_summary(f'MATRIX SIZE: {rows} x {cols}     MISMATCH (should be {self.isotope_dic["planar"]["matrix"][0]} x {self.isotope_dic["planar"]["matrix"][1]}\n')
+            self.append_to_summary(f'MATRIX SIZE: {rows} x {cols} (should be {self.isotope_dic["planar"]["matrix"][0]} x {self.isotope_dic["planar"]["matrix"][1]}\t MISMATCH\n')
 
         #check zoom
         if zoom == self.isotope_dic['planar']['zoom']:
-            self.append_to_summary(f'ZOOM: {zoom}                   OK\n\n')
+            self.append_to_summary(f'ZOOM: {zoom}\t                   OK\n\n')
         else:
-            self.append_to_summary(f'ZOOM: {zoom}              MISMATCH (should be {self.isotope_dic["planar"]["zoom"]}\n\n')
+            self.append_to_summary(f'ZOOM: {zoom} (should be {self.isotope_dic["planar"]["zoom"]}\tMISMATCH\n\n')

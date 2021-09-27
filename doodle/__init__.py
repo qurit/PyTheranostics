@@ -6,6 +6,10 @@ from doodle.qc.dosecal_qc import (
     DosecalQC
 )
 
+from doodle.qc.spect_qc import (
+    SPECTQC
+)
+
 from doodle.shared.radioactive_decay import (
     decay_act
 )

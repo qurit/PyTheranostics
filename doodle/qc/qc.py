@@ -2,6 +2,8 @@ from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
+from io import StringIO
+
 
 this_dir=Path(__file__).resolve().parent.parent
 ISOTOPE_DATA_FILE = Path(this_dir,"isotope_data","isotopes.json")
@@ -54,7 +56,7 @@ class QC:
         if type == 'planar':
             ds = self.ds
         elif type == 'spect':
-            ds = self.recon_file
+            ds = self.recon_ds
         elif type == 'raw':
             ds = self.proj_ds
 
@@ -77,11 +79,16 @@ class QC:
         # find which expected windows are not in the current dataset, and which windows are in both
         missing_win_keys = list(set(self.isotope_dic['windows_kev'].keys()) - set(win_check))
         common_win_keys = set(self.isotope_dic['windows_kev'].keys()).intersection(set(win_check))
-
-        if missing_win_keys:
-            self.append_to_summary(f'The dataset is missing a window for {missing_win_keys}     MISMATCH\n\n')
+        
+        if type != 'spect':
+            if missing_win_keys:
+                self.append_to_summary(f'The dataset is missing a window for {missing_win_keys}.\tMISMATCH\n')
+            else:
+                self.append_to_summary('The dataset contains all the expected energy windows.\tOK\n')
         else:
-            self.append_to_summary('The dataset contains all the expected energy windows.      OK\n\n')
+            if 'photopeak' in common_win_keys:
+                self.append_to_summary(f"The reconstructed image is for the correct photopeak, centered at {win_check['photopeak'][1]} keV.\tOK\n")
+
 
         # find differences between common windows
         win_perc_dif = {}
@@ -102,20 +109,23 @@ class QC:
         
         arrays = [['expected','expected','expected','configured','configured','configured','perc_diff','perc_diff','perc_diff'],['min','center','upper','min','center','upper','min','center','upper']]
         
-        
-        # check if any perc_diff are higher than 2%
-        if (perc_diff_df.abs()>win_perdiff_max).any(axis=None):
-            self.append_to_summary(f'There are differences in the energy window settings that are higher than {win_perdiff_max} %.\nPlease see below:      MISMATCH\n\n')
-            # self.append_to_summary(f'{self.window_check_df.to_string()}')
-        elif (perc_diff_df.abs()!=0).any(axis=None):
-            self.append_to_summary(f'There are differences in the energy window settings but are minimal and acceptable.\nPlease see below:      VERIFY\n\n')
-            # self.append_to_summary(f'{self.window_check_df.to_string()}')
-        else:
-            self.append_to_summary(f'The energy window settings are set as expected      OK\n\n')
-            # self.append_to_summary(f'{self.window_check_df.to_string()}')
+        if type != 'spect':
+            # check if any perc_diff are higher than 2%
+            if (perc_diff_df.abs()>win_perdiff_max).any(axis=None):
+                self.append_to_summary(f'There are differences in the energy window settings that are higher than {win_perdiff_max} %.\nPlease see below:\t       MISMATCH\n\n')
+                # self.append_to_summary(f'{self.window_check_df.to_string()}')
+            elif (perc_diff_df.abs()!=0).any(axis=None):
+                self.append_to_summary(f'There are differences in the energy window settings but are minimal and acceptable.\t       VERIFY\n\n')
+                # self.append_to_summary(f'{self.window_check_df.to_string()}')
+            else:
+                self.append_to_summary(f'The energy window settings are set as expected.\t       OK\n\n')
+                # self.append_to_summary(f'{self.window_check_df.to_string()}')
 
         window_check_df = pd.concat([protocol_df,win_df, perc_diff_df],axis=1)
         window_check_df.columns = pd.MultiIndex.from_arrays(arrays)
+
+        if type == 'spect':
+            window_check_df.dropna(inplace=True)
 
         return window_check_df
     
@@ -124,8 +134,11 @@ class QC:
         self.summary = self.summary + text
     
     def print_summary(self):
-        print(self.summary)
-
-             
-
-        
+        # print(self.summary)
+        summary = StringIO(self.summary)
+        self.summary_df = pd.read_csv(summary,sep='\t')
+        # print(self.summary_df.columns[0])
+        cols = self.summary_df.columns[0]
+        # print(cols)
+        self.summary_df.style.set_properties(subset=[cols],**{'width': '500px'},**{'text-align': 'left'}).hide_index()
+        # print(self.summary)
