@@ -9,7 +9,7 @@
             "upper_scatter":[228.8,239.2,249.6],
             "general_scatter":[55,110,165] 
         },
-        "accepted_collimators":["MELP"],
+        "accepted_collimators":["MELP","MEGP","MEGL"],
         "planar":{
             "duration":5,
             "matrix":[256,256],
