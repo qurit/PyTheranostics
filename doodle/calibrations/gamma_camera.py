@@ -42,6 +42,15 @@ class GammaCamera(PlanarQC):
                     camera_model = 'Intevo'
                 else:
                     camera_model = 'Symbia T'
+            elif kwargs['site_id'] == 'CAHJ':
+                if self.ds.ManufacturerModelName == 'Tandem_870_DR':
+                    camera_model = 'Discovery 870'
+            elif kwargs['site_id'] == 'CAGQ':
+                if self.ds.ManufacturerModelName == 'Encore2':
+                    camera_model = 'Symbia T6'
+            elif kwargs['site_id'] == 'CAGA':
+                if self.ds.ManufacturerModelName == 'Encore2':
+                    camera_model = 'Intevo T6'
 
          # find activity of source        
         if 'site_id' in kwargs:
@@ -129,7 +138,8 @@ class GammaCamera(PlanarQC):
         self.cal_dic = {}
         self.cal_dic[kwargs['site_id']] = {}
         self.cal_dic[kwargs['site_id']][camera_model] = {}
-        self.cal_dic[kwargs['site_id']][camera_model]['manufacturer'] = self.ds.Manufacturer
+        self.cal_dic[kwargs['site_id']][camera_model]['manufacturer'] = df2.manufacturer.values[0]
+        self.cal_dic[kwargs['site_id']][camera_model]['collimator'] = df2.collimator.values[0]
         self.cal_dic[kwargs['site_id']][camera_model]['sensitivity'] = sensitivity
         self.cal_dic[kwargs['site_id']][camera_model]['calibration_factor'] = calibration_factor
 
