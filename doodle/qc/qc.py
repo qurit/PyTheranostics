@@ -3,10 +3,12 @@ import json
 import numpy as np
 import pandas as pd
 from io import StringIO
+from doodle.shared.radioactive_decay import decay_act
+from doodle.shared.evaluation_metrics import perc_diff
 
 
 this_dir=Path(__file__).resolve().parent.parent
-ISOTOPE_DATA_FILE = Path(this_dir,"isotope_data","isotopes.json")
+ISOTOPE_DATA_FILE = Path(this_dir,"data","isotopes.json")
 
 
 class QC:
@@ -22,6 +24,8 @@ class QC:
                     site_id       
         '''
 
+        self.db_df = {}
+
         with open(ISOTOPE_DATA_FILE) as f:
             self.isotope_dic = json.load(f)
 
@@ -33,22 +37,40 @@ class QC:
             db_file = kwargs['db_dic']['db_file']
             sheet_names = kwargs['db_dic']['sheet_names']
             header = kwargs['db_dic']['header']
-            site_id = kwargs['db_dic']['site_id']
+            if 'site_id' in kwargs['db_dic']:
+                site_id = kwargs['db_dic']['site_id']
 
-            cal_type = kwargs['cal_type']
+            if 'cal_type' in kwargs:
+                cal_type = kwargs['cal_type']
 
             db_df = pd.read_excel(db_file,sheet_name=sheet_names,header=header)
+            
+            if 'calibration_data' in db_df.keys():
+                cal_forms = db_df[sheet_names[0]]
 
-            cal_forms = db_df[sheet_names[0]]
-            ref_shipped = db_df[sheet_names[1]]
+                #convert columns of date and time to datetime
+                cols = ['measurement_datetime', 'ref_time']
 
-             #convert columns of date and time to datetime
-            cal_forms['measurement_datetime'] = pd.to_datetime(cal_forms['measurement_datetime'], format='%Y%m%d %H:%M')
-            ref_shipped['ref_datetime'] = pd.to_datetime(ref_shipped['ref_datetime'], format='%Y%m%d %H:%M')
+                for c in cols:
+                    cal_forms[c] = pd.to_datetime(cal_forms[c], format='%Y%m%d %H:%M')
 
-            # only look at the center being qualified and the type of calibration necessary
-            self.db_df['cal_data'] = cal_forms[(cal_forms.site_id == site_id) & (cal_forms.cal_type == cal_type)]
-            self.db_df['shipped_data'] = ref_shipped[(ref_shipped.site_id == site_id)]
+                    self.db_df['cal_data'] = cal_forms
+
+            else:
+                cal_forms = db_df[sheet_names[0]]
+                ref_shipped = db_df[sheet_names[1]]
+
+                #convert columns of date and time to datetime
+                cal_forms['measurement_datetime'] = pd.to_datetime(cal_forms['measurement_datetime'], format='%Y%m%d %H:%M')
+                ref_shipped['ref_datetime'] = pd.to_datetime(ref_shipped['ref_datetime'], format='%Y%m%d %H:%M')
+
+                # only look at the center being qualified and the type of calibration necessary
+                if 'site_id' in kwargs['db_dic']: 
+                    self.db_df['cal_data'] = cal_forms[(cal_forms.site_id == site_id) & (cal_forms.cal_type == cal_type)]
+                    self.db_df['shipped_data'] = ref_shipped[(ref_shipped.site_id == site_id)]
+                else:
+                    self.db_df['cal_data'] = cal_forms
+                    self.db_df['shipped_data'] = ref_shipped
 
     
     def window_check(self,win_perdiff_max=2,type='planar'):
@@ -142,3 +164,44 @@ class QC:
         # print(cols)
         self.summary_df.style.set_properties(subset=[cols],**{'width': '500px'},**{'text-align': 'left'}).hide_index()
         # print(self.summary)
+
+
+    def update_db(self,syringe_name='syringe_20_mL'):
+        sources = self.db_df['shipped_data'].source_id.unique()
+        centres = self.db_df['shipped_data'].site_id.unique()
+
+        
+        for s in sources:
+            for c in centres:
+                #find the reference time of the shipped source
+                ref_act = self.db_df['shipped_data'][(self.db_df['shipped_data'].source_id == s) & (self.db_df['shipped_data'].site_id == c)]['A_ref_MBq']
+                ref_time = self.db_df['shipped_data'][(self.db_df['shipped_data'].source_id == s) & (self.db_df['shipped_data'].site_id == c)]['ref_datetime'] 
+                # print(self.db_df['cal_data'].loc[(self.db_df['cal_data'].source_id == s) &  (self.db_df['shipped_data'].site_id == c)])
+               
+                self.db_df['cal_data'].loc[((self.db_df['cal_data'].source_id == s) &  (self.db_df['cal_data'].site_id == c)),'ref_act_MBq'] = ref_act.values[0]
+                self.db_df['cal_data'].loc[((self.db_df['cal_data'].source_id == s) &  (self.db_df['cal_data'].site_id == c)),'ref_time'] = ref_time.values[0]   
+            
+     
+        # calculate the delta time of the calibration of the shipped source and the measurement
+        self.db_df['cal_data']['delta_t'] = (self.db_df['cal_data']['measurement_datetime'] - self.db_df['cal_data']['ref_time']) / np.timedelta64(1,'D')
+        
+        self.db_df['cal_data']['decayed_ref'] = np.nan
+
+        # decay correct reference sources to measurement time series
+        self.db_df['cal_data'].decayed_ref = self.db_df['cal_data'].apply(lambda row: decay_act(row.ref_act_MBq,row.delta_t,self.isotope_dic['half_life']),axis=1)
+
+        # # Check that decay has been applied correctly. calculate perc_diff
+        self.db_df['cal_data']['decay_perc_diff'] = perc_diff(self.db_df['cal_data']['Ae_MBq'],self.db_df['cal_data'].decayed_ref)
+
+        # #check recovery with the calculated decayed activity
+        self.db_df['cal_data']['recovery_calculated'] = (self.db_df['cal_data'].Am_MBq / self.db_df['cal_data']['decayed_ref'] *100).round(1)
+
+        
+        #check the syringe
+        self.db_df['cal_data'].loc[self.db_df['cal_data'].source_id == syringe_name,'syringe_activity_calculated'] = self.db_df['cal_data']['Ai_syr_MBq'] - self.db_df['cal_data']['Af_syr_MBq']
+        self.db_df['cal_data'].loc[self.db_df['cal_data'].source_id == syringe_name,'recovery_calculated'] = (self.db_df['cal_data']['Am_syr_MBq'] / self.db_df['cal_data']['syringe_activity_calculated'] * 100).round(1)
+
+        # reorder columns
+        cols = ['site_id', 'department', 'city', 'performed_by', 'cal_type','manufacturer', 'model', 'collimator', 'initial_ cal_num', 'source_id','measurement_datetime', 'time_zone', 'ref_time','ref_act_MBq', 'delta_t','decayed_ref', 'Ae_MBq', 'decay_perc_diff', 'Am_MBq', 'Ai_syr_MBq','Af_syr_MBq', 'As_syr_MBq','syringe_activity_calculated', 'Am_syr_MBq', 'reported_recovery','recovery_calculated','final_cal_num', 'comments']
+
+        self.db_df['cal_data'] = self.db_df['cal_data'][cols]

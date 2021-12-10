@@ -8,7 +8,6 @@ import numpy as np
 class DosecalQC(QC):
     
     def __init__(self,isotope,db_dic,cal_type='dc'):
-        self.db_df = {}
         super().__init__(isotope,db_dic=db_dic,cal_type=cal_type)
                 
 
@@ -93,7 +92,7 @@ class DosecalQC(QC):
         #check recovery with the calculated decayed activity
         self.db_df['cal_data']['recovery_calculated'] = (self.db_df['cal_data'].Am_MBq / self.db_df['cal_data']['decayed_ref'] *100).round(1)
 
-         # check if any perc_diff are higher than accepted
+        # check if any perc_diff are higher than accepted
         if (self.db_df['cal_data']['decay_perc_diff'].abs()>accepted_percent).any(axis=None):
             self.accepted_calibration = 2
             self.append_to_summary(f'One or more of the sources decay correction are off by more than {accepted_percent} %.\t      MISMATCH\n\n')
