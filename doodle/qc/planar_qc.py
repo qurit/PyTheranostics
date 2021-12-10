@@ -6,7 +6,6 @@ import pandas as pd
 class PlanarQC(QC):
 
     def __init__(self,isotope,dicomfile,db_dic,cal_type='planar'):
-        self.db_df = {}
         super().__init__(isotope,db_dic=db_dic,cal_type=cal_type)
         self.ds = pydicom.dcmread(dicomfile)
 

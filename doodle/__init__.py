@@ -17,3 +17,16 @@ from doodle.shared.radioactive_decay import (
 from doodle.shared.evaluation_metrics import (
     perc_diff
 )
+
+from doodle.calibrations.gamma_camera import (
+    GammaCamera
+)
+
+from doodle.shared.corrections import (
+    tew_scatt
+)
+
+
+from doodle.plots.plots import (
+    ewin_montage
+)

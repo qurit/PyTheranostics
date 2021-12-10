@@ -6,7 +6,6 @@ import pandas as pd
 class SPECTQC(QC):
 
     def __init__(self,isotope,projections_file,recon_file,db_dic,cal_type='spect'):
-        self.db_df = {}
         super().__init__(isotope,db_dic=db_dic,cal_type=cal_type)
         self.proj_ds = pydicom.dcmread(projections_file)
         self.recon_ds = pydicom.dcmread(recon_file)

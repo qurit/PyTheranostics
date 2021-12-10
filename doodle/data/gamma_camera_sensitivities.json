@@ -1,0 +1,30 @@
+{
+  "CAVA": {
+    "Symbia T": {
+      "manufacturer": "SIEMENS NM",
+      "sensitivity": {
+        "Detector1": 9.35637078789132,
+        "Detector2": 9.161145653532262,
+        "Average": 9.25875822071179
+      },
+      "calibration_factor": {
+        "Detector1": 0.10687904772801055,
+        "Detector2": 0.10915665330726732,
+        "Average": 0.10800584442987242
+      }
+    },
+    "Intevo": {
+      "manufacturer": "SIEMENS NM",
+      "sensitivity": {
+        "Detector1": 9.028040553253593,
+        "Detector2": 9.154348609427013,
+        "Average": 9.091194581340304
+      },
+      "calibration_factor": {
+        "Detector1": 0.11076600665463476,
+        "Detector2": 0.10923770141003969,
+        "Average": 0.10999654567426179
+      }
+    }
+  }
+}
