@@ -51,6 +51,9 @@ class GammaCamera(PlanarQC):
             elif kwargs['site_id'] == 'CAGA':
                 if self.ds.ManufacturerModelName == 'Encore2':
                     camera_model = 'Intevo T6'
+            elif kwargs['site_id'] == 'CAHN':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670_ES':
+                    camera_model = 'Discovery 670'
 
          # find activity of source        
         if 'site_id' in kwargs:
@@ -63,8 +66,12 @@ class GammaCamera(PlanarQC):
 
             acq_time = self.ds.AcquisitionTime
             acq_date = self.ds.AcquisitionDate
-            
-            acq_time = np.datetime64(datetime.strptime(f'{acq_date} {acq_time}','%Y%m%d %H%M%S.%f'))
+
+            if '.' in acq_time:
+                acq_time = np.datetime64(datetime.strptime(f'{acq_date} {acq_time}','%Y%m%d %H%M%S.%f'))
+            else:
+                acq_time = np.datetime64(datetime.strptime(f'{acq_date} {acq_time}','%Y%m%d %H%M%S'))
+
             
             # find the time difference in days
             if self.isotope_dic['half_life_units'] == 'days':
