@@ -1,7 +1,8 @@
 {
   "CAVA": {
     "Symbia T": {
-      "manufacturer": "SIEMENS NM",
+      "manufacturer": "Siemens",
+      "collimator": "MELP",
       "sensitivity": {
         "Detector1": 9.35637078789132,
         "Detector2": 9.161145653532262,
@@ -14,7 +15,8 @@
       }
     },
     "Intevo": {
-      "manufacturer": "SIEMENS NM",
+      "manufacturer": "Siemens",
+      "collimator": "MELP",
       "sensitivity": {
         "Detector1": 9.028040553253593,
         "Detector2": 9.154348609427013,
@@ -24,6 +26,70 @@
         "Detector1": 0.11076600665463476,
         "Detector2": 0.10923770141003969,
         "Average": 0.10999654567426179
+      }
+    }
+  },
+  "CAHJ": {
+    "Discovery 870": {
+      "manufacturer": "GE",
+      "collimator": "MEGP",
+      "sensitivity": {
+        "Detector1": 4.495294055657973,
+        "Detector2": 4.719284937814484,
+        "Average": 4.607289496736229
+      },
+      "calibration_factor": {
+        "Detector1": 0.22245485781766744,
+        "Detector2": 0.21189650830091714,
+        "Average": 0.21704735522011215
+      }
+    }
+  },
+  "CAGQ": {
+    "Symbia T6": {
+      "manufacturer": "Siemens",
+      "collimator": "MEGL",
+      "sensitivity": {
+        "Detector1": 9.047765308813814,
+        "Detector2": 9.126775044024312,
+        "Average": 9.087270176419063
+      },
+      "calibration_factor": {
+        "Detector1": 0.11052452908187808,
+        "Detector2": 0.10956772739290234,
+        "Average": 0.11004404849708792
+      }
+    }
+  },
+  "CAGA": {
+    "Intevo T6": {
+      "manufacturer": "Siemens",
+      "collimator": "MEGL",
+      "sensitivity": {
+        "Detector1": 9.545819213838021,
+        "Detector2": 9.375061874193033,
+        "Average": 9.460440544015526
+      },
+      "calibration_factor": {
+        "Detector1": 0.10475790265861708,
+        "Detector2": 0.1066659626804944,
+        "Average": 0.10570332273084035
+      }
+    }
+  },
+  "CAHN": {
+    "Discovery 670": {
+      "manufacturer": "GE",
+      "collimator": "MEGP",
+      "sensitivity": {
+        "Detector1": 5.4473409731355,
+        "Detector2": 5.504354553570881,
+        "Average": 5.47584776335319
+      },
+      "calibration_factor": {
+        "Detector1": 0.1835758042192828,
+        "Detector2": 0.18167434351612807,
+        "Average": 0.18262012444765996
       }
     }
   }
