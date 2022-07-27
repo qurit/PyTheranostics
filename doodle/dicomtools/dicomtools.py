@@ -3,6 +3,7 @@ import numpy as np
 from pydicom.dataset import Dataset
 from pydicom.uid import generate_uid
 from doodle.shared.radioactive_decay import get_activity_at_injection
+import pandas as pd
 
 class DicomModify():
 
@@ -71,6 +72,9 @@ class DicomModify():
         start_datetime, total_injected_activity = get_activity_at_injection(injection_date,pre_inj_activity,pre_inj_time,post_inj_activity,post_inj_time,injection_time,half_life=half_life)
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
+        inj_dic = {'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime]}
+        inj_df = pd.DataFrame(data=inj_dic)
+        
 
         self.ds.RadiopharmaceuticalInformationSequence[0].Radiopharmaceutical=radiopharmaceutical
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalVolume=""
@@ -93,6 +97,7 @@ class DicomModify():
         self.ds.SeriesInstanceUID = generate_uid(prefix=prefix)
 
         # self.ds.MediaStorageSOPInstaceUID
+        return inj_df
 
 
     def save(self):
