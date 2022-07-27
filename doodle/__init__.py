@@ -11,7 +11,8 @@ from doodle.qc.spect_qc import (
 )
 
 from doodle.shared.radioactive_decay import (
-    decay_act
+    decay_act,
+    get_activity_at_injection
 )
 
 from doodle.shared.evaluation_metrics import (
@@ -28,5 +29,23 @@ from doodle.shared.corrections import (
 
 
 from doodle.plots.plots import (
-    ewin_montage
+    ewin_montage,
+    monoexp_fit_plots
+)
+
+from doodle.segmentation.tools import (
+    rtst_to_mask
+)
+
+
+from doodle.fits.fits import (
+    monoexp_fun,
+    biexp_fun,
+    fit_monoexp,
+    fit_biexp,
+    fit_biexp_uptake
+)
+
+from doodle.dicomtools.dicomtools import (
+    DicomModify
 )
