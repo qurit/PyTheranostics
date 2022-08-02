@@ -14,6 +14,13 @@ class DicomModify():
 
     def make_bqml_suv(self,weight,height,injection_date,pre_inj_activity,pre_inj_time,post_inj_activity,post_inj_time,injection_time,activity_meter_scale_factor,half_life=574300,radiopharmaceutical='Lutetium-PSMA-617',n_detectors = 2):
         #Half-life is in seconds
+
+
+        
+        # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
+        if 'siemens' in self.ds.Manufacturer.lower():
+            self.ds.SeriesTime = self.ds.AcquisitionTime
+            self.ds.ContentTime = self.ds.AcquisitionTime
         
         # Get the frame duration in seconds
         frame_duration = self.ds.RotationInformationSequence[0].ActualFrameDuration/1000
