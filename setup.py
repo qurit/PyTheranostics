@@ -10,6 +10,6 @@ setup(name='DOODLE',
       packages=['doodle','doodle.tests'],
       include_package_data=True,
       install_requires = [
-          'numpy','matplotlib','pandas','pydicom','openpyxl','rt_utils'
+          'numpy','matplotlib','pandas','pydicom','openpyxl','rt_utils','scikit-image'
       ],
       zip_safe=False)
