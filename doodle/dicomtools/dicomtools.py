@@ -4,6 +4,7 @@ from pydicom.dataset import Dataset
 from pydicom.uid import generate_uid
 from doodle.shared.radioactive_decay import get_activity_at_injection
 import pandas as pd
+from datetime import datetime
 
 class DicomModify():
 
@@ -75,11 +76,15 @@ class DicomModify():
         self.ds.RadiopharmaceuticalInformationSequence += [Dataset()]
 
 
-
+        # values for net injected activity and injection date and time
         start_datetime, total_injected_activity = get_activity_at_injection(injection_date,pre_inj_activity,pre_inj_time,post_inj_activity,post_inj_time,injection_time,half_life=half_life)
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
-        inj_dic = {'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime]}
+
+        scan_datetime = datetime.strptime(self.ds.SeriesDate + '124013.000000','%Y%m%d%H%M%S.%f')
+        delta_scan_inj = (scan_datetime - start_datetime).total_seconds()/(60*60*24)
+
+        inj_dic = {'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime],'scan_datetime':[scan_datetime],'delta_t_days':[delta_scan_inj]}
         inj_df = pd.DataFrame(data=inj_dic)
         
 
