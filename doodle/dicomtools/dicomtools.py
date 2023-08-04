@@ -87,14 +87,14 @@ class DicomModify():
         pre_inj_datetime = datetime.strptime(injection_date + pre_inj_time,'%Y%m%d%H%M')
         post_inj_datetime = datetime.strptime(injection_date + post_inj_time,'%Y%m%d%H%M')
 
-        inj_dic = {'weight_kg':[weight],'height_m':[height],'pre_inj_activity_MBq':[pre_inj_activity],'pre_inj_datetime':[pre_inj_datetime],'post_inj_activity_MBq':[post_inj_activity],'post_inj_datetime':[post_inj_datetime],'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime],'scan_datetime':[scan_datetime],'delta_t_days':[delta_scan_inj]}
+        inj_dic = {'patient_id':[self.ds.PatientID],'weight_kg':[weight],'height_m':[height],'pre_inj_activity_MBq':[pre_inj_activity],'pre_inj_datetime':[pre_inj_datetime],'post_inj_activity_MBq':[post_inj_activity],'post_inj_datetime':[post_inj_datetime],'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime],'scan_datetime':[scan_datetime],'delta_t_days':[delta_scan_inj]}
         inj_df = pd.DataFrame(data=inj_dic)
         
 
         self.ds.RadiopharmaceuticalInformationSequence[0].Radiopharmaceutical=radiopharmaceutical
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalVolume=""
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartTime=start_datetime.strftime("%H%M%S.%f")
-        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(total_injected_activity*1e6)
+        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(total_injected_activity)
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife=str(half_life)
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclidePositronFraction=''
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartDateTime=start_datetime.strftime('%Y%m%d%H%M%S.%f')
