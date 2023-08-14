@@ -1,3 +1,4 @@
+# %%
 import pydicom
 import numpy as np
 from pydicom.dataset import Dataset
@@ -6,6 +7,7 @@ from doodle.shared.radioactive_decay import get_activity_at_injection
 import pandas as pd
 from datetime import datetime
 
+# %%
 class DicomModify():
 
     def __init__(self,fname,CF):
