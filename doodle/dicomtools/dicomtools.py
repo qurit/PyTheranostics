@@ -33,7 +33,7 @@ class DicomModify():
 
         # Get image in Bq/ml
         A = self.ds.pixel_array
-        A.astype(np.float)
+        A.astype(np.float64)
         A = A / (frame_duration * n_proj) * self.CF * 1e6 / vox_vol
 
         slope,intercept = dicom_slope_intercept(A)
@@ -81,17 +81,20 @@ class DicomModify():
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
 
-        scan_datetime = datetime.strptime(self.ds.SeriesDate + '124013.000000','%Y%m%d%H%M%S.%f')
+        scan_datetime = datetime.strptime(self.ds.SeriesDate + self.ds.SeriesTime,'%Y%m%d%H%M%S.%f')
         delta_scan_inj = (scan_datetime - start_datetime).total_seconds()/(60*60*24)
 
-        inj_dic = {'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime],'scan_datetime':[scan_datetime],'delta_t_days':[delta_scan_inj]}
+        pre_inj_datetime = datetime.strptime(injection_date + pre_inj_time,'%Y%m%d%H%M')
+        post_inj_datetime = datetime.strptime(injection_date + post_inj_time,'%Y%m%d%H%M')
+
+        inj_dic = {'patient_id':[self.ds.PatientID],'weight_kg':[weight],'height_m':[height],'pre_inj_activity_MBq':[pre_inj_activity],'pre_inj_datetime':[pre_inj_datetime],'post_inj_activity_MBq':[post_inj_activity],'post_inj_datetime':[post_inj_datetime],'injected_activity_MBq':[total_injected_activity],'injection_datetime':[start_datetime],'scan_datetime':[scan_datetime],'delta_t_days':[delta_scan_inj]}
         inj_df = pd.DataFrame(data=inj_dic)
         
 
         self.ds.RadiopharmaceuticalInformationSequence[0].Radiopharmaceutical=radiopharmaceutical
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalVolume=""
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartTime=start_datetime.strftime("%H%M%S.%f")
-        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(total_injected_activity*1e6)
+        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(total_injected_activity)
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife=str(half_life)
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclidePositronFraction=''
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartDateTime=start_datetime.strftime('%Y%m%d%H%M%S.%f')
