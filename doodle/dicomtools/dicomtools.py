@@ -69,7 +69,7 @@ class DicomModify():
             
         #add info for SUV
         self.ds.PatientWeight= str(weight) # in kg
-        self.ds.PatientSize = str(height) # in m
+        self.ds.PatientSize = str(height/100) # in m
 
         self.ds.DecayCorrection = 'START'
         self.ds.CorrectedImage.insert(0,'DECY')
