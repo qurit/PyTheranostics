@@ -96,7 +96,7 @@ class DicomModify():
         self.ds.RadiopharmaceuticalInformationSequence[0].Radiopharmaceutical=radiopharmaceutical
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalVolume=""
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartTime=start_datetime.strftime("%H%M%S.%f")
-        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(round(total_injected_activity, 2))
+        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(round(total_injected_activity, 4))
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife=str(half_life)
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclidePositronFraction=''
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartDateTime=start_datetime.strftime('%Y%m%d%H%M%S.%f')
