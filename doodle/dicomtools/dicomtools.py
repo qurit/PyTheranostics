@@ -1,3 +1,4 @@
+# %%
 import pydicom
 import numpy as np
 from pydicom.dataset import Dataset
@@ -6,6 +7,7 @@ from doodle.shared.radioactive_decay import get_activity_at_injection
 import pandas as pd
 from datetime import datetime
 
+# %%
 class DicomModify():
 
     def __init__(self,fname,CF):
@@ -67,7 +69,7 @@ class DicomModify():
             
         #add info for SUV
         self.ds.PatientWeight= str(weight) # in kg
-        self.ds.PatientSize = str(height) # in m
+        self.ds.PatientSize = str(height/100) # in m
 
         self.ds.DecayCorrection = 'START'
         self.ds.CorrectedImage.insert(0,'DECY')
@@ -94,7 +96,7 @@ class DicomModify():
         self.ds.RadiopharmaceuticalInformationSequence[0].Radiopharmaceutical=radiopharmaceutical
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalVolume=""
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartTime=start_datetime.strftime("%H%M%S.%f")
-        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(total_injected_activity)
+        self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose=str(round(total_injected_activity, 4))
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife=str(half_life)
         self.ds.RadiopharmaceuticalInformationSequence[0].RadionuclidePositronFraction=''
         self.ds.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartDateTime=start_datetime.strftime('%Y%m%d%H%M%S.%f')
