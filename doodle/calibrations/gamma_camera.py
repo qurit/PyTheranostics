@@ -5,7 +5,6 @@ from doodle.shared.radioactive_decay import decay_act
 
 from pathlib import Path
 import json
-import numpy as np
 from datetime import datetime
 
 
