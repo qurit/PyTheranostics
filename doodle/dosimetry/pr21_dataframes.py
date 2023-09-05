@@ -30,9 +30,12 @@ def getinputdata(patient_id, cycle):
     #######################################################################################
     # Activities from Patient statistics from MIM
     mimcsv_tp1 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp1.csv"
-    mimcsv_tp2 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp2.csv"
     activity_tp1_df = pd.read_csv(mimcsv_tp1)
-    activity_tp2_df = pd.read_csv(mimcsv_tp2)
+    if cycle == '1':
+        mimcsv_tp2 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp2.csv"
+        activity_tp2_df = pd.read_csv(mimcsv_tp2)
+    else:
+        pass
     
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace(' ', '')
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace('-', '_')
@@ -46,9 +49,12 @@ def getinputdata(patient_id, cycle):
     acq1 = activity_tp1_df.loc[1, 'Series Date']
     date_object = datetime.strptime(acq1, "%Y-%m-%d")
     data1 = date_object.strftime("%Y%m%d")
-    acq2 = activity_tp2_df.loc[1, 'Series Date']
-    date_object = datetime.strptime(acq2, "%Y-%m-%d")
-    data2 = date_object.strftime("%Y%m%d")
+    if cycle == '1':
+        acq2 = activity_tp2_df.loc[1, 'Series Date']
+        date_object = datetime.strptime(acq2, "%Y-%m-%d")
+        data2 = date_object.strftime("%Y%m%d")
+    else:
+        pass
     
     # injection timepoint data have in their name hyphen CAVA-00X, so here i create patient id with hyphen
     # Use regular expression to insert a hyphen after every group of letters
@@ -62,8 +68,11 @@ def getinputdata(patient_id, cycle):
     injection_folder = f"{folder}/injection_timepoints"
     file_path = f"{injection_folder}/PR21-{x_with_hyphen}.{data1}.injection.info.csv"
     inj_timepoint1 = pd.read_csv(file_path)
-    file_path = f"{injection_folder}/PR21-{x_with_hyphen}.{data2}.injection.info.csv"
-    inj_timepoint2 = pd.read_csv(file_path)    
+    if cycle == '1':
+        file_path = f"{injection_folder}/PR21-{x_with_hyphen}.{data2}.injection.info.csv"
+        inj_timepoint2 = pd.read_csv(file_path)    
+    else:
+        pass
     #######################################################################################
     
     #######################################################################################
@@ -150,9 +159,9 @@ def getinputdata(patient_id, cycle):
 
     # Define your data for three observations: SPECT, CT, RT
     data = [
-        {'observation': 'SPECT', 'xdim': SPECT_xdim, 'ydim': SPECT_ydim, 'zdim': SPECT_zdim, 'xsize': SPECT_xsize, 'ysize': SPECT_ysize, 'zsize': SPECT_zsize},
-        {'observation': 'CT', 'xdim': CT.shape[0], 'ydim': CT.shape[1], 'zdim': CT.shape[2], 'xsize': CT_xysize[0], 'ysize': CT_xysize[1], 'zsize': CT_zsize},
-        {'observation': 'RT', 'xdim': RT_xdim, 'ydim': RT_ydim, 'zdim': RT_zdim, 'xsize': "", 'ysize': "", 'zsize': ""}
+        {' ': 'SPECT', 'xdim': SPECT_xdim, 'ydim': SPECT_ydim, 'zdim': SPECT_zdim, 'xsize': SPECT_xsize, 'ysize': SPECT_ysize, 'zsize': SPECT_zsize},
+        {' ': 'CT', 'xdim': CT.shape[0], 'ydim': CT.shape[1], 'zdim': CT.shape[2], 'xsize': CT_xysize[0], 'ysize': CT_xysize[1], 'zsize': CT_zsize},
+        {' ': 'RT', 'xdim': RT_xdim, 'ydim': RT_ydim, 'zdim': RT_zdim, 'xsize': "", 'ysize': "", 'zsize': ""}
     ]
 
     # Create a DataFrame
@@ -161,5 +170,8 @@ def getinputdata(patient_id, cycle):
     # Print the summary table
     print(df)
 
-    return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled
+    if cycle == '1':
+        return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled
+    else:
+        return activity_tp1_df, inj_timepoint1, CT, SPECTMBq, roi_masks_resampled
 # %%
