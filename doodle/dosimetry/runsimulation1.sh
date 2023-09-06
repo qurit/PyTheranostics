@@ -6,10 +6,17 @@
 #	echo "gate main_normalized_v82_"$number_splits".mac >> output-"$number_splits".txt &"
 #done
 
-for number_splits in {1..10}; do
+path=$1
+ncpu=$2
+currentPath=$pwd
+cd $path
+
+for number_splits in $( eval echo {1..$ncpu}); do
 	docker run -i --rm -v $PWD:/APP opengatecollaboration/gate main_normalized_${number_splits}.mac >> output-${number_splits}.txt 2>&1 &
 	echo "gate main_normalized_"$number_splits".mac >> output-"$number_splits".txt 2>&1 &"
 done
+
+cd $currentPath
 
 
 
