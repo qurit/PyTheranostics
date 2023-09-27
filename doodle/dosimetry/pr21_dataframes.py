@@ -20,8 +20,9 @@ from  doodle.fits.fits import monoexp_fun, fit_monoexp
 from doodle.plots.plots import monoexp_fit_plots
 from pathlib import Path
 import sys
-
- 
+import tempfile
+from pydicom.dataset import FileDataset, FileMetaDataset
+from pydicom.uid import UID
 
 # %%
 def getinputdata(patient_id, cycle):
@@ -154,6 +155,16 @@ def getinputdata(patient_id, cycle):
         RT_xdim = resized.shape[0]
         RT_ydim = resized.shape[1]
         RT_zdim = resized.shape[2]
+        
+        
+    # Create th ROI ROB (WBCT-everything else)
+    all_organs = np.zeros((RT_xdim, RT_ydim, RT_zdim))
+    organs = [organ for organ in organslist if organ != "WBCT"]
+    for organ in organs:
+        all_organs +=  roi_masks_resampled[organ]
+        
+    
+    rob = roi_masks_resampled['WBCT'] - all_organs
     #######################################################################################
     
 
@@ -171,7 +182,95 @@ def getinputdata(patient_id, cycle):
     print(df)
 
     if cycle == '1':
-        return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled
+        return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled, all_organs, rob
     else:
-        return activity_tp1_df, inj_timepoint1, CT, SPECTMBq, roi_masks_resampled
+        return activity_tp1_df, inj_timepoint1, CT, SPECTMBq, roi_masks_resampled, all_organs, rob
+    
+    
+    
+# %%
+# Luke's function from qurit github
+
+def find_first_entry_containing_substring(list_of_attributes, substring, dtype=np.float32):
+    line = list_of_attributes[np.char.find(list_of_attributes, substring)>=0][0]
+    if dtype == np.float32:
+        return np.float32(line.replace('\n', '').split(':=')[-1])
+    elif dtype == str:
+        return (line.replace('\n', '').split(':=')[-1].replace(' ', ''))
+    elif dtype == int:
+        return int(line.replace('\n', '').split(':=')[-1].replace(' ', ''))
+
+def intf2dcm(headerfile, folder, patient_id, cycle):
+    # Interfile attributes   
+    with open(headerfile) as f:
+        headerdata = f.readlines()
+    headerdata = np.array(headerdata)
+    dim1 = find_first_entry_containing_substring(headerdata, 'matrix size [1]', int)
+    dim2 = find_first_entry_containing_substring(headerdata, 'matrix size [2]', int)
+    dim3 = find_first_entry_containing_substring(headerdata, 'matrix size [3]', int)
+    dx = find_first_entry_containing_substring(headerdata, 'scaling factor (mm/pixel) [1]', np.float32) 
+    dy = find_first_entry_containing_substring(headerdata, 'scaling factor (mm/pixel) [2]', np.float32) 
+    dz = find_first_entry_containing_substring(headerdata, 'scaling factor (mm/pixel) [3]', np.float32) 
+    number_format = find_first_entry_containing_substring(headerdata, 'number format', str)
+    num_bytes_per_pixel = find_first_entry_containing_substring(headerdata, 'number of bytes per pixel', np.float32)
+    imagefile = find_first_entry_containing_substring(headerdata, 'name of data file', str)
+    pixeldata = np.fromfile(os.path.join(str(Path(headerfile).parent), imagefile), dtype=np.float32)
+    dose_scaling_factor = np.max(pixeldata) / (2**16 - 1) 
+    pixeldata /= dose_scaling_factor
+    pixeldata = pixeldata.astype(np.int32)
+    path = f'{folder}/{patient_id}/cycle0{cycle}/MC'
+    #ds = pydicom.read_file(glob.glob(os.path.join(path, 'spect.dcm'))[0])
+    ds = pydicom.read_file(glob.glob(os.path.join(path, 'template.dcm'))[0])
+    #ds = pydicom.read_file(os.path.join(str(Path(os.path.realpath(__file__)).parent), "template.dcm"))
+    ds.BitsAllocated = 32
+    ds.Rows = dim1
+    ds.Columns = dim2
+    ds.PixelRepresentation = 0
+    ds.NumberOfFrames = dim3
+    ds.PatientName = f'PR21-CAVA-0004'
+    ds.PatientID = f'PR21-CAVA-0004'
+    ds.PixelSpacing = [dx, dy]
+    ds.SliceThickness = dz
+    ds.Modality = 'NM'
+    #ds.ReferencedImageSequence[0].ReferencedSOPClassUID = 'UN'
+    ds.ReferencedImageSequence[0].ReferencedSOPInstanceUID = '1.2.826.0.1.3680043.10.740.6048439480987740658090176328874005953'
+    ds.FrameOfReferenceUID = '1.2.826.0.1.3680043.10.740.2362138874319727035222927285105155066'
+    #ds.ReferencedRTPlanSequence[0].ReferencedSOPClassUID = 'UN'
+    #ds.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID = 'UN'
+    ds.PixelData = pixeldata.tobytes()
+    
+    
+    print(ds.ReferencedImageSequence[0].ReferencedSOPClassUID)
+    print(ds.ReferencedImageSequence[0].ReferencedSOPInstanceUID)
+    print(ds.FrameOfReferenceUID)
+    print(ds.ReferencedRTPlanSequence[0].ReferencedSOPClassUID)
+    print(ds.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID)
+    ds.save_as("doseimage_try.dcm")
+    return ds
+# %%
+def image_visualisation(image):
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))    
+    axs[0].imshow(image[:, :, 120])
+    axs[0].set_title('Slice at index 50')
+    axs[1].imshow(image[120, :, :].T)
+    axs[1].set_title('Slice at index 100')
+    axs[2].imshow(image[:,64, :])
+    axs[2].set_title('Slice at index 47')
+    plt.tight_layout()
+    plt.show()
+    
+def getdosemapdata(patient_id, cycle):
+    folder = "/mnt/y/Sara/PR21_dosimetry"
+    
+    ###### TO DO: merge files
+    
+    headerfile_path = f'{folder}/{patient_id}/cycle0{cycle}/MC/output/DoseimageGy_MC.hdr'
+    print(headerfile_path)
+    ds = intf2dcm(headerfile_path, folder, patient_id, cycle)
+    Dosemap = ds.pixel_array
+    Dosemap = np.rot90(Dosemap)
+    Dosemap = np.transpose(Dosemap, (0,2,1))
+    return Dosemap
+    
+
 # %%
