@@ -11,15 +11,16 @@ import glob
 import pydicom 
 from rt_utils import RTStructBuilder
 import gatetools as gt
-import scipy
 import SimpleITK as sitk
+import itk
 from skimage import io
 from skimage.transform import resize
 from skimage import img_as_bool
-from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial
-from doodle.plots.plots import monoexp_fit_plots
+from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake
+from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
 
-
+# %%
+itk.LabelStatisticsImageFilter.GetTypes()
 # %%
 class PatientDosimetry:
     def __init__(self, df, patient_id, cycle, isotope, CT, SPECTMBq, roi_masks_resampled, activity_tp1_df, inj_timepoint1, activity_tp2_df = None, inj_timepoint2 = None):
@@ -42,25 +43,35 @@ class PatientDosimetry:
             if self.cycle in self.df['cycle'].values:
                 print(f"Patient {self.patient_id} cycle0{self.cycle} is already on the list!")
             elif self.cycle not in self.df['cycle'].values:
-                print("im here")
                 self.new_data = pd.DataFrame({
                     'patient_id': [self.patient_id] * len(self.activity_tp1_df),
                     'cycle': [self.cycle] * len(self.activity_tp1_df),
                     'organ': self.activity_tp1_df['Contour'].tolist(),
                     'volume_ml': self.activity_tp1_df['Volume (ml)'].tolist()
                     })
-                #self.df = pd.concat([self.df, new_data], ignore_index=True)
-                #print(f"Patient {self.patient_id} cycle0{self.cycle} loaded to the final dataframe.")
         else:
-            print("3")
             self.new_data = pd.DataFrame({
                 'patient_id': [self.patient_id] * len(self.activity_tp1_df),
                 'cycle': [self.cycle] * len(self.activity_tp1_df),
                 'organ': self.activity_tp1_df['Contour'].tolist(),
                 'volume_ml': self.activity_tp1_df['Volume (ml)'].tolist()
                 })
+
+        # Calculate the sum of 'volume_ml' for observations other than 'WBCT'
+        sum_without_wbct = self.new_data[self.new_data['organ'] != 'WBCT']['volume_ml'].sum()
+
+        # Specify the values for the new observation
+        rob_observation = {
+            'patient_id': self.patient_id,
+            'cycle': self.cycle,
+            'organ': 'ROB',
+            'volume_ml': self.new_data.loc[self.new_data['organ'] == 'WBCT', 'volume_ml'].values[0] - sum_without_wbct
+        }
+        self.new_data.loc[len(self.new_data)] = rob_observation
+
         print(self.new_data)
-        self.organslist = self.activity_tp1_df['Contour'].unique()        
+        self.organslist = self.activity_tp1_df['Contour'].unique()
+        return self.organslist        
         
     def fitting(self):
         ################################# Isotope information #########################################
@@ -82,8 +93,18 @@ class PatientDosimetry:
             a_tp2 = self.activity_tp2_df.iloc[index][['Integral Total (BQML*ml)']].values
             activity = [a_tp1, a_tp2]
             activity = np.array([float(arr[0]) for arr in activity]) # reduce dimensons and extract values
-            popt,tt,yy,residuals = fit_monoexp(ts,activity,decayconst,monoguess=(1e6,1e-6))
-            monoexp_fit_plots(ts,activity,tt,yy,row['organ'],popt[2],residuals)
+#            popt,tt,yy,residuals = fit_monoexp(ts,activity,deayconst,monoguess=(1e6,1e-5))
+#            monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
+#            plt.show()
+#            elif function == 2:
+#                popt,tt,yy,residuals = fit_biexp_uptake(ts,activity,decayconst,uptakeguess=(6,1e-3 , 1e-3))
+#                biexp_fit_plots(ts / (3600 * 24), activity / 10**6, tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
+#                #monoexp_fit_plots(ts, activity, tt,yy,row['organ'],popt[2],residuals)
+#                #plt.show()
+            #else:
+            #    print('Function unknown')
+            popt,tt,yy,residuals = fit_monoexp(ts,activity,decayconst,monoguess=(1e6,1e-5))
+            monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
             plt.show()
             self.new_data.at[index, 'lamda_eff_1/s'] = popt[1]
             self.new_data.at[index, 'a0_Bq'] = popt[0]
@@ -143,6 +164,8 @@ class PatientDosimetry:
         
         for organ in self.organslist:
             self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+            
+        return self.TIA
 
     def flip_images(self):
         self.CTp = np.transpose(self.CT, (2, 0, 1))
@@ -152,6 +175,8 @@ class PatientDosimetry:
         self.image_visualisation(self.CTp)
         print('SPECT image:')
         self.image_visualisation(self.TIAp)
+        
+        return self.TIAp
         
     def normalise_TIA(self):
         self.total_acc_A = np.sum(np.sum(np.sum(self.TIAp)))
@@ -163,19 +188,20 @@ class PatientDosimetry:
         print(self.df)
         self.df.to_csv("/mnt/y/Sara/PR21_dosimetry/df.csv")
         
-#        self.CTp = np.array(self.CTp, dtype=np.float32)
-#        image = sitk.GetImageFromArray(self.CTp)
-#        image.SetSpacing([4.7952, 4.7952, 4.7952]) 
-#        sitk.WriteImage(image, f'{self.output_path}/MC/data/CT.mhd')
-#        
-#        self.source_normalized = np.array(self.source_normalized, dtype=np.float32)
-#        image2 = sitk.GetImageFromArray(self.source_normalized)
-#        image2.SetSpacing([4.7952, 4.7952, 4.7952]) 
-#        sitk.WriteImage(image2, f'{self.output_path}/MC/data/Source_normalized.mhd')
-#
-#        folder = f'{self.output_path}/MC/output'
-#        image_path = os.path.join(folder, 'TotalAccA.txt')
-#        with open(image_path, 'w') as fileID:
-#            fileID.write('%.2f' % self.total_acc_A)
+        self.CTp = np.array(self.CTp, dtype=np.float32)
+        image = sitk.GetImageFromArray(self.CTp)
+        image.SetSpacing([4.7952, 4.7952, 4.7952]) 
+        sitk.WriteImage(image, f'/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/MC/data/CT.mhd')
+        
+        self.source_normalized = np.array(self.source_normalized, dtype=np.float32)
+        image2 = sitk.GetImageFromArray(self.source_normalized)
+        image2.SetSpacing([4.7952, 4.7952, 4.7952]) 
+        sitk.WriteImage(image2, f'/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/MC/data/Source_normalized.mhd')
 
+        folder = f'/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/MC/output'
+        image_path = os.path.join(folder, 'TotalAccA.txt')
+        with open(image_path, 'w') as fileID:
+            fileID.write('%.2f' % self.total_acc_A)
+            
+        
 # %%
