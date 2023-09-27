@@ -1,15 +1,12 @@
 
 import os
 
-
 class MonteCarlo:
     def __init__(self, n_cpu, n_primaries, output_dir):
         self.n_cpu = n_cpu 
         self.n_primaries = n_primaries
         self.output_dir = output_dir
 
-
-        
     def split_simulations(self):
         n_primaries_per_mac = int(self.n_primaries / self.n_cpu)
   
@@ -28,11 +25,5 @@ class MonteCarlo:
                 output_mac.write(new_mac)
             
     def run_MC(self):
-#        script_name = "/mnt/y/Sara/PR21_dosimetry/CAVA0004/cycle01/MC/runsimulation1.sh"
-#
-#        try:
-#            subprocess.run(['bash', script_name], check=True)
-#        except subprocess.CalledProcessError as e:
-#            print(f"Error executing {script_name}: {e}")
         os.system(f"bash {self.output_dir}/runsimulation1.sh {self.output_dir} {self.n_cpu}")
         
