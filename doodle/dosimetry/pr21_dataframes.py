@@ -32,16 +32,20 @@ def getinputdata(patient_id, cycle):
     # Activities from Patient statistics from MIM
     mimcsv_tp1 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp1.csv"
     activity_tp1_df = pd.read_csv(mimcsv_tp1)
-    if cycle == '1':
-        mimcsv_tp2 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp2.csv"
-        activity_tp2_df = pd.read_csv(mimcsv_tp2)
-    else:
-        pass
-    
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace(' ', '')
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace('-', '_')
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace('(', '_')
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace(')', '')
+    
+    if cycle == '1':
+        mimcsv_tp2 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp2.csv"
+        activity_tp2_df = pd.read_csv(mimcsv_tp2)
+        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace(' ', '')
+        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace('-', '_')
+        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace('(', '_')
+        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace(')', '')
+    else:
+        pass
     #######################################################################################
     
     
@@ -162,11 +166,12 @@ def getinputdata(patient_id, cycle):
     organs = [organ for organ in organslist if organ != "WBCT"]
     for organ in organs:
         all_organs +=  roi_masks_resampled[organ]
-        
-    
     rob = roi_masks_resampled['WBCT'] - all_organs
-    #######################################################################################
+    rob = rob.astype(bool)
+    roi_masks_resampled['ROB'] = rob
     
+    
+    #######################################################################################
 
     # Define your data for three observations: SPECT, CT, RT
     data = [
@@ -182,9 +187,9 @@ def getinputdata(patient_id, cycle):
     print(df)
 
     if cycle == '1':
-        return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled, all_organs, rob
+        return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled
     else:
-        return activity_tp1_df, inj_timepoint1, CT, SPECTMBq, roi_masks_resampled, all_organs, rob
+        return activity_tp1_df, inj_timepoint1, CT, SPECTMBq, roi_masks_resampled
     
     
     
