@@ -37,6 +37,49 @@ class PatientDosimetry:
         self.roi_masks_resampled = roi_masks_resampled
 
     def dataframe(self):
+        # Calculate the sum of 'volume_ml' for observations other than 'WBCT'
+        filtered_df = self.activity_tp1_df[(self.activity_tp1_df['Contour'] == 'TotalTumorBurden') | 
+                                   (self.activity_tp1_df['Contour'] == 'Kidney_L_a') |
+                                   (self.activity_tp1_df['Contour'] == 'Kidney_R_a') |
+                                   (self.activity_tp1_df['Contour'] == 'Liver') |
+                                   (self.activity_tp1_df['Contour'] == 'ParotidglandL') |
+                                   (self.activity_tp1_df['Contour'] == 'ParotidglandR') |
+                                   (self.activity_tp1_df['Contour'] == 'Spleen') |
+                                   (self.activity_tp1_df['Contour'] == 'Skeleton') |
+                                   (self.activity_tp1_df['Contour'] == 'Bladder_Experimental') |
+                                   (self.activity_tp1_df['Contour'] == 'SubmandibularglandL') |
+                                   (self.activity_tp1_df['Contour'] == 'SubmandibularglandR')]
+
+
+        # Specify the values for the new observation
+        rob_observation = {
+            'Contour': 'ROB',
+            'Series Date': 'x',
+            'Integral Total (BQML*ml)': self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - filtered_df['Integral Total (BQML*ml)'].sum(),
+            'Max (BQML)': 'x',
+            'Mean Ratio (-)': 'x',
+            'Total (BQML)': 'x',
+            'Volume (ml)': self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'WBCT', 'Volume (ml)'] - filtered_df['Volume (ml)'].sum(),
+            'Voxel Count (#)': 'x'
+        }
+        #activity_tp1_df[len(activity_tp1_df)] = rob_observation
+        rob_observation = pd.DataFrame([rob_observation])
+        self.activity_tp1_df = pd.concat([self.activity_tp1_df, rob_observation], ignore_index=True)
+
+        # Specify the values for the new observation
+        rob_observation = {
+            'Contour': 'ROB',
+            'Series Date': 'x',
+            'Integral Total (BQML*ml)': self.activity_tp2_df.loc[self.activity_tp2_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - filtered_df['Integral Total (BQML*ml)'].sum(),
+            'Max (BQML)': 'x',
+            'Mean Ratio (-)': 'x',
+            'Total (BQML)': 'x',
+            'Volume (ml)': self.activity_tp2_df.loc[self.activity_tp2_df['Contour'] == 'WBCT', 'Volume (ml)'] - filtered_df['Volume (ml)'].sum(),
+            'Voxel Count (#)': 'x'
+        }
+        rob_observation = pd.DataFrame([rob_observation])
+        self.activity_tp2_df = pd.concat([self.activity_tp2_df, rob_observation], ignore_index=True)
+        
         self.new_data = pd.DataFrame()
         #################################### Output dataframe #########################################            
         if self.patient_id in self.df['patient_id'].values:
@@ -57,17 +100,19 @@ class PatientDosimetry:
                 'volume_ml': self.activity_tp1_df['Volume (ml)'].tolist()
                 })
 
-        # Calculate the sum of 'volume_ml' for observations other than 'WBCT'
-        sum_without_wbct = self.new_data[self.new_data['organ'] != 'WBCT']['volume_ml'].sum()
+#        # Calculate the sum of 'volume_ml' for observations other than 'WBCT'
+#        sum_without_wbct = self.new_data[self.new_data['organ'] != 'WBCT']['volume_ml'].sum()
+#
+#        # Specify the values for the new observation
+#        rob_observation = {
+#            'patient_id': self.patient_id,
+#            'cycle': self.cycle,
+#            'organ': 'ROB',
+#            'volume_ml': self.new_data.loc[self.new_data['organ'] == 'WBCT', 'volume_ml'].values[0] - sum_without_wbct
+#        }
+#        self.new_data.loc[len(self.new_data)] = rob_observation
 
-        # Specify the values for the new observation
-        rob_observation = {
-            'patient_id': self.patient_id,
-            'cycle': self.cycle,
-            'organ': 'ROB',
-            'volume_ml': self.new_data.loc[self.new_data['organ'] == 'WBCT', 'volume_ml'].values[0] - sum_without_wbct
-        }
-        self.new_data.loc[len(self.new_data)] = rob_observation
+
 
         print(self.new_data)
         self.organslist = self.activity_tp1_df['Contour'].unique()
@@ -110,7 +155,7 @@ class PatientDosimetry:
             self.new_data.at[index, 'a0_Bq'] = popt[0]
             self.new_data.at[index, 'tia_bqs'] = popt[0]/popt[1]
             self.new_data.at[index, 'tiac_h'] = (popt[0]/popt[1])/(inj_activity * 3600)
-
+        
         ########################### Dictionary with lamda eff of each VOIs ############################
         self.lamda_eff_dict = {}
         for organ in self.organslist:
@@ -156,24 +201,111 @@ class PatientDosimetry:
         plt.show()
         
     def create_TIA(self):
-        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+
+        ##############################################################################################
+        ####################################### OPTION 1 #############################################
+        ##############################################################################################
+#        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+#        if self.cycle == 1:
+#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#        else:
+#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#
+#        organs = [organ for organ in self.organslist if organ != "ROB"]
+#        print(organs)
+#        for organ in organs:
+#            self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+                     
+        ##############################################################################################
+        ####################################### OPTION 1 #############################################
+        ##############################################################################################
+#        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+#        if self.cycle == 1:
+#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#        else:
+#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
+
+                                    
+        #organs = [organ for organ in self.organslist if organ != "WBCT"]
+        #last_element = organs.pop()  # Remove the ROB
+        #organs.insert(0, last_element)  # Insert it at the beginning
+        #organs = np.array(organs)
+        #print(organs)
+        #for organ in organs:
+        #    self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+
+
+        ##############################################################################################
+        ####################################### OPTION 2 #############################################
+        ##############################################################################################
+
+#        if self.cycle == 1:
+#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#        else:
+#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#                            
+#        TIA_WB = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+#        TIA_organs = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+#            
+#        TIA_WB[self.roi_masks_resampled['WBCT']] = self.SPECTMBq[self.roi_masks_resampled['WBCT']] * np.exp(self.lamda_eff_dict['WBCT'] * time) / self.lamda_eff_dict['WBCT']
+#        organs = [organ for organ in self.organslist if organ not in ["WBCT", "ROB", "Liver_Reference", "TotalTumorBurden", "Kidney_L_m", 'Kidney_R_m']]
+#        index_skeleton = organs.index('Skeleton')
+#        organs.pop(index_skeleton)
+#
+#        # Insert 'Skeleton' at the beginning of the list
+#        organs.insert(0, 'Skeleton')
+#
+#        print(organs)
+#        for organ in organs:
+#            TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+#            
+#        print(TIA_WB.shape)
+#        print(TIA_organs.shape)
+#        TIA_ROB = TIA_WB - TIA_organs
+#        self.TIA = TIA_ROB + TIA_organs
+
+        ##############################################################################################
+        ####################################### OPTION 3 #############################################
+        ##############################################################################################
+
         if self.cycle == 1:
             time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
         else:
             time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-        
-        for organ in self.organslist:
-            self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+                            
+        TIA_WB = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+        TIA_organs = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
             
+        TIA_WB[self.roi_masks_resampled['WBCT']] = self.SPECTMBq[self.roi_masks_resampled['WBCT']] * np.exp(self.lamda_eff_dict['WBCT'] * time) / self.lamda_eff_dict['WBCT']
+        organs = [organ for organ in self.organslist if organ not in ["WBCT", "ROB", "Liver_Reference", "TotalTumorBurden", "Kidney_L_m", 'Kidney_R_m']]
+        index_skeleton = organs.index('Skeleton')
+        organs.pop(index_skeleton)
+
+        # Insert 'Skeleton' at the beginning of the list
+        organs.insert(0, 'Skeleton')
+        print(organs)
+        for organ in organs:
+            TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+            
+        TIA_ROB = TIA_WB - TIA_organs
+        TIA_ROB_value = np.sum(np.sum(np.sum(TIA_ROB)))
+        ROB_no_voxels = np.sum(np.sum(np.sum(self.roi_masks_resampled['ROB'])))
+
+        TIA_value_per_voxel = TIA_ROB_value / ROB_no_voxels
+        TIA_ROB[self.roi_masks_resampled['ROB']] = TIA_value_per_voxel
+        
+        self.TIA = TIA_ROB + TIA_organs
+        
+
+        
         return self.TIA
 
     def flip_images(self):
         self.CTp = np.transpose(self.CT, (2, 0, 1))
-        print(self.CTp.shape)
         self.TIAp = np.transpose(self.TIA, (2, 0, 1))
         print('CT image:')
         self.image_visualisation(self.CTp)
-        print('SPECT image:')
+        print('TIA image:')
         self.image_visualisation(self.TIAp)
         
         return self.TIAp
