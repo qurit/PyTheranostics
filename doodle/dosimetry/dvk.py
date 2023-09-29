@@ -153,5 +153,5 @@ class DoseVoxelKernel:
                 for k in range(zdim):
                     image_weighted[i, j, k] = image[i, j, k] * weighting[i, j, k]
                     
-        return RHOMAT, image_weighted
+        return image_weighted
 
