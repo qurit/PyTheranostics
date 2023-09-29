@@ -18,6 +18,9 @@ def biexp_fun(t, a, b,c,d):
 #     decayconst = 0.004344987591895751
 #     return a*exp(-b*x) + c*exp(-d*x) +e*exp(-decayconst*x)
 
+def find_a_initial(f, b, t):
+    return f * exp(b * t)
+
 def get_residuals(t,a,skip_points,popt,eq='monoexp'):
 
     if eq == 'monoexp':
@@ -32,7 +35,7 @@ def get_residuals(t,a,skip_points,popt,eq='monoexp'):
 
 
 
-def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000):
+def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000,limit_bounds=False):
 
     if ignore_weights:
         weights = None
@@ -41,13 +44,20 @@ def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1)
 
     #monoexponential fit
     # bounds show that the minimum decay is with physical decay, can't decay slower. (decayconst to inf)
+    
+    if limit_bounds:
+        upper_bound = decayconst
+    else:
+        upper_bound = decayconst * 1e6
+    
      
     if weights:    
         popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
-                                p0=monoguess,bounds=([0,decayconst],np.inf),maxfev=maxev)
+                                p0=monoguess,bounds=([0,upper_bound],np.inf),maxfev=maxev)
     else:
-        popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights,
-                                p0=monoguess,bounds=([0,decayconst],np.inf),maxfev=maxev)
+        print("Im here")
+        popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights,p0=monoguess,
+                                maxfev=maxev)
 
 
     [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='monoexp')
