@@ -162,7 +162,8 @@ class QC:
         # print(self.summary_df.columns[0])
         cols = self.summary_df.columns[0]
         # print(cols)
-        self.summary_df.style.set_properties(subset=[cols],**{'width': '500px'},**{'text-align': 'left'}).hide_index()
+        #self.summary_df.style.set_properties(subset=[cols],**{'width': '500px'},**{'text-align': 'left'}).hide_index() # https://stackoverflow.com/questions/55051920/pandas-styler-object-has-no-attribute-hide-index-error
+        self.summary_df.style.set_properties(subset=[cols],**{'width': '500px'},**{'text-align': 'left'}).hide()
         # print(self.summary)
 
 

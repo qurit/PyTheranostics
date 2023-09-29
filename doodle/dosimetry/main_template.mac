@@ -1,0 +1,147 @@
+#========================================================================================
+# Verbosity            
+#========================================================================================
+
+/gate/verbose Physic    1
+/gate/verbose Cuts      1
+/gate/verbose SD        0
+/gate/verbose Actions   0
+/gate/verbose Actor     1
+/gate/verbose Step      0
+/gate/verbose Error     1
+/gate/verbose Warning   1
+/gate/verbose Output    1
+/gate/verbose Beam      1
+/gate/verbose Volume    1
+/gate/verbose Image     1
+/gate/verbose Geometry  2
+
+#========================================================================================
+# Geometry             
+#========================================================================================
+# Material database
+/gate/geometry/setMaterialDatabase data/GateMaterials.db
+# Material database
+/gate/world/geometry/setXLength 100 cm
+/gate/world/geometry/setYLength 100 cm
+/gate/world/geometry/setZLength 200 cm
+/gate/world/setMaterial Air
+/gate/world/vis/setVisible 1
+/gate/world/vis/forceWireframe
+
+# Generate materials from Hounsfield units
+/gate/HounsfieldMaterialGenerator/SetMaterialTable data/Schneider2000MaterialsTable.txt
+/gate/HounsfieldMaterialGenerator/SetDensityTable  data/Schneider2000DensitiesTable.txt
+/gate/HounsfieldMaterialGenerator/SetDensityTolerance               0.1 g/cm3
+/gate/HounsfieldMaterialGenerator/SetOutputMaterialDatabaseFilename data/patient-HUmaterials.db
+/gate/HounsfieldMaterialGenerator/SetOutputHUMaterialFilename       data/patient-HU2mat.txt
+/gate/HounsfieldMaterialGenerator/Generate
+
+# Voxelized geometry 
+/gate/world/daughters/name                      phantom
+/gate/world/daughters/insert                    ImageNestedParametrisedVolume
+/gate/geometry/setMaterialDatabase              data/patient-HUmaterials.db
+/gate/phantom/geometry/setHUToMaterialFile      data/patient-HU2mat.txt
+/gate/phantom/geometry/setImage                 data/CT.mhd
+/gate/phantom/vis/forceWireframe
+
+
+#========================================================================================
+# PHYSICS              
+#========================================================================================
+#emstandard_opt3 is recommended for medical, space 
+# http://geant4.in2p3.fr/IMG/pdf_PhysicsLists.pdf
+/gate/physics/addPhysicsList emstandard_opt3
+/gate/physics/addProcess Decay
+/gate/physics/addProcess RadioactiveDecay
+
+/gate/physics/Gamma/SetCutInRegion      world 1 mm
+/gate/physics/Electron/SetCutInRegion   world 1 mm
+/gate/physics/Positron/SetCutInRegion   world 1 mm
+
+/gate/physics/Gamma/SetCutInRegion      phantom 0.001 mm
+/gate/physics/Electron/SetCutInRegion   phantom 0.001 mm
+/gate/physics/Positron/SetCutInRegion   phantom 0.001 mm
+
+
+#========================================================================================
+# DOSE ACTOR           
+#========================================================================================
+
+/gate/actor/addActor                     DoseActor  dose3D
+/gate/actor/dose3D/save                  output/distrib-SPLIT.mhd
+/gate/actor/dose3D/attachTo    	       phantom
+/gate/actor/dose3D/stepHitType           random
+/gate/actor/dose3D/setPosition           0 0 0 cm
+#/gate/actor/dose3D/setVoxelSize          4.7952 4.7952 4.7952 mm
+/gate/actor/dose3D/setSize          	613.7856 613.7856 1117.2816 mm
+/gate/actor/dose3D/setResolution         128 128 233
+/gate/actor/dose3D/saveEveryNSeconds     3600
+/gate/actor/dose3D/enableEdep            true
+/gate/actor/dose3D/enableUncertaintyEdep true
+/gate/actor/dose3D/enableDose            true
+/gate/actor/dose3D/enableUncertaintyDose true
+/gate/actor/dose3D/enableNumberOfHits    true
+
+/gate/actor/addActor               SimulationStatisticActor stat
+/gate/actor/stat/save              output/stat-SPLIT.txt
+/gate/actor/stat/saveEveryNSeconds 3600
+
+#========================================================================================
+# INITIALIZE           
+#========================================================================================
+
+/gate/run/initialize
+/gate/physics/displayCuts
+
+#========================================================================================
+# SOURCE               
+#========================================================================================
+
+
+/gate/source/addSource Lu177Source voxel
+/gate/source/Lu177Source/reader/insert	image
+
+/gate/source/Lu177Source/imageReader/translator/insert linear
+# Input image is normalized accumulated activity image - to make sure GATE is reading in the image correctly, set scale to 1
+# then check verbose output for source - is there the total activity in 1 Bq? Then it was read correctly. 
+# In any way, GATE is simulating the number of primaries!
+/gate/source/Lu177Source/imageReader/linearTranslator/setScale 1 Bq
+/gate/source/Lu177Source/imageReader/readFile data/Source_normalized.mhd
+
+# Source has always to be shifted to -1/2 of its total length in x,y,z
+/gate/source/Lu177Source/setPosition -306.8928 -306.8928 -558.6408 mm
+
+# Define source Lutetium: Z = 71, A = 177
+/gate/source/Lu177Source/gps/particle ion
+/gate/source/Lu177Source/gps/ion 71 177 0 0
+/gate/source/Lu177Source/gps/angtype   iso
+/gate/source/Lu177Source/setForcedUnstableFlag 	true
+/gate/source/Lu177Source/setForcedHalfLife 574300.8 s  
+/gate/source/Lu177Source/gps/energytype Mono
+/gate/source/Lu177Source/gps/monoenergy 0. keV
+
+# source is now relative to phantom instead of relative to world
+/gate/source/Lu177Source/attachTo phantom 
+
+
+# To enable information output of source 
+/gate/source/Lu177Source/dump 1
+
+# Gives a list of all defined sources. In this example only 1 source
+/gate/source/list
+
+#========================================================================================
+# START
+#========================================================================================
+
+
+/gate/random/setEngineName MersenneTwister
+/gate/random/setEngineSeed auto
+
+#/tracking/verbose 1
+
+/gate/application/setTotalNumberOfPrimaries XXX
+
+/gate/application/start
+
