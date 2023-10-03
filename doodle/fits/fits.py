@@ -1,8 +1,6 @@
 from typing import Optional, Tuple
 import numpy as np
 from numpy import exp
-import pandas as pd
-import matplotlib.pylab as plt
 from scipy.optimize import curve_fit
 
 
@@ -93,10 +91,6 @@ def fit_biexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,
     # create times for displaying the function
     tt = np.linspace(0,t.max()*2.5,1000)
     yy = biexp_fun(tt,*popt[:4])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
-
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
 
     return popt,tt,yy,residuals
 
@@ -129,10 +123,6 @@ def fit_biexp_uptake(t,a,decayconst,skip_points=0,ignore_weights=True,append_zer
     # create times for displaying the function
     tt = np.linspace(0,t.max()*2.5,1000)
     yy = biexp_fun(tt,*popt[:4])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
-
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
 
     return popt,tt,yy,residuals
 
