@@ -25,7 +25,8 @@ def blood_based_selfdose(df: pandas.DataFrame) -> Tuple[float, float]:
 
 
     # TODO: Compute Time-Integrated Activity Concetrations
-
+    TIA_plasma = 0
+    TIA_blood = 0
 
     # Compute Dose 
     dose_ECF = TIA_plasma * RMECFF * m_bm * s_bm_bm
