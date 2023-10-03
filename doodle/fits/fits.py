@@ -1,3 +1,4 @@
+from typing import Optional, Tuple
 import numpy as np
 from numpy import exp,log
 import pandas as pd
@@ -35,44 +36,30 @@ def get_residuals(t,a,skip_points,popt,eq='monoexp'):
 
 
 
-def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000,limit_bounds=False):
+def fit_monoexp(time: np.ndarray, 
+                activity: np.ndarray, 
+                decayconst: float = 1000000,
+                skip_points: int = 0,
+                weights: Optional[np.ndarray] = None,
+                monoguess: Tuple[int, int] = (1,1),
+                maxev: int = 100000
+                ) -> Tuple[np.ndarray, np.ndarray]:
 
-    if ignore_weights:
-        weights = None
-    else:
-        weights = sigmas
-
-    #monoexponential fit
-    # bounds show that the minimum decay is with physical decay, can't decay slower. (decayconst to inf)
-    
-    if limit_bounds:
-        upper_bound = decayconst
-    else:
-        upper_bound = decayconst * 1e6
-    
+    # The minimum decay is with physical decay, can't decay slower. (decayconst to inf)
+    if skip_points > 0:
+        time = time[skip_points:]
+        activity = activity[skip_points:]
+        weights = weights[skip_points] if weights is not None else weights
      
-    if weights:    
-        popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
-                                p0=monoguess,bounds=([0,upper_bound],np.inf),maxfev=maxev)
-    else:
-        print("Im here")
-        popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights,p0=monoguess,
-                                maxfev=maxev)
+    popt, _ = curve_fit(monoexp_fun, time, activity, sigma=weights,
+                        p0=monoguess,
+                        bounds=([0,decayconst], np.inf), maxfev=maxev)
 
+    [r_squared, residuals] = get_residuals(time, activity, skip_points, popt, eq='monoexp')
 
-    [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='monoexp')
+    popt = np.append(popt, r_squared)
 
-    popt = np.append(popt,r_squared)
-
-    # create times for displaying the function
-    tt = np.linspace(0,t.max()*2.5,1000)
-    yy = monoexp_fun(tt,*popt[:2])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
-
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
-
-    return popt,tt,yy,residuals
+    return popt, residuals
 
 
 def fit_biexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,biguess=(1,1,1,0.1),maxev=100000):
