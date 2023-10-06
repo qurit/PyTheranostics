@@ -11,21 +11,24 @@ class Olinda:
     def phantom_data(self):
         lesion_df = self.df[self.df['organ'].str.contains('Lesion', case=False, na=False)]
         
+        ## Prepare df for Olinda 
         phrases_to_exclude = ['Femur', 'Humerus', 'Reference', 'TotalTumorBurden', 'Kidney_L_m', 'Kidney_R_m', 'Lesion']
         phrases_to_exclude.extend([f'L{i}' for i in range(10)])  # L(any number)
-        # Replace "Kidney_R_a" and "Kidney_L_a" with "Kidneys" in the 'organ' column
+        self.df = self.df[~self.df['organ'].str.contains('|'.join(phrases_to_exclude), case=False, na=False)]
+        
+        
+        # group kidneys 
         self.df['organ'] = self.df['organ'].replace(['Kidney_R_a', 'Kidney_L_a'], 'Kidneys')
-        # Group by 'organ' and aggregate values (e.g., sum)
         self.df = self.df.groupby('organ').agg({'tiac_h': 'sum'}).reset_index()
         
+        # group salivary glands
         self.df['organ'] = self.df['organ'].replace(['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR'], 'Salivary Glands')
-        # Group by 'organ' and aggregate values (e.g., sum)
         self.df = self.df.groupby('organ').agg({'tiac_h': 'sum'}).reset_index()
+        
+        # renaming
         self.df['organ'] = self.df['organ'].replace('Bladder_Experimental', 'Urinary Bladder Contents')
 
 
-
-        self.df = self.df[~self.df['organ'].str.contains('|'.join(phrases_to_exclude), case=False, na=False)]
         print(self.df)
 
         self.organlist = self.df['organ'].unique()
