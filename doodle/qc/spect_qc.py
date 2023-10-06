@@ -112,11 +112,17 @@ class SPECTQC(QC):
             self.window_check_df['reconstructed_image'] = self.window_check(type='spect')
 
             #check applied corrections
-            if set(self.isotope_dic['spect']['corrections']).issubset(set(list(ds.CorrectedImage.split())).intersection(set(self.isotope_dic['spect']['corrections']))) :
-                self.append_to_summary(f"CORRECTIONS APPLIED: {self.isotope_dic['spect']['corrections']}\t                   OK\n\n")
-            else:
-                self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(list(ds.CorrectedImage.split())) ^ set(self.isotope_dic['spect']['corrections'])} correction.\t         FAIL\n\n")
-           
+            try:
+                if set(self.isotope_dic['spect']['corrections']).issubset(set(list(ds.CorrectedImage.split())).intersection(set(self.isotope_dic['spect']['corrections']))) :
+                    self.append_to_summary(f"CORRECTIONS APPLIED: {self.isotope_dic['spect']['corrections']}\t                   OK\n\n")
+                else:
+                    self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(list(ds.CorrectedImage.split())) ^ set(self.isotope_dic['spect']['corrections'])} correction.\t         FAIL\n\n")
+            except:
+                if set(self.isotope_dic['spect']['corrections']).issubset(set(list(ds.CorrectedImage)).intersection(set(self.isotope_dic['spect']['corrections']))) :
+                    self.append_to_summary(f"CORRECTIONS APPLIED: {self.isotope_dic['spect']['corrections']}\t                   OK\n\n")
+                else:
+                    self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(list(ds.CorrectedImage)) ^ set(self.isotope_dic['spect']['corrections'])} correction.\t         FAIL\n\n")
+                          
             #check matrix size
             if [rows,cols] == self.isotope_dic['spect']['matrix']:
                 self.append_to_summary(f'MATRIX SIZE: {rows} x {cols}\t         OK\n\n')
