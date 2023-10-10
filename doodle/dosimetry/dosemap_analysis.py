@@ -3,6 +3,9 @@ import gatetools as gt
 import itk
 import numpy as np
 import SimpleITK as sitk
+
+
+
 import argparse
 class Dosemap:
     def __init__(self, df, patient_id, cycle, dosemap, roi_masks_resampled, organlist):
@@ -55,6 +58,17 @@ class Dosemap:
             zip = zip.SetLabelInput()
             organ_data = gt.createDVH(doseimage, itkVol)
             print(organ_data)
+            
+    # equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
+    # and 177Lu-DOTATATE: the role of associated risk factors"
+    def calculate_bed(abs_dose_per_cycle, n_cycles, alpha_beta, t_repair, t_eff):
+        bed = 0
+        for i in range(1, n_cycles + 1):
+            abs_dose = abs_dose_per_cycle[f'{i}']
+            bed += abs_dose + 1/alpha_beta * t_repair/(t_repair + t_eff) * abs_dose**2
+
+        return bed
+
             
     def save_dataframe(self):
         print(self.df)
