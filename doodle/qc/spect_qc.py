@@ -40,7 +40,10 @@ class SPECTQC(QC):
             duration = np.nan
         rows = ds.Rows
         cols = ds.Columns
-        zoom = ds.DetectorInformationSequence[0].ZoomFactor
+        try:
+            zoom = ds.DetectorInformationSequence[0].ZoomFactor
+        except:
+            zoom = None
         try:
             number_projections = ds.RotationInformationSequence[0].NumberOfFramesInRotation * ds.NumberOfDetectors
         except:
@@ -116,12 +119,12 @@ class SPECTQC(QC):
                 if set(self.isotope_dic['spect']['corrections']).issubset(set(list(ds.CorrectedImage.split())).intersection(set(self.isotope_dic['spect']['corrections']))) :
                     self.append_to_summary(f"CORRECTIONS APPLIED: {self.isotope_dic['spect']['corrections']}\t                   OK\n\n")
                 else:
-                    self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(list(ds.CorrectedImage.split())) ^ set(self.isotope_dic['spect']['corrections'])} correction.\t         FAIL\n\n")
+                    self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(self.isotope_dic['spect']['corrections']) - set(list(ds.CorrectedImage))} correction.\t         FAIL\n\n")
             except:
                 if set(self.isotope_dic['spect']['corrections']).issubset(set(list(ds.CorrectedImage)).intersection(set(self.isotope_dic['spect']['corrections']))) :
                     self.append_to_summary(f"CORRECTIONS APPLIED: {self.isotope_dic['spect']['corrections']}\t                   OK\n\n")
                 else:
-                    self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(list(ds.CorrectedImage)) ^ set(self.isotope_dic['spect']['corrections'])} correction.\t         FAIL\n\n")
+                    self.append_to_summary(f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(self.isotope_dic['spect']['corrections']) - set(list(ds.CorrectedImage))} correction.\t         FAIL\n\n")
                           
             #check matrix size
             if [rows,cols] == self.isotope_dic['spect']['matrix']:
