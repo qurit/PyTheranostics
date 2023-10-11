@@ -19,15 +19,8 @@ class Dosemap:
         self.dosemap = dosemap 
         self.roi_masks_resampled = roi_masks_resampled
         self.organlist = organlist
-        print(RADIOBIOLOGY_DATA_FILE)
-        if RADIOBIOLOGY_DATA_FILE.exists():
-            with open(RADIOBIOLOGY_DATA_FILE) as f:
-                self.radiobiology_dic = json.load(f)
-        else:
-            print("The JSON file does not exist.")
-
-        #with open(RADIOBIOLOGY_DATA_FILE) as f:
-        #    self.radiobiology_dic = json.load(f)
+        with open(RADIOBIOLOGY_DATA_FILE) as f:
+            self.radiobiology_dic = json.load(f)
         
     def image_visualisation(self, image):
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
@@ -47,16 +40,19 @@ class Dosemap:
         self.ad_mean = {}
         for organ in self.organlist:
             mask = self.roi_masks_resampled[organ]
-            self.ad_mean[organ] = self.dosemap[mask].mean()
+            self.ad_mean[organ] = self.dosemap[mask].mean() / 1000
             print(f'{organ}', self.ad_mean[organ])
-        #print(self.ad_mean)
+
+        self.df['mean_ad[Gy]']= self.df['organ'].map(self.ad_mean)
+
+
             
     def show_max_statistics(self):
         for organ in self.organlist:
             mask = self.roi_masks_resampled[organ]
             x = self.dosemap[mask].max()
             print(f'{organ}', x)
-            
+                        
     def dose_volume_histogram(self):
         doseimage = self.dosemap.astype(float)
         doseimage = itk.image_from_array(doseimage)
@@ -74,12 +70,15 @@ class Dosemap:
     # equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
     # and 177Lu-DOTATATE: the role of associated risk factors"
     def calculate_bed(self, abs_dose_per_cycle, n_cycles, alpha_beta, t_repair):
+        bed_df = self.df[self.df['organ'].isin(list(self.radiobiology_dic.keys()))] # only organs that we know the radiobiology parameters
+        organs = np.array(bed_df['organ'].unique())
         bed = 0
-
-
-
-        for i in self.organlist:
-            t_eff['i'] = self.df.loc[self.df['organ'] == 'i']['lamda_eff_1/s'].values[0]
+        t_eff = {}
+        # how to retrieve information from previous cycles?
+        for i in organs:
+            t_eff['i'] = bed_df.loc[bed_df['organ'] == 'i']['lamda_eff_1/s'].values[0]
+            
+            abs_dose_per_cycle
             for j in range(1, n_cycles + 1):
                 abs_dose = abs_dose_per_cycle[f'{j}']
                 bed['i'] += abs_dose + 1/alpha_beta * t_repair/(t_repair + t_eff['i']) * abs_dose**2
@@ -87,12 +86,6 @@ class Dosemap:
         return bed
 
 
-    def dataf(self):
-        #print(self.df)
-        print(self.df.loc[self.df['organ'] == 'Liver']['lamda_eff_1/s'].values[0])
-        intersection = {key: self.organlist[key] for key in self.organlist if key in self.radiobiology_dic and self.organlist[key] == self.radiobiology_dic[key]}
-
-        print(intersection)
     
     def save_dataframe(self):
         print(self.df)
