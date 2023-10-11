@@ -118,7 +118,7 @@ class PatientDosimetry:
         self.new_data['tia_bqs'] = self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s']
         self.new_data['tiac_h'] = (self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s'])/(inj_activity * 3600)
 
-        return self.new_data
+        return self.new_data, self.lamda_eff_dict
    
     def image_visualisation(self, image):
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))    
@@ -187,12 +187,11 @@ class PatientDosimetry:
         # Insert 'Skeleton' at the beginning of the list
         organs.insert(0, 'Skeleton')
 
-        print(organs)
+
         for organ in organs:
             TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
             
-        print(TIA_WB.shape)
-        print(TIA_organs.shape)
+
         TIA_ROB = TIA_WB - TIA_organs
         self.TIA = TIA_ROB + TIA_organs
 
