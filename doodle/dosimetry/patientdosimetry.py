@@ -19,12 +19,10 @@ from skimage import img_as_bool
 from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake
 from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
 
-# %%
-itk.LabelStatisticsImageFilter.GetTypes()
+
 # %%
 class PatientDosimetry:
-    def __init__(self, df, patient_id, cycle, isotope, CT, SPECTMBq, roi_masks_resampled, activity_tp1_df, inj_timepoint1, activity_tp2_df = None, inj_timepoint2 = None):
-        self.df = df
+    def __init__(self, patient_id, cycle, isotope, CT, SPECTMBq, roi_masks_resampled, activity_tp1_df, inj_timepoint1, activity_tp2_df = None, inj_timepoint2 = None):
         self.patient_id = patient_id
         self.cycle = int(cycle)
         self.isotope = isotope
@@ -96,7 +94,7 @@ class PatientDosimetry:
         return self.new_data, self.lamda_eff_dict
 
     def takefitfromcycle1_andintegrate(self):
-        cycle1_df = self.df[(self.df['patient_id'] == self.patient_id) & (self.df['cycle'] == 1)]
+        cycle1_df = pd.read_csv(f"/mnt/y/Sara/PR21_dosimetry/output/{self.patient_id}_cycle01_dosimetry_output.csv")
         t = [self.inj_timepoint1.loc[0, 'delta_t_days']]
         ts = np.array([i * 24 * 3600 for i in t]) # seconds
         inj_activity = self.inj_timepoint1.loc[0, 'injected_activity_MBq'] # MBq
@@ -248,12 +246,7 @@ class PatientDosimetry:
         self.total_acc_A = np.sum(np.sum(np.sum(self.TIAp)))
         self.source_normalized = self.TIAp / self.total_acc_A
 
-    def save_images_and_df(self):
-        self.df = pd.concat([self.df, self.new_data], ignore_index=True)
-        self.df = self.df.dropna(subset=['patient_id'])
-        print(self.df)
-        self.df.to_csv("/mnt/y/Sara/PR21_dosimetry/df.csv")
-        
+    def save_images(self):
         self.CTp = np.array(self.CTp, dtype=np.float32)
         image = sitk.GetImageFromArray(self.CTp)
         image.SetSpacing([4.7952, 4.7952, 4.7952]) 
