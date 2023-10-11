@@ -199,20 +199,23 @@ def getinputdata(patient_id, cycle):
     rob_observation = pd.DataFrame([rob_observation])
     if "ROB" not in activity_tp1_df['Contour'].values:
         activity_tp1_df = pd.concat([activity_tp1_df, rob_observation], ignore_index=True)
-    # Specify the values for the ROB observation - time point 2
-    rob_observation = {
-        'Contour': 'ROB',
-        'Series Date': activity_tp2_df.loc[1, 'Series Date'],
-        'Integral Total (BQML*ml)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - organs_df['Integral Total (BQML*ml)'].sum()).values[0],
-        'Total (BQML)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Total (BQML)'] - organs_df['Total (BQML)'].sum()).values[0],
-        'Volume (ml)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Volume (ml)'] - organs_df['Volume (ml)'].sum()).values[0],
-        'Voxel Count (#)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Voxel Count (#)'] - organs_df['Voxel Count (#)'].sum()).values[0]
-    }
-    rob_observation = pd.DataFrame([rob_observation])
-    if "ROB" not in activity_tp2_df['Contour'].values:
+    
+    if cycle == '1':
+        # Specify the values for the ROB observation - time point 2
+        rob_observation = {
+            'Contour': 'ROB',
+            'Series Date': activity_tp2_df.loc[1, 'Series Date'],
+            'Integral Total (BQML*ml)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - organs_df['Integral Total (BQML*ml)'].sum()).values[0],
+            'Total (BQML)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Total (BQML)'] - organs_df['Total (BQML)'].sum()).values[0],
+            'Volume (ml)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Volume (ml)'] - organs_df['Volume (ml)'].sum()).values[0],
+            'Voxel Count (#)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Voxel Count (#)'] - organs_df['Voxel Count (#)'].sum()).values[0]
+        }
+        rob_observation = pd.DataFrame([rob_observation])
+        if "ROB" not in activity_tp2_df['Contour'].values:
+            activity_tp2_df = pd.concat([activity_tp2_df, rob_observation], ignore_index=True)
         activity_tp2_df = pd.concat([activity_tp2_df, rob_observation], ignore_index=True)
-    activity_tp2_df = pd.concat([activity_tp2_df, rob_observation], ignore_index=True)
-        
+    else:
+        pass
     # Define your data for three observations: SPECT, CT, RT
     data = [
         {' ': 'SPECT', 'xdim': SPECT_xdim, 'ydim': SPECT_ydim, 'zdim': SPECT_zdim, 'xsize': SPECT_xsize, 'ysize': SPECT_ysize, 'zsize': SPECT_zsize},
