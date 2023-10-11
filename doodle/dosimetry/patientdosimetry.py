@@ -37,84 +37,14 @@ class PatientDosimetry:
         self.roi_masks_resampled = roi_masks_resampled
 
     def dataframe(self):
-        # Calculate the sum of 'volume_ml' for observations other than 'WBCT'
-        filtered_df = self.activity_tp1_df[(self.activity_tp1_df['Contour'] == 'TotalTumorBurden') | 
-                                   (self.activity_tp1_df['Contour'] == 'Kidney_L_a') |
-                                   (self.activity_tp1_df['Contour'] == 'Kidney_R_a') |
-                                   (self.activity_tp1_df['Contour'] == 'Liver') |
-                                   (self.activity_tp1_df['Contour'] == 'ParotidglandL') |
-                                   (self.activity_tp1_df['Contour'] == 'ParotidglandR') |
-                                   (self.activity_tp1_df['Contour'] == 'Spleen') |
-                                   (self.activity_tp1_df['Contour'] == 'Skeleton') |
-                                   (self.activity_tp1_df['Contour'] == 'Bladder_Experimental') |
-                                   (self.activity_tp1_df['Contour'] == 'SubmandibularglandL') |
-                                   (self.activity_tp1_df['Contour'] == 'SubmandibularglandR')]
-
-
-        # Specify the values for the new observation
-        rob_observation = {
-            'Contour': 'ROB',
-            'Series Date': 'x',
-            'Integral Total (BQML*ml)': self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - filtered_df['Integral Total (BQML*ml)'].sum(),
-            'Max (BQML)': 'x',
-            'Mean Ratio (-)': 'x',
-            'Total (BQML)': 'x',
-            'Volume (ml)': self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'WBCT', 'Volume (ml)'] - filtered_df['Volume (ml)'].sum(),
-            'Voxel Count (#)': 'x'
-        }
-        #activity_tp1_df[len(activity_tp1_df)] = rob_observation
-        rob_observation = pd.DataFrame([rob_observation])
-        self.activity_tp1_df = pd.concat([self.activity_tp1_df, rob_observation], ignore_index=True)
-
-        # Specify the values for the new observation
-        rob_observation = {
-            'Contour': 'ROB',
-            'Series Date': 'x',
-            'Integral Total (BQML*ml)': self.activity_tp2_df.loc[self.activity_tp2_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - filtered_df['Integral Total (BQML*ml)'].sum(),
-            'Max (BQML)': 'x',
-            'Mean Ratio (-)': 'x',
-            'Total (BQML)': 'x',
-            'Volume (ml)': self.activity_tp2_df.loc[self.activity_tp2_df['Contour'] == 'WBCT', 'Volume (ml)'] - filtered_df['Volume (ml)'].sum(),
-            'Voxel Count (#)': 'x'
-        }
-        rob_observation = pd.DataFrame([rob_observation])
-        self.activity_tp2_df = pd.concat([self.activity_tp2_df, rob_observation], ignore_index=True)
-        
-        self.new_data = pd.DataFrame()
         #################################### Output dataframe #########################################            
-        if self.patient_id in self.df['patient_id'].values:
-            if self.cycle in self.df['cycle'].values:
-                print(f"Patient {self.patient_id} cycle0{self.cycle} is already on the list!")
-            elif self.cycle not in self.df['cycle'].values:
-                self.new_data = pd.DataFrame({
-                    'patient_id': [self.patient_id] * len(self.activity_tp1_df),
-                    'cycle': [self.cycle] * len(self.activity_tp1_df),
-                    'organ': self.activity_tp1_df['Contour'].tolist(),
-                    'volume_ml': self.activity_tp1_df['Volume (ml)'].tolist()
-                    })
-        else:
-            self.new_data = pd.DataFrame({
-                'patient_id': [self.patient_id] * len(self.activity_tp1_df),
-                'cycle': [self.cycle] * len(self.activity_tp1_df),
-                'organ': self.activity_tp1_df['Contour'].tolist(),
-                'volume_ml': self.activity_tp1_df['Volume (ml)'].tolist()
-                })
+        self.new_data = pd.DataFrame({
+            'patient_id': [self.patient_id] * len(self.activity_tp1_df),
+            'cycle': [self.cycle] * len(self.activity_tp1_df),
+            'organ': self.activity_tp1_df['Contour'].tolist(),
+            'volume_ml': self.activity_tp1_df['Volume (ml)'].tolist()
+        })
 
-#        # Calculate the sum of 'volume_ml' for observations other than 'WBCT'
-#        sum_without_wbct = self.new_data[self.new_data['organ'] != 'WBCT']['volume_ml'].sum()
-#
-#        # Specify the values for the new observation
-#        rob_observation = {
-#            'patient_id': self.patient_id,
-#            'cycle': self.cycle,
-#            'organ': 'ROB',
-#            'volume_ml': self.new_data.loc[self.new_data['organ'] == 'WBCT', 'volume_ml'].values[0] - sum_without_wbct
-#        }
-#        self.new_data.loc[len(self.new_data)] = rob_observation
-
-
-
-        print(self.new_data)
         self.organslist = self.activity_tp1_df['Contour'].unique()
         return self.organslist        
         
@@ -163,7 +93,7 @@ class PatientDosimetry:
             lamda_eff = organ_data['lamda_eff_1/s'].iloc[0]
             self.lamda_eff_dict[organ] = lamda_eff
             
-        return self.new_data
+        return self.new_data, self.lamda_eff_dict
 
     def takefitfromcycle1_andintegrate(self):
         cycle1_df = self.df[(self.df['patient_id'] == self.patient_id) & (self.df['cycle'] == 1)]
