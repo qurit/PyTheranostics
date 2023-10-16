@@ -53,9 +53,9 @@ class DosecalQC(QC):
                 # self.append_to_summary(f'Please see below:\t \n\n')
             # print(self.db_df['cal_data'].columns)
             mismatch_df = self.db_df['cal_data'][self.db_df['cal_data']['recovery_calculated'] != self.db_df['cal_data']['reported_recovery']]
-            cols_show = ['manufacturer','model','source_id','delta_t','ref_act_MBq','decayed_ref','Ae_MBq','decay_perc_diff','Am_MBq','Ai_syr_MBq','Af_syr_MBq','As_syr_MBq','Am_syr_MBq','reported_recovery','recovery_calculated']
-            print(f"\n\n{mismatch_df[cols_show]}")
-
+            cols_show = ['manufacturer','model','source_id','delta_t','ref_act_MBq','decayed_ref','Ae_MBq','decay_perc_diff','Am_MBq','Ai_syr_MBq','Af_syr_MBq','As_syr_MBq','Am_syr_MBq','reported_recovery','recovery_calculated', 'syringe_activity_calculated']
+            #print(f"\n\n{mismatch_df[cols_show]}")
+            print(f"\n\n{self.db_df['cal_data'][cols_show]}")
 
 
         # if self.accepted_calibration == 1:

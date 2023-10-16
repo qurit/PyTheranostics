@@ -162,6 +162,8 @@ class PatientDosimetry:
             organ_data = self.new_data[self.new_data['organ'] == organ]
             lamda_eff = organ_data['lamda_eff_1/s'].iloc[0]
             self.lamda_eff_dict[organ] = lamda_eff
+            
+        return self.new_data
 
     def takefitfromcycle1_andintegrate(self):
         cycle1_df = self.df[(self.df['patient_id'] == self.patient_id) & (self.df['cycle'] == 1)]
@@ -187,6 +189,8 @@ class PatientDosimetry:
         self.new_data['a0_Bq'] = self.new_data['organ'].map(a0_Bq_dict)
         self.new_data['tia_bqs'] = self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s']
         self.new_data['tiac_h'] = (self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s'])/(inj_activity * 3600)
+
+        return self.new_data
    
     def image_visualisation(self, image):
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))    
@@ -239,35 +243,6 @@ class PatientDosimetry:
         ####################################### OPTION 2 #############################################
         ##############################################################################################
 
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#                            
-#        TIA_WB = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        TIA_organs = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#            
-#        TIA_WB[self.roi_masks_resampled['WBCT']] = self.SPECTMBq[self.roi_masks_resampled['WBCT']] * np.exp(self.lamda_eff_dict['WBCT'] * time) / self.lamda_eff_dict['WBCT']
-#        organs = [organ for organ in self.organslist if organ not in ["WBCT", "ROB", "Liver_Reference", "TotalTumorBurden", "Kidney_L_m", 'Kidney_R_m']]
-#        index_skeleton = organs.index('Skeleton')
-#        organs.pop(index_skeleton)
-#
-#        # Insert 'Skeleton' at the beginning of the list
-#        organs.insert(0, 'Skeleton')
-#
-#        print(organs)
-#        for organ in organs:
-#            TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-#            
-#        print(TIA_WB.shape)
-#        print(TIA_organs.shape)
-#        TIA_ROB = TIA_WB - TIA_organs
-#        self.TIA = TIA_ROB + TIA_organs
-
-        ##############################################################################################
-        ####################################### OPTION 3 #############################################
-        ##############################################################################################
-
         if self.cycle == 1:
             time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
         else:
@@ -283,18 +258,47 @@ class PatientDosimetry:
 
         # Insert 'Skeleton' at the beginning of the list
         organs.insert(0, 'Skeleton')
+
         print(organs)
         for organ in organs:
             TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
             
+        print(TIA_WB.shape)
+        print(TIA_organs.shape)
         TIA_ROB = TIA_WB - TIA_organs
-        TIA_ROB_value = np.sum(np.sum(np.sum(TIA_ROB)))
-        ROB_no_voxels = np.sum(np.sum(np.sum(self.roi_masks_resampled['ROB'])))
-
-        TIA_value_per_voxel = TIA_ROB_value / ROB_no_voxels
-        TIA_ROB[self.roi_masks_resampled['ROB']] = TIA_value_per_voxel
-        
         self.TIA = TIA_ROB + TIA_organs
+
+        ##############################################################################################
+        ####################################### OPTION 3 #############################################
+        ##############################################################################################
+
+#        if self.cycle == 1:
+#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#        else:
+#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
+#                            
+#        TIA_WB = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+#        TIA_organs = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
+#            
+#        TIA_WB[self.roi_masks_resampled['WBCT']] = self.SPECTMBq[self.roi_masks_resampled['WBCT']] * np.exp(self.lamda_eff_dict['WBCT'] * time) / self.lamda_eff_dict['WBCT']
+#        organs = [organ for organ in self.organslist if organ not in ["WBCT", "ROB", "Liver_Reference", "TotalTumorBurden", "Kidney_L_m", 'Kidney_R_m']]
+#        index_skeleton = organs.index('Skeleton')
+#        organs.pop(index_skeleton)
+#
+#        # Insert 'Skeleton' at the beginning of the list
+#        organs.insert(0, 'Skeleton')
+#        print(organs)
+#        for organ in organs:
+#            TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
+#            
+#        TIA_ROB = TIA_WB - TIA_organs
+#        TIA_ROB_value = np.sum(np.sum(np.sum(TIA_ROB)))
+#        ROB_no_voxels = np.sum(np.sum(np.sum(self.roi_masks_resampled['ROB'])))
+#
+#        TIA_value_per_voxel = TIA_ROB_value / ROB_no_voxels
+#        TIA_ROB[self.roi_masks_resampled['ROB']] = TIA_value_per_voxel
+#        
+#        self.TIA = TIA_ROB + TIA_organs
         
 
         
