@@ -8,10 +8,10 @@ from scipy import integrate
 from scipy.optimize import curve_fit
 
 
-def monoexp_fun(t,a,b):
+def monoexp_fun(x, a, b):
     return a * exp(-b * x)
 
-def biexp_fun(t, a, b,c,d):
+def biexp_fun(x, a, b, c, d):
     return a * exp(-b * x) + c * exp(-d * x)
 
 def triexp_fun(x, a, b, c, d, e, f):
@@ -34,7 +34,7 @@ def get_residuals(t,a,skip_points,popt,eq='monoexp'):
 
 
 
-def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000,limit_bounds=False):
+def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000,limit_bounds=False, sigmas = None):
 
     if ignore_weights:
         weights = None
@@ -47,7 +47,7 @@ def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1)
     if limit_bounds:
         upper_bound = decayconst
     else:
-        upper_bound = decayconst * 1e6
+        upper_bound = decayconst #* 1e6 ## to check! it works with preclinical dosimetry; is it the same in humn cases?
     
      
     if weights:    
@@ -73,17 +73,16 @@ def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1)
     return popt,tt,yy,residuals
 
 
-def fit_biexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,biguess=(1,1,1,0.1),maxev=100000):
+def fit_biexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,biguess=(1,1,1,0.1),maxev=100000, sigmas = None):
 
   
     if ignore_weights:
         weights = None
     else:
         weights = sigmas
-        weights = np.append(1,weights)
+        #weights = np.append(1,weights)
 
-      
-    if weights: 
+    if any(weight is not None for weight in weights): 
         popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
                                     p0=biguess,bounds=([0,decayconst,0,decayconst],np.inf),maxfev=maxev)
     else:
@@ -107,7 +106,7 @@ def fit_biexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,
 
 
 
-def fit_biexp_uptake(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,uptakeguess=(1,1,-1,1),maxev=100000):
+def fit_biexp_uptake(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,uptakeguess=(1,1,-1,1),maxev=100000, sigmas = None):
 
      # Append point (0,0) if flag set to true.
     if append_zero:
@@ -119,13 +118,15 @@ def fit_biexp_uptake(t,a,decayconst,skip_points=0,ignore_weights=True,append_zer
             weights = sigmas
             weights = np.append(1,weights)
 
-    #monoexponential fit
-    # bounds show that the minimum decay is with physical decay, can't decay slower. (decayconst to inf)
-     
- 
-    popt, pconv = curve_fit(biexp_fun,t,a,sigma=weights,
-                            p0=uptakeguess,bounds=([0,decayconst,-np.inf,decayconst],[np.inf,np.inf,0,np.inf]),maxfev=maxev)
-    
+
+    if any(weight is not None for weight in weights): 
+        popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
+                                    p0=uptakeguess,bounds=([0,decayconst,-np.inf,decayconst],[np.inf,np.inf,0,np.inf]),maxfev=maxev)
+    else:
+        popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],
+                                    p0=biguess,bounds=([0,decayconst,0,decayconst],np.inf),maxfev=maxev)
+        
+
 
     [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='biexp')
 
