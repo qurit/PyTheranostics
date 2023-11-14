@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-
+import numpy as np
 
 def ewin_montage(img,ewin):
     '''
@@ -35,9 +35,8 @@ def ewin_montage(img,ewin):
 
 def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=None,**kwargs):
     fig, axes = plt.subplots(1, 3, figsize=(10,4))
-
-    if sigmas:
-        axes[0].errorbar(t,a,yerr=sigmas,fmt='o')
+    if any(sigma is not None for sigma in sigmas):
+        axes[0].errorbar(t,a,yerr=sigmas,fmt='o', color='#1f77b4',markeredgecolor='black')
         # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
     else:
         axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
@@ -59,7 +58,7 @@ def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=N
     axes[1].set_ylabel('A (MBq)')
     axes[1].set_title('{} Mono-Exponential'.format(organ))
 
-    axes[2].plot(t[skip_points:],residuals,'o')
+    axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
     axes[2].set_title('Residuals')
     axes[2].set_xlabel('t (days)')
     axes[2].set_ylabel('A (MBq)')
@@ -74,8 +73,8 @@ def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=N
 def biexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=None,**kwargs):
     fig, axes = plt.subplots(1, 3, figsize=(10,4))
 
-    if sigmas:
-        axes[0].errorbar(t,a,yerr=sigmas,fmt='o')
+    if any(sigma is not None for sigma in sigmas):
+        axes[0].errorbar(t,a,yerr=sigmas,fmt='o',color='#1f77b4',markeredgecolor='black')
         # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
     else:
         axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
@@ -99,7 +98,11 @@ def biexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=Non
     axes[1].set_ylabel('A (MBq)')
     axes[1].set_title('{} Bi-Exponential'.format(organ))
 
-    axes[2].plot(t[skip_points:],residuals,'o')
+    try:
+        axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
+    except:
+        t = np.append(0,t)
+        axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
     axes[2].set_title('Residuals')
     axes[2].set_xlabel('t (days)')
     axes[2].set_ylabel('A (MBq)')
@@ -109,7 +112,7 @@ def biexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=Non
     axes[0].set_ylim(bottom=0)
 
     axes[1].set_xlim(left=0)
-    axes[1].set_ylim(a[1:].min()*0.8,a.max()*1.1)
+
 
 
     plt.tight_layout()
