@@ -35,7 +35,8 @@ def ewin_montage(img,ewin):
 
 def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=None,**kwargs):
     fig, axes = plt.subplots(1, 3, figsize=(10,4))
-    if any(sigma is not None for sigma in sigmas):
+    if sigmas is not None and any(sigma is not None for sigma in sigmas):
+        print('imhere')
         axes[0].errorbar(t,a,yerr=sigmas,fmt='o', color='#1f77b4',markeredgecolor='black')
         # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
     else:
@@ -73,7 +74,7 @@ def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=N
 def biexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=None,**kwargs):
     fig, axes = plt.subplots(1, 3, figsize=(10,4))
 
-    if any(sigma is not None for sigma in sigmas):
+    if sigmas is not None and any(sigma is not None for sigma in sigmas):
         axes[0].errorbar(t,a,yerr=sigmas,fmt='o',color='#1f77b4',markeredgecolor='black')
         # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
     else:
