@@ -66,7 +66,8 @@ class BioDose():
         biodi['Organ'] = biodi['Organ'].replace('Small Intestines','Small Intestine')
         biodi['Organ'] = biodi['Organ'].replace('Bone','Skeleton')
         biodi['Organ'] = biodi['Organ'].replace('Kidney','Kidneys')
-        
+        biodi['Organ'] = biodi['Organ'].replace('Tumour','Tumor')
+
         biodi.set_index('Organ', inplace=True)
         biodi = pd.concat([biodi.iloc[:, :len(self.t)], biodi.iloc[:, len(self.t):]], axis=1, keys=['%ID/g', 'sigma'])
         biodi.sort_index(inplace=True)
@@ -246,11 +247,11 @@ class BioDose():
     def remainder_body_uptake(self,tumor_name=None):
         print("At this point we are ignoring the tumor")
         if tumor_name:
-            not_inphantom_notumor=[org for org in self.not_inphantom if tumor_name not in org]
+            self.not_inphantom_notumor=[org for org in self.not_inphantom if tumor_name not in org]
             tumortemp = self.biodi.loc[tumor_name]
         else:
-            not_inphantom_notumor=self.not_inphantom
-        not_inphantom_notumor
+            self.not_inphantom_notumor=self.not_inphantom
+        self.not_inphantom_notumor
         print(self.phantom)
         print('Disintegrations\n')
 
@@ -274,22 +275,30 @@ class BioDose():
         print(self.phantom_mass)
         if 'mouse' in self.phantom.lower():
             self.disintegrations['%ID*h']=self.disintegrations['%ID/g*h']*self.phantom_mass['25g']
-            self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[not_inphantom_notumor].mul(literature_mass['25g']).sum())
-        
+            self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(literature_mass['25g']).sum())
+            for org in self.not_inphantom_notumor:
+                if org != 'Tail':
+                    self.disintegrations.loc[org, '%ID*h'] = self.disintegrations.loc[org, '%ID/g*h'] * literature_mass.loc[org, '25g']
+                else:
+                    pass
+                
+                
         elif 'human' in self.phantom.lower():
             self.disintegrations['%ID*h Female']=self.disintegrations['%ID/g*h']*self.phantom_mass['Female']
             self.disintegrations['%ID*h Male']=self.disintegrations['%ID/g*h']*self.phantom_mass['Male']
             
-            self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[not_inphantom_notumor].mul(literature_mass['Female']).sum())
-            self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[not_inphantom_notumor].mul(literature_mass['Male']).sum())
-            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[not_inphantom_notumor]*literature_mass['Female']).sum()
-            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[not_inphantom_notumor]*literature_mass['Male']).sum()
+            self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(literature_mass['Female']).sum())
+            self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(literature_mass['Male']).sum())
+            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*literature_mass['Female']).sum()
+            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*literature_mass['Male']).sum()
         
 
-        self.disintegrations.drop(not_inphantom_notumor,inplace=True)
+        #self.disintegrations.drop(not_inphantom_notumor,inplace=True)
         self.disintegrations=self.disintegrations/100
         
-        
+    def not_inphantom_notumor_fun(self):
+        self.disintegrations.drop(self.not_inphantom_notumor,inplace=True)
+            
     def add_tumor_mass(self,tumor_name,tumor_mass):
         self.phantom_mass.loc[tumor_name]=tumor_mass  #grams   Provided by average of biodi from Etienne
         
@@ -424,6 +433,12 @@ class BioDose():
     
     
     def interspecies_conversion(self,mouse_mass=25):
+        organs = self.disintegrations['%ID*h Male'].index
+        for organ in organs:
+            print(organ)
+            print(self.phantom_mass['Male'].loc[organ])
+            
+        
         self.disintegrations['%ID*h Male']=self.disintegrations['%ID*h Male']*(mouse_mass/self.phantom_mass['Male'].loc['Body'])
         self.disintegrations['%ID*h Female']=self.disintegrations['%ID*h Female']*(mouse_mass/self.phantom_mass['Female'].loc['Body'])
 
