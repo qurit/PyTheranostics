@@ -216,7 +216,9 @@ class BioDose():
         for index_value in self.disintegrations['%ID*h'].index:
             if index_value not in not_organ:
                 self.disintegrations['%ID*h'][index_value] = self.disintegrations['%ID*h'][index_value] + (tumor_value * ((self.disintegrations['%ID*h'][index_value]) / (wb_value - tumor_value)))
-
+        
+        new = deepcopy(self.disintegrations)
+        return new
         
     def phantom_data(self):
         print(PHANTOM_PATH)
@@ -257,28 +259,28 @@ class BioDose():
 
         # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
         if 'mouse' in self.phantom.lower():
-            literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'mouse_notinphantom_masses.csv'))  # TODO: CHANGE PATH
+            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'mouse_notinphantom_masses.csv'))  # TODO: CHANGE PATH
         
         elif 'human' in self.phantom.lower():
-            literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
+            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
             
-        literature_mass.set_index('Organ',inplace=True)
+        self.literature_mass.set_index('Organ',inplace=True)
 
         if 'mouse' in self.phantom.lower():
-            literature_mass.loc['Muscle'] = self.phantom_mass.loc['Remainder Body']-literature_mass.sum()
+            self.literature_mass.loc['Muscle'] = self.phantom_mass.loc['Remainder Body']-self.literature_mass.sum()
         
 
-        literature_mass=literature_mass.loc[self.disintegrations.index.intersection(literature_mass.index)]
+        self.literature_mass=self.literature_mass.loc[self.disintegrations.index.intersection(self.literature_mass.index)]
         print('\nLiterature Mass (g)\n')
-        print(literature_mass)
+        print(self.literature_mass)
 
         print(self.phantom_mass)
         if 'mouse' in self.phantom.lower():
             self.disintegrations['%ID*h']=self.disintegrations['%ID/g*h']*self.phantom_mass['25g']
-            self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(literature_mass['25g']).sum())
+            self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g']).sum())
             for org in self.not_inphantom_notumor:
                 if org != 'Tail':
-                    self.disintegrations.loc[org, '%ID*h'] = self.disintegrations.loc[org, '%ID/g*h'] * literature_mass.loc[org, '25g']
+                    self.disintegrations.loc[org, '%ID*h'] = self.disintegrations.loc[org, '%ID/g*h'] * self.literature_mass.loc[org, '25g']
                 else:
                     pass
                 
@@ -287,10 +289,10 @@ class BioDose():
             self.disintegrations['%ID*h Female']=self.disintegrations['%ID/g*h']*self.phantom_mass['Female']
             self.disintegrations['%ID*h Male']=self.disintegrations['%ID/g*h']*self.phantom_mass['Male']
             
-            self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(literature_mass['Female']).sum())
-            self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(literature_mass['Male']).sum())
-            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*literature_mass['Female']).sum()
-            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*literature_mass['Male']).sum()
+            self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Female']).sum())
+            self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Male']).sum())
+            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Female']).sum()
+            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Male']).sum()
         
 
         #self.disintegrations.drop(not_inphantom_notumor,inplace=True)
@@ -431,7 +433,8 @@ class BioDose():
         human.area.index = human.area.index.str.replace('Blood','Heart Contents')
         return human
     
-    
+
+        
     def interspecies_conversion(self,mouse_mass=25):
         organs = self.disintegrations['%ID*h Male'].index
         for organ in organs:
@@ -484,7 +487,7 @@ class BioDose():
             ind=template[template['Data'].str.contains(temporg)].index
             sourceorgan=template.iloc[ind[0]].str.split('|')[0][0]
             massorgan=template.iloc[ind[0]].str.split('|')[0][1]
-            kineticdata=self.disintegrations.loc[org]['%ID*h '+self.sex]
+            kineticdata=self.disintegrations.loc[org]['h '+self.sex]
             
             if np.isnan(kineticdata):
                 kineticdata=0
