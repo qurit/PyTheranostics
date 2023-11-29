@@ -32,6 +32,9 @@ def get_residuals(t,a,skip_points,popt,eq='monoexp'):
 
     return r_squared, residuals
 
+def Hanscheid(a, t):
+    return a * ((2 * t) / (log(2)))
+
 
 
 def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000,limit_bounds=False, sigmas = None):
