@@ -22,7 +22,7 @@ from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
 
 # %%
 class PatientDosimetry:
-    def __init__(self, patient_id, cycle, isotope, CT, SPECTMBq, roi_masks_resampled, activity_tp1_df, inj_timepoint1, activity_tp2_df = None, inj_timepoint2 = None):
+    def __init__(self, patient_id, cycle, isotope, CT, SPECTMBq, roi_masks_resampled, activity_tp1_df, inj_timepoint1 = None, activity_tp2_df = None, inj_timepoint2 = None):
         self.patient_id = patient_id
         self.cycle = int(cycle)
         self.isotope = isotope
@@ -46,50 +46,56 @@ class PatientDosimetry:
         self.organslist = self.activity_tp1_df['Contour'].unique()
         return self.organslist        
         
-    def fitting(self):
-        ################################# Isotope information #########################################
-        if self.isotope == '177Lu':
-            half_life = 159.528 * 3600 #s
-            decayconst = np.log(2)/half_life
-        else:
-            print('Isotope currently not implemented in the code. Add it in the class code.')        
+    def fitting(self, method, injactivity = None):
+        if method == 'Hanscheid':
+            t = 24 #h ?????????????????????????????????????????????????????????????????????????????????????????????????????????
+            inj_activity = injactivity # MBq
 
-        ###################################### Variables ##############################################          
-        t = [self.inj_timepoint1.loc[0, 'delta_t_days'], self.inj_timepoint2.loc[0, 'delta_t_days']]
-        ts = np.array([i * 24 * 3600 for i in t]) # seconds
-        inj_activity = self.inj_timepoint1.loc[0, 'injected_activity_MBq'] # MBq
-        inj_activity = inj_activity * 10**6 # Bq
         
-        ###################################### Fitting ##############################################
-        for index,row in self.new_data.iterrows():
-            a_tp1 = self.activity_tp1_df.iloc[index][['Integral Total (BQML*ml)']].values
-            a_tp2 = self.activity_tp2_df.iloc[index][['Integral Total (BQML*ml)']].values
-            activity = [a_tp1, a_tp2]
-            activity = np.array([float(arr[0]) for arr in activity]) # reduce dimensons and extract values
-#            popt,tt,yy,residuals = fit_monoexp(ts,activity,deayconst,monoguess=(1e6,1e-5))
-#            monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
-#            plt.show()
-#            elif function == 2:
-#                popt,tt,yy,residuals = fit_biexp_uptake(ts,activity,decayconst,uptakeguess=(6,1e-3 , 1e-3))
-#                biexp_fit_plots(ts / (3600 * 24), activity / 10**6, tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
-#                #monoexp_fit_plots(ts, activity, tt,yy,row['organ'],popt[2],residuals)
-#                #plt.show()
-            #else:
-            #    print('Function unknown')
-            popt,tt,yy,residuals = fit_monoexp(ts,activity,decayconst,monoguess=(1e6,1e-5))
-            monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
-            plt.show()
-            self.new_data.at[index, 'lamda_eff_1/s'] = popt[1]
-            self.new_data.at[index, 'a0_Bq'] = popt[0]
-            self.new_data.at[index, 'tia_bqs'] = popt[0]/popt[1]
-            self.new_data.at[index, 'tiac_h'] = (popt[0]/popt[1])/(inj_activity * 3600)
-        
-        ########################### Dictionary with lamda eff of each VOIs ############################
-        self.lamda_eff_dict = {}
-        for organ in self.organslist:
-            organ_data = self.new_data[self.new_data['organ'] == organ]
-            lamda_eff = organ_data['lamda_eff_1/s'].iloc[0]
-            self.lamda_eff_dict[organ] = lamda_eff
+        else:
+            ################################# Isotope information #########################################
+            if self.isotope == '177Lu':
+                half_life = 159.528 * 3600 #s
+                decayconst = np.log(2)/half_life
+            else:
+                print('Isotope currently not implemented in the code. Add it in the class code.')        
+
+            ###################################### Variables ##############################################          
+            t = [self.inj_timepoint1.loc[0, 'delta_t_days'], self.inj_timepoint2.loc[0, 'delta_t_days']]
+            ts = np.array([i * 24 * 3600 for i in t]) # seconds
+            inj_activity = self.inj_timepoint1.loc[0, 'injected_activity_MBq'] # MBq
+            inj_activity = inj_activity * 10**6 # Bq
+
+            ###################################### Fitting ##############################################
+            for index,row in self.new_data.iterrows():
+                a_tp1 = self.activity_tp1_df.iloc[index][['Integral Total (BQML*ml)']].values
+                a_tp2 = self.activity_tp2_df.iloc[index][['Integral Total (BQML*ml)']].values
+                activity = [a_tp1, a_tp2]
+                activity = np.array([float(arr[0]) for arr in activity]) # reduce dimensons and extract values
+    #            popt,tt,yy,residuals = fit_monoexp(ts,activity,deayconst,monoguess=(1e6,1e-5))
+    #            monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
+    #            plt.show()
+    #            elif function == 2:
+    #                popt,tt,yy,residuals = fit_biexp_uptake(ts,activity,decayconst,uptakeguess=(6,1e-3 , 1e-3))
+    #                biexp_fit_plots(ts / (3600 * 24), activity / 10**6, tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
+    #                #monoexp_fit_plots(ts, activity, tt,yy,row['organ'],popt[2],residuals)
+    #                #plt.show()
+                #else:
+                #    print('Function unknown')
+                popt,tt,yy,residuals = fit_monoexp(ts,activity,decayconst,monoguess=(1e6,1e-5))
+                monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
+                plt.show()
+                self.new_data.at[index, 'lamda_eff_1/s'] = popt[1]
+                self.new_data.at[index, 'a0_Bq'] = popt[0]
+                self.new_data.at[index, 'tia_bqs'] = popt[0]/popt[1]
+                self.new_data.at[index, 'tiac_h'] = (popt[0]/popt[1])/(inj_activity * 3600)
+
+            ########################### Dictionary with lamda eff of each VOIs ############################
+            self.lamda_eff_dict = {}
+            for organ in self.organslist:
+                organ_data = self.new_data[self.new_data['organ'] == organ]
+                lamda_eff = organ_data['lamda_eff_1/s'].iloc[0]
+                self.lamda_eff_dict[organ] = lamda_eff
             
         return self.new_data, self.lamda_eff_dict
 
@@ -166,7 +172,6 @@ class PatientDosimetry:
         #for organ in organs:
         #    self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
 
-
         ##############################################################################################
         ####################################### OPTION 2 #############################################
         ##############################################################################################
@@ -187,12 +192,11 @@ class PatientDosimetry:
         # Insert 'Skeleton' at the beginning of the list
         organs.insert(0, 'Skeleton')
 
-        print(organs)
+
         for organ in organs:
             TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
             
-        print(TIA_WB.shape)
-        print(TIA_organs.shape)
+
         TIA_ROB = TIA_WB - TIA_organs
         self.TIA = TIA_ROB + TIA_organs
 
