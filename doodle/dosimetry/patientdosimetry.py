@@ -124,7 +124,7 @@ class PatientDosimetry:
         self.new_data['tia_bqs'] = self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s']
         self.new_data['tiac_h'] = (self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s'])/(inj_activity * 3600)
 
-        return self.new_data
+        return self.new_data, self.lamda_eff_dict
    
     def image_visualisation(self, image):
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))    
