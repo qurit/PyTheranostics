@@ -53,6 +53,24 @@ class GammaCamera(PlanarQC):
             elif kwargs['site_id'] == 'CAHN':
                 if self.ds.ManufacturerModelName == 'Tandem_Discovery_670_ES':
                     camera_model = 'Discovery 670'
+            elif kwargs['site_id'] == 'CAGH':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670':
+                    camera_model = 'Discovery 670'
+            elif kwargs['site_id'] == 'CANL':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670_Pro':
+                    camera_model = 'Discovery 670'
+            elif kwargs['site_id'] == 'CAMN':
+                if self.ds.ManufacturerModelName == 'Tandem_Optima_640':
+                    camera_model = 'Optima 640'
+            elif kwargs['site_id'] == 'CAMP':
+                if self.ds.ManufacturerModelName == 'Encore2':
+                    camera_model = 'Symbia'
+            elif kwargs['site_id'] == 'CATW':
+                if self.ds.ManufacturerModelName == 'Encore2':
+                    camera_model = 'Symbia T-16'
+            elif kwargs['site_id'] == 'CATC':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670':
+                    camera_model = 'Discovery 670'
 
          # find activity of source        
         if 'site_id' in kwargs:
