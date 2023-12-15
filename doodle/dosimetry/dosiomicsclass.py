@@ -7,7 +7,7 @@ import radiomics
 import SimpleITK as sitk
 import pandas as pd
 
-class Dosiomics:
+class Radiomics:
     def __init__(self, imagemodality, patient_id, cycle, image, mask, organslist):
         self.imagemodality = imagemodality
         self.patient_id = patient_id
