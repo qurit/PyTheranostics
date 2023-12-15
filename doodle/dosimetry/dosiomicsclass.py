@@ -8,7 +8,8 @@ import SimpleITK as sitk
 import pandas as pd
 
 class Dosiomics:
-    def __init__(self, patient_id, cycle, image, mask, organslist):
+    def __init__(self, imagemodality, patient_id, cycle, image, mask, organslist):
+        self.imagemodality = imagemodality
         self.patient_id = patient_id
         self.cycle = cycle
         self.image = image
@@ -16,12 +17,13 @@ class Dosiomics:
         self.organslist = organslist
 
     def prepareimages(self):
-        dosemap = sitk.GetImageFromArray(self.image)
-        sitk.WriteImage(dosemap, f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/dosiomics/dosemap.nrrd")
+        img = sitk.GetImageFromArray(self.image)
+
+        sitk.WriteImage(img, f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/radiomics/{self.imagemodality}.nrrd")
         for organ in self.organslist:
             self.mask[organ] = self.mask[organ].astype(int)
             img = sitk.GetImageFromArray(self.mask[organ])
-            sitk.WriteImage(img, f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/dosiomics/{organ}.nrrd")
+            sitk.WriteImage(img, f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/radiomics/{organ}.nrrd")
     
         
     def featureextractor(self):
@@ -31,9 +33,9 @@ class Dosiomics:
         #print('Extraction parameters:\n\t', extractor.settings)
         #print('Enabled filters:\n\t', extractor.enabledImagetypes)
         #print('Enabled features:\n\t', extractor.enabledFeatures)
-        dosiomics_list = []
+        radiomics_list = []
         for organ in self.organslist:
-            imagepath = f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/dosiomics/dosemap.nrrd"
+            imagepath = f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/dosiomics/{self.imagemodality}.nrrd"
             maskpath = f"/mnt/y/Sara/PR21_dosimetry/{self.patient_id}/cycle0{self.cycle}/dosiomics/{organ}.nrrd"
             result = extractor.execute(imagepath, maskpath)
             #print('Result type:', type(result))  # result is returned in a Python ordered dictionary)
@@ -44,10 +46,10 @@ class Dosiomics:
                 #print('\t', key, ':', value)
                 data[key] = value
                 
-            dosiomics_list.append(data)
+            radiomics_list.append(data)
             
-        dosiomics_df = pd.DataFrame(dosiomics_list)
-        dosiomics_df.to_csv(f"/mnt/y/Sara/PR21_dosimetry/output/{self.patient_id}_cycle0{self.cycle}_dosiomics_output.csv")
+        radiomics_df = pd.DataFrame(radiomics_list)
+        radiomics_df.to_csv(f"/mnt/y/Sara/PR21_dosimetry/output/{self.patient_id}_cycle0{self.cycle}_radiomics_{self.imagemodality}_output.csv")
         
-        return dosiomics_df
+        return radiomics_df
 
