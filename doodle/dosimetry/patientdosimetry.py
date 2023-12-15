@@ -233,18 +233,18 @@ class PatientDosimetry:
 #        self.TIA = TIA_ROB + TIA_organs
         
 
-        
-        return self.TIA
-
     def flip_images(self):
         self.CTp = np.transpose(self.CT, (2, 0, 1))
         self.TIAp = np.transpose(self.TIA, (2, 0, 1))
+        self.SPECTMBqp = np.transpose(self.SPECTMBq, (2, 0, 1))
         print('CT image:')
         self.image_visualisation(self.CTp)
         print('TIA image:')
         self.image_visualisation(self.TIAp)
+        #print('SPECTMBq image:')
+        #self.image_visualisation(self.SPECTMBqp)
         
-        return self.TIAp
+        return self.TIAp, self.SPECTMBqp 
         
     def normalise_TIA(self):
         self.total_acc_A = np.sum(np.sum(np.sum(self.TIAp)))
