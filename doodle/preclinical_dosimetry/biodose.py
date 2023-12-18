@@ -102,12 +102,14 @@ class BioDose():
             t = np.asarray((self.t))
             sigmas = self.biodi.loc[org]['sigma']
             sigmas = np.asarray(sigmas)
+            xlabel = 't (h)'
+            ylabel = '%ID/g'
             
             if uptake == False:
                 popt1,tt1,yy1,residuals1 = fit_monoexp(t, activity,decayconst=decayconst,skip_points=skip_points, monoguess=monoguess,   maxev=maxev, limit_bounds=False, sigmas = sigmas) 
-                monoexp_fit_plots(t, activity, tt1, yy1, org, popt1[2], residuals1, skip_points, sigmas)
+                monoexp_fit_plots(t, activity, tt1, yy1, org,  popt1[2], residuals1, xlabel, ylabel, skip_points, sigmas)
                 popt2,tt2,yy2,residuals2 = fit_biexp(t, activity, maxev=maxev, biguess=biguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)
-                biexp_fit_plots(t, activity, tt2, yy2, org, popt2[4], residuals2, skip_points, sigmas)
+                biexp_fit_plots(t, activity, tt2, yy2, org, popt2[4], residuals2, xlabel, ylabel, skip_points, sigmas)
                 
                 if skip_points == 0:
                     area1 = integrate.quad(monoexp_fun, 0, np.inf, args=(popt1[0], popt1[1]))
@@ -137,7 +139,7 @@ class BioDose():
 
             else:
                 popt3,tt3,yy3,residuals3 = fit_biexp_uptake(t, activity, maxev=maxev, uptakeguess=uptakeguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)                
-                biexp_fit_plots(t, activity, tt3, yy3, org, popt3[4], residuals3, skip_points, sigmas)
+                biexp_fit_plots(t, activity, tt3, yy3, org, popt3[4], residuals3, xlabel, ylabel, skip_points, sigmas)
                 area3 = integrate.quad(biexp_fun, 0, np.inf, args=(popt3[0], popt3[1], popt3[2], popt3[3]))
 
                 self.area.loc[org,'Bi-Exponential_uptake'] = area3[0]
@@ -208,14 +210,13 @@ class BioDose():
         
         
     def tumor_sink_effect(self):
-        print(type(self.disintegrations['%ID*h']))
         not_organ = ['Tumor']
-        tumor_value = self.disintegrations['%ID*h']['Tumor']
-        wb_value = self.disintegrations['%ID*h'].sum()
+        tumor_value = self.disintegrations['h']['Tumor']
+        wb_value = self.disintegrations['h'].sum()
 
-        for index_value in self.disintegrations['%ID*h'].index:
+        for index_value in self.disintegrations['h'].index:
             if index_value not in not_organ:
-                self.disintegrations['%ID*h'][index_value] = self.disintegrations['%ID*h'][index_value] + (tumor_value * ((self.disintegrations['%ID*h'][index_value]) / (wb_value - tumor_value)))
+                self.disintegrations['h'][index_value] = self.disintegrations['h'][index_value] + (tumor_value * ((self.disintegrations['h'][index_value]) / (wb_value - tumor_value)))
         
         new = deepcopy(self.disintegrations)
         return new
@@ -296,7 +297,7 @@ class BioDose():
         
 
         #self.disintegrations.drop(not_inphantom_notumor,inplace=True)
-        self.disintegrations=self.disintegrations/100
+        self.disintegrations['h']=self.disintegrations['%ID*h']/100
         
     def not_inphantom_notumor_fun(self):
         self.disintegrations.drop(self.not_inphantom_notumor,inplace=True)
@@ -337,7 +338,8 @@ class BioDose():
             ind=template[template['Data'].str.contains(temporg)].index
             sourceorgan=template.iloc[ind[0]].str.split('|')[0][0]
             massorgan=template.iloc[ind[0]].str.split('|')[0][1]
-            kineticdata=self.disintegrations.loc[org]['%ID*h']
+            kineticdata=self.disintegrations.loc[org]['h']
+            print(kineticdata)
             
             if np.isnan(kineticdata):
                 kineticdata=0
