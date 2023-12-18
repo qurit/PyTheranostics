@@ -1,0 +1,127 @@
+Saved on 06.06.2017 at 09:36:07 PDT
+[BEGIN CASE FILE]
+[BEGIN NUCLIDE SETTINGS]
+USE_DECAY_SERIES|false
+USE_LEGACY_DATA|false
+[END NUCLIDE SETTINGS]
+[BEGIN NUCLIDES]
+Lu-177|
+[END NUCLIDES]
+[BEGIN MODEL SETTINGS]
+[END MODEL SETTINGS]
+[BEGIN MODELS]
+[BEGIN ICRP 89 Adult Female]
+ICRP 89 Adult Female|B
+[BEGIN ICRP 89 Adult Female SOURCE ORGANS]
+Adrenals|13.0|0.0
+Brain|1300.0|0.0
+Breasts|500.0|0.0
+Esophagus|35.0|0.0
+Eyes|15.0|0.0
+Gallbladder Contents|48.0|0.0
+LLI Contents|80.0|0.0
+Small Intestine|280.0|0.0
+Stomach Contents|230.0|0.0
+ULI Contents|160.0|0.0
+Rectum|80.0|0.0
+Heart Contents|370.0|0.0
+Heart Wall|250.0|0.0
+Kidneys|275.5|0.0
+Liver|1400.0|0.0
+Lungs|950.0|0.0
+Muscle|0.0|0.0
+Ovaries|11.0|0.0
+Pancreas|120.0|0.0
+Prostate|0.0|0.0
+Salivary Glands|70.0|0.0
+Red Marrow|900.0|0.0
+Cortical Bone|3200.0|0.0
+Trabecular Bone|800.0|0.0
+Spleen|130.0|0.0
+Testes|0.0|0.0
+Thymus|20.0|0.0
+Thyroid|17.0|0.0
+Urinary Bladder Contents|160.0|0.0
+Uterus|80.0|0.0
+Fetus|0.0|0.0
+Placenta|0.0|0.0
+Total Body|60000.0|0.0
+[END ICRP 89 Adult Female SOURCE ORGANS]
+[BEGIN ICRP 89 Adult Female MODEL OPTIONS]
+IS_BONE_ACTIVITY_ON_SURFACE|true
+[END ICRP 89 Adult Female MODEL OPTIONS]
+[BEGIN ICRP 89 Adult Female TARGET ORGANS]
+Adrenals|13.0
+Brain|1300.0
+Breasts|500.0
+Esophagus|35.0
+Eyes|15.0
+Gallbladder Wall|8.0
+LLI Wall|145.0
+Small Intestine|600.0
+Stomach|140.0
+ULI Wall|145.0
+Rectum|70.0
+Heart Wall|250.0
+Kidneys|275.5
+Liver|1400.0
+Lungs|950.0
+Muscle|0.0
+Ovaries|11.0
+Pancreas|120.0
+Prostate|0.0
+Salivary Glands|70.0
+Red Marrow|900.0
+Bone Surfaces|120.0
+Skin|0.0
+Spleen|130.0
+Testes|0.0
+Thymus|20.0
+Thyroid|17.0
+Urinary Bladder Wall|40.0
+Uterus|80.0
+Fetus|0.0
+Placenta|0.0
+Total Body|60000.0
+[END ICRP 89 Adult Female TARGET ORGANS]
+[BEGIN ICRP 89 Adult Female MODEL TARGET ORGANS]
+TARGET_ORGAN_MASSES_ARE_FROM_USER_INPUT|FALSE
+[END ICRP 89 Adult Female MODEL TARGET ORGANS]
+[BEGIN KINETIC DATA]
+Adrenals|0.0
+Brain|0.0
+Breasts|0.0
+Esophagus|0.0
+Eyes|0.0
+Gallbladder Contents|0.0
+LLI Contents|0.0
+Small Intestine|0.0
+Stomach Contents|0.0
+ULI Contents|0.0
+Rectum|0.0
+Heart Contents|0.0
+Heart Wall|0.0
+Kidneys|0.0
+Liver|0.0
+Lungs|0.0
+Muscle|0.0
+Ovaries|0.0
+Pancreas|0.0
+Prostate|0.0
+Salivary Glands|0.0
+Red Marrow|0.0
+Cortical Bone|0.0
+Trabecular Bone|0.0
+Spleen|0.0
+Testes|0.0
+Thymus|0.0
+Thyroid|0.0
+Urinary Bladder Contents|0.0
+Uterus|0.0
+Fetus|0.0
+Placenta|0.0
+Total Body|0.0
+[END KINETIC DATA]
+[END ICRP 89 Adult Female]
+[END MODELS]
+[END CASE FILE]
