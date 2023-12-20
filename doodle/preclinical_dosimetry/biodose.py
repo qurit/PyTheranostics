@@ -211,15 +211,22 @@ class BioDose():
         
     def tumor_sink_effect(self):
         not_organ = ['Tumor']
-        tumor_value = self.disintegrations['h']['Tumor']
-        wb_value = self.disintegrations['h'].sum() - self.disintegrations['h']['Remainder Body'] # to not duplicate Remainder Body with organs that go there
-
-        for index_value in self.disintegrations['h'].index:
-            if index_value not in not_organ:
-                self.disintegrations['h'][index_value] = self.disintegrations['h'][index_value] + (tumor_value * ((self.disintegrations['h'][index_value]) / (wb_value - tumor_value)))
         
-        new = deepcopy(self.disintegrations)
-        return new
+        # Get the disintegration value for the 'Tumor'
+        tumor_value = self.disintegrations['h']['Tumor']
+        
+        # Calculate the sum of disintegration values for all organs except 'Remainder Body' (Organs included in the ROB are added to WB, so we don't want to add them twice)
+        wb_value = self.disintegrations['h'].sum() - self.disintegrations['h']['Remainder Body'] 
+
+        # Update disintegration values for each organ considering the tumor sink effect
+        for organ in self.disintegrations['h'].index:
+            if organ not in not_organ:
+                self.disintegrations['h'][organ] = self.disintegrations['h'][organ] + (tumor_value * ((self.disintegrations['h'][organ]) / (wb_value - tumor_value)))
+        
+        # Create a deep copy of the disintegrations to avoid modifying the original data
+        new_disintegrations = deepcopy(self.disintegrations)
+        
+        return new_disintegrations
         
     def phantom_data(self):
         print(PHANTOM_PATH)
@@ -633,7 +640,6 @@ def m2(human, mouse):
         elif org == 'Heart Contents':
             mouse_mass_org = mouse.literature_mass.loc['Blood', '25g']
         elif org in mouse.phantom_mass.index:
-            print(mouse.phantom_mass)
             mouse_mass_org = mouse.phantom_mass.loc[org, '25g']
         elif org in mouse.literature_mass.index:
             mouse_mass_org = mouse.literature_mass.loc[org, '25g']
