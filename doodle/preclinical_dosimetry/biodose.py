@@ -95,7 +95,9 @@ class BioDose():
             self.area = pd.DataFrame(index=organlist, columns=['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 'Perctage_diff - bi vs tri uptake washout'])
             self.fit_results = {}
             organlist = self.biodi.index
-
+            
+        #self.monoexp_parameters = pd.DataFrame()
+        dfs = []
         for org in organlist:
             bio_data = self.biodi.loc[org]['%ID/g']
             activity = np.asarray(bio_data)
@@ -111,6 +113,18 @@ class BioDose():
                 popt2,tt2,yy2,residuals2 = fit_biexp(t, activity, maxev=maxev, biguess=biguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)
                 biexp_fit_plots(t, activity, tt2, yy2, org, popt2[4], residuals2, xlabel, ylabel, skip_points, sigmas)
                 
+                organ_data = {
+                    'Organ': [org],
+                    '%ID/g': [popt1[0]], 
+                    'lambda_effective_1/h': [popt1[1]],  
+                }
+                # Creating a temporary DataFrame for the current organ
+                organ_df = pd.DataFrame(organ_data)
+                dfs.append(organ_df)
+
+                # Appending the temporary DataFrame to the main DataFrame
+                #self.monoexp_parameters = self.monoexp_parameters.append(organ_df, ignore_index=True)
+
                 if skip_points == 0:
                     area1 = integrate.quad(monoexp_fun, 0, np.inf, args=(popt1[0], popt1[1]))
                     area2 = integrate.quad(biexp_fun, 0, np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
@@ -145,7 +159,11 @@ class BioDose():
                 self.area.loc[org,'Bi-Exponential_uptake'] = area3[0]
                 #self.area.loc[org,'Tri-Exponential'] = area4[0]
                 #self.area.loc[org,'Perctage_diff - bi vs tri uptake washout'] = abs(area3[0] - area4[0]) / area3[0] * 100                
-            
+        
+        try:
+            self.monoexp_parameters = pd.concat(dfs, ignore_index=True)   
+        except:
+            print("")
 
 #    def get_fit_accepted_dict(self):
 #        self.fit_accepted = {}  # Initialize an empty dictionary
