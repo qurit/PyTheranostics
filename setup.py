@@ -7,9 +7,18 @@ setup(name='DOODLE',
       author='Carlos Uribe',
       author_email='curibe@bccrc.ca',
       license='LICENSE',
-      packages=['doodle','doodle.tests'],
+      packages=[
+        'doodle',
+        'doodle.calibrations',
+        'doodle.dicomtools',
+        'doodle.dosimetry',
+        'doodle.fits',
+        'doodle.plots',
+        'doodle.qc',
+        'doodle.segmentation',
+        'doodle.shared'],
       include_package_data=True,
       install_requires = [
-          'numpy','matplotlib','pandas = 1.5.3','pydicom','openpyxl','rt_utils','scikit-image'
+          'numpy','matplotlib','pandas==1.5.3','pydicom','openpyxl','rt_utils','scikit-image'
       ],
       zip_safe=False)
