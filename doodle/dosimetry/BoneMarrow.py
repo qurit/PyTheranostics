@@ -1,8 +1,9 @@
 import pandas
 from typing import Tuple
 from doodle.fits import fit_monoexp
+from dosimetry.olinda import load_s_values, load_phantom_mass
 
-def blood_based_selfdose(df: pandas.DataFrame, decay_constant: float) -> Tuple[float, float]:
+def blood_based_selfdose(df: pandas.DataFrame, radionuclide: str, gender: str) -> Tuple[float, float]:
 
     """
     Computes the bone-marrow self-dose due to activity concentration in the bone-marrow, following
@@ -18,9 +19,10 @@ def blood_based_selfdose(df: pandas.DataFrame, decay_constant: float) -> Tuple[f
 
     """
 
-    # TODO: Have S-factors stored and accesible somewhere
-    s_bm_bm = 1 
-    m_bm = 1
+    # S-Values
+    s_values = load_s_values(gender=gender, radionuclide=radionuclide)
+    s_bm_bm =  s_values["Red Marrow"]["Red Mar."] # Red-Marrow -> Red-Marrow S-Factor, Adult Male in mSv/MBq s.
+    m_bm = load_phantom_mass(gender=gender, organ="Red  Marrow")  # in Grams.
 
     # Parameters:
     RMECFF = 0.19
@@ -38,6 +40,7 @@ def blood_based_selfdose(df: pandas.DataFrame, decay_constant: float) -> Tuple[f
     
 
     # Compute Dose: Assume TIAC_blood = TIAC_plasma
+    # Activity Concentration should be in MBq / grams.
     dose_ECF = TIAC_blood * RMECFF * m_bm * s_bm_bm  # Should use Plasma TIAC.
     dose_Blood = TIAC_blood * RMBLR * m_bm * s_bm_bm
 
