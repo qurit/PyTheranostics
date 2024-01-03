@@ -1,23 +1,13 @@
 # %%
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from scipy import integrate
-from scipy.optimize import curve_fit
-from datetime import datetime
-import re
-import glob
-import pydicom 
-from rt_utils import RTStructBuilder
-import gatetools as gt
 import SimpleITK as sitk
-import itk
-from skimage import io
-from skimage.transform import resize
-from skimage import img_as_bool
-from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake
-from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
+
+from doodle.fits.fits import find_a_initial, fit_monoexp
+from doodle.plots.plots import monoexp_fit_plots
 
 
 # %%
