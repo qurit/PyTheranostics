@@ -42,8 +42,8 @@ def monoexp_fit_plots(t,a,tt,yy,organ, r_squared, residuals, xlabel = 't (days)'
         axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
 
     if skip_points:
-        axes[0].plot(tt[tt>=t[skip_points]],yy)
-        axes[1].semilogy(tt[tt>=t[skip_points]],yy)
+        axes[0].plot(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
+        axes[1].semilogy(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
     else:
         axes[0].plot(tt,yy)
         axes[1].semilogy(tt,yy)
@@ -80,8 +80,8 @@ def biexp_fit_plots(t,a,tt,yy,organ, r_squared,residuals, xlabel = 't (days)', y
         axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
 
     if skip_points:
-        axes[0].plot(tt[tt>=t[skip_points]],yy)
-        axes[1].semilogy(tt[tt>=t[skip_points]],yy)
+        axes[0].plot(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
+        axes[1].semilogy(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
     else:
         axes[0].plot(tt,yy)
         axes[1].semilogy(tt,yy)
