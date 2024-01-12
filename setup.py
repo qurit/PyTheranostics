@@ -16,6 +16,7 @@ setup(name='DOODLE',
         'doodle.plots',
         'doodle.qc',
         'doodle.segmentation',
+        'doodle.registration',
         'doodle.shared'],
       include_package_data=True,
       install_requires = [
