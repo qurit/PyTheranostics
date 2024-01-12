@@ -30,6 +30,7 @@ def getinputdata(patient_id, cycle):
     
     #######################################################################################
     # Activities from Patient statistics from MIM
+    # TODO: replace with our own processing.
     mimcsv_tp1 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp1.csv"
     activity_tp1_df = pd.read_csv(mimcsv_tp1)
     activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace(' ', '')
@@ -51,6 +52,7 @@ def getinputdata(patient_id, cycle):
     
     # Retrieve information about date of acquisition
     # It is crucial, because name of files in incjection .csv are named with acq date
+    # TODO: Shouldn't this be on DICOM tags?
     acq1 = activity_tp1_df.loc[1, 'Series Date']
     date_object = datetime.strptime(acq1, "%Y-%m-%d")
     data1 = date_object.strftime("%Y%m%d")
@@ -70,6 +72,7 @@ def getinputdata(patient_id, cycle):
     
     #######################################################################################    
     # Load injection timepoint data
+    # TODO: check if this is part of DICOM tags? Currently provided by Ascinta.
     injection_folder = f"{folder}/injection_timepoints"
     file_path = f"{injection_folder}/PR21-{x_with_hyphen}.{data1}.injection.info.csv"
     inj_timepoint1 = pd.read_csv(file_path)
@@ -84,6 +87,7 @@ def getinputdata(patient_id, cycle):
     # Load CT
     CT_folder = f"{folder}/{patient_id}/cycle0{cycle}/CT" # this CT is resampled
     files = []
+    # TODO: this should be a separated function.
     for fname in glob.glob(CT_folder + "/*.dcm", recursive=False):
         files.append(pydicom.dcmread(fname))
         pixel_arrays = [slice.pixel_array for slice in files]
@@ -107,6 +111,7 @@ def getinputdata(patient_id, cycle):
         img2d = s.pixel_array
         img3d[:, :, i] = img2d
     CT = np.squeeze(img3d)
+    # TODO: Read data using slope + intercept.
     CT = CT - 1024  # Caution! Loaded CT has not accounted for shift in HUs! 'Rescale Intercept': -1024    
     #######################################################################################
     
