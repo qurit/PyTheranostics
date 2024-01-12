@@ -82,7 +82,7 @@ class PhantomToCTBoneReg:
         registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
         registration_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
 
-        # Don't optimize in-place, we would possibly like to run this cell multiple times.
+        # Don't optimize in-place
         if self.InitialTransform is None:
             raise AssertionError("Initial Transform was not applied.")
         
