@@ -45,7 +45,17 @@ class PatientDosimetry:
 
         self.organslist = self.activity_tp1_df['Contour'].unique()
         return self.organslist        
+    
+    # TODO: automate the categorisatioon of the lesions into these groups
+    def subtruct_lesions_from_healthy_vois(self, bone_metastases, liver_metastases, lymph_metastases):
+        if bone_metastases != None:
+            meta = self.activity_tp1_df[self.activity_tp1_df['Contour'].isin(bone_metastases)]
+            self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'Skeleton', 'Integral Total (BQML*ml)'] = self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'Skeleton', 'Integral Total (BQML*ml)'] - meta['Integral Total (BQML*ml)'].sum()
         
+        if liver_metastases != None:
+            meta = self.activity_tp1_df[self.activity_tp1_df['Contour'].isin(liver_metastases)]
+            self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'Liver', 'Integral Total (BQML*ml)'] = self.activity_tp1_df.loc[self.activity_tp1_df['Contour'] == 'Liver', 'Integral Total (BQML*ml)'] - meta['Integral Total (BQML*ml)'].sum()
+                
     def fitting(self, method, injactivity = None):
         if method == 'Hanscheid':
             t = 24 #h ?????????????????????????????????????????????????????????????????????????????????????????????????????????
