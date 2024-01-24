@@ -56,8 +56,8 @@ class BioDose():
         biodi['Organ'] = biodi['Organ'].replace('Bone Marrow','Red Marrow')
         biodi['Organ'] = biodi['Organ'].replace('Muscles','Muscle')
         biodi['Organ'] = biodi['Organ'].replace('Urine','Bladder')
-        #biodi['Organ'] = biodi['Organ'].replace('Submandibular Glands','Salivary Glands')
-        #biodi['Organ'] = biodi['Organ'].replace('Submandibular Gland','Salivary Glands')
+        biodi['Organ'] = biodi['Organ'].replace('Submandibular Glands','Salivary Glands')
+        biodi['Organ'] = biodi['Organ'].replace('Submandibular Gland','Salivary Glands')
         biodi['Organ'] = biodi['Organ'].replace('Seminal Glands','Seminals')
         biodi['Organ'] = biodi['Organ'].replace('Seminal','Seminals')
         biodi['Organ'] = biodi['Organ'].replace('Seminal Vesicles','Seminals')
@@ -311,11 +311,16 @@ class BioDose():
         self.literature_mass=self.literature_mass.loc[self.disintegrations.index.intersection(self.literature_mass.index)]
         print('\nLiterature Mass (g)\n')
         print(self.literature_mass)
-
         print(self.phantom_mass)
+        self.not_inphantom_notumor.remove('Tail')
+        self.phantom_mass.loc['Residual'] = self.phantom_mass.loc['Remainder Body'] - self.literature_mass.sum()
         if 'mouse' in self.phantom.lower():
             self.disintegrations['%ID*h']=self.disintegrations['%ID/g*h']*self.phantom_mass['25g']
-            self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g']).sum())
+            if 'Residual' in self.disintegrations.index:
+                self.not_inphantom_notumor.remove('Residual')
+                self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g'].loc[self.not_inphantom_notumor]).sum()) + (self.disintegrations.loc['Residual', '%ID/g*h'] * (self.phantom_mass.loc['Residual', '25g']))
+            else:    
+                self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g'].loc[self.not_inphantom_notumor]).sum())
             for org in self.not_inphantom_notumor:
                 if org != 'Tail':
                     self.disintegrations.loc[org, '%ID*h'] = self.disintegrations.loc[org, '%ID/g*h'] * self.literature_mass.loc[org, '25g']
@@ -387,9 +392,19 @@ class BioDose():
         #modify the isotope in the template
         ind=template[template['Data']=='[BEGIN NUCLIDES]'].index
         template.loc[ind[0]+1,'Data']=self.isotope + '|'
-
+        input_organs = self.disintegrations.drop(set(self.not_inphantom).intersection(set(self.disintegrations.index))).index.to_list()
+        if 'Residual' in input_organs:
+            input_organs.remove('Residual')
+        else:
+            pass
+        if 'Tail' in input_organs:
+            input_organs.remove('Tail')
+        else:
+            pass
+        print(input_organs)
         #change the kinetics for each input organ
-        for org in self.disintegrations.drop(set(self.not_inphantom).intersection(set(self.disintegrations.index))).index:  #ignore the tumor here
+        for org in input_organs:  #ignore the tumor here
+
             temporg=org
             uptakepos=2
             
@@ -405,6 +420,7 @@ class BioDose():
                 uptakepos=3
                 
             ind=template[template['Data'].str.contains(temporg)].index
+            print(org)
             sourceorgan=template.iloc[ind[0]].str.split('|')[0][0]
             massorgan=template.iloc[ind[0]].str.split('|')[0][1]
             kineticdata=self.disintegrations.loc[org]['h']
@@ -547,8 +563,12 @@ class BioDose():
             self.disintegrations_m1 = self.disintegrations_m1.drop('Tumor', axis=0)
         except:
             print('No tumor')
-        self.disintegrations_m1.loc['Red Marrow'] = 0.34 * self.disintegrations_m1.loc['Heart Contents']       
-
+        #if 'Red Marrow' != self.disintegrations_m1.index:
+        #    self.disintegrations_m1.loc['Red Marrow'] = 0.34 * self.disintegrations_m1.loc['Heart Contents']       
+        if 'Red Marrow' in self.disintegrations.index:
+            if pd.isna(self.disintegrations.loc['Red Marrow']).any():
+                self.disintegrations.loc['Red Marrow'] = self.disintegrations.loc['Heart Contents'] * 0.34
+                
         self.disintegrations_m1.sort_index(inplace=True)
         
         
@@ -730,6 +750,8 @@ def m2(human, mouse):
     mouse.not_inphantom_notumor
     mouse_mass = 25
     human.disintegrations_m2=pd.DataFrame(index=human.in_phantom_organs,columns=['h Female', 'h Male'])
+    if 'Residual' in human.not_inphantom_notumor:
+        human.not_inphantom_notumor.remove('Residual')
     for org in human.in_phantom_organs:
         
         if org == 'Remainder Body':
