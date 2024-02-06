@@ -49,7 +49,7 @@ class Olinda:
                 self.not_inphantom.append(org)
         print('These organs are not modelled in the phantom\n{}'.format(self.not_inphantom))
             
-    def create_case_file(self):-
+    def create_case_file(self):
         this_dir=path.dirname(__file__)
         TEMPLATE_PATH = path.join(this_dir,"olindaTemplates")
         template=pd.read_csv(path.join(TEMPLATE_PATH,'adult_male.cas'))
