@@ -14,7 +14,7 @@ class Olinda:
         lesion_df = self.df[self.df['organ'].str.contains('Lesion', case=False, na=False)]
         
         ## Prepare df for Olinda 
-        phrases_to_exclude = ['Femur', 'Humerus', 'Reference', 'TotalTumorBurden', 'Kidney_L_m', 'Kidney_R_m', 'Lesion']
+        phrases_to_exclude = ['Femur', 'Humerus', 'Reference', 'TotalTumorBurden', 'Kidney_L_m', 'Kidney_R_m', 'Lesion', 'WBCT']
         phrases_to_exclude.extend([f'L{i}' for i in range(10)])  # L(any number)
         self.df = self.df[~self.df['organ'].str.contains('|'.join(phrases_to_exclude), case=False, na=False)]
         
@@ -29,6 +29,9 @@ class Olinda:
         
         # renaming
         self.df['organ'] = self.df['organ'].replace('Bladder_Experimental', 'Urinary Bladder Contents')
+        self.df['organ'] = self.df['organ'].replace('ROB', 'Total Body')
+        self.df['organ'] = self.df['organ'].replace('Skeleton', 'Cortical Bone')
+        
 
         blankIndex=[''] * len(self.df)
         self.df.index=blankIndex
@@ -46,7 +49,7 @@ class Olinda:
                 self.not_inphantom.append(org)
         print('These organs are not modelled in the phantom\n{}'.format(self.not_inphantom))
             
-    def create_case_file(self):
+    def create_case_file(self):-
         this_dir=path.dirname(__file__)
         TEMPLATE_PATH = path.join(this_dir,"olindaTemplates")
         template=pd.read_csv(path.join(TEMPLATE_PATH,'adult_male.cas'))
