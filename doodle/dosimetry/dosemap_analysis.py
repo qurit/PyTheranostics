@@ -40,8 +40,8 @@ class Dosemap:
         self.ad_mean = {}
         for organ in self.organlist:
             mask = self.roi_masks_resampled[organ]
-            self.ad_mean[organ] = self.dosemap[mask].mean() / 1000
-            #print(f'{organ}', self.ad_mean[organ])
+            self.ad_mean[organ] = self.dosemap[mask].mean() 
+            print(f'{organ}', self.ad_mean[organ])
 
         self.df['mean_ad[Gy]']= self.df['organ'].map(self.ad_mean)
 

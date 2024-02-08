@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-
+import numpy as np
 
 def ewin_montage(img,ewin):
     '''
@@ -33,36 +33,35 @@ def ewin_montage(img,ewin):
 
 
 
-def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=None,**kwargs):
+def monoexp_fit_plots(t,a,tt,yy,organ, r_squared, residuals, xlabel = 't (days)', ylabel = 'A (MBq)',skip_points=0,sigmas=None,**kwargs):
     fig, axes = plt.subplots(1, 3, figsize=(10,4))
-
-    if sigmas:
-        axes[0].errorbar(t,a,yerr=sigmas,fmt='o')
+    if sigmas is not None and any(sigma is not None for sigma in sigmas):
+        axes[0].errorbar(t,a,yerr=sigmas,fmt='o', color='#1f77b4',markeredgecolor='black')
         # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
     else:
         axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
 
     if skip_points:
-        axes[0].plot(tt[tt>=t[skip_points]],yy)
-        axes[1].semilogy(tt[tt>=t[skip_points]],yy)
+        axes[0].plot(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
+        axes[1].semilogy(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
     else:
         axes[0].plot(tt,yy)
         axes[1].semilogy(tt,yy)
 
     axes[0].set_title('{} Mono-Exponential'.format(organ))
-    axes[0].set_xlabel('t (days)')
-    axes[0].set_ylabel('A (MBq)')
+    axes[0].set_xlabel(xlabel)
+    axes[0].set_ylabel(ylabel)
     axes[0].text(0.6,0.85,'$R^2={:.4f}$'.format(r_squared),transform=axes[0].transAxes)
 
     axes[1].semilogy(t[skip_points:],a[skip_points:],'o',color='#1f77b4',markeredgecolor='black')
-    axes[1].set_xlabel('t (days)')
-    axes[1].set_ylabel('A (MBq)')
+    axes[1].set_xlabel(xlabel)
+    axes[1].set_ylabel(ylabel)
     axes[1].set_title('{} Mono-Exponential'.format(organ))
 
-    axes[2].plot(t[skip_points:],residuals,'o')
+    axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
     axes[2].set_title('Residuals')
-    axes[2].set_xlabel('t (days)')
-    axes[2].set_ylabel('A (MBq)')
+    axes[2].set_xlabel(xlabel)
+    axes[2].set_ylabel(ylabel)
 
     plt.tight_layout()
 
@@ -71,45 +70,49 @@ def monoexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=N
 
 
 
-def biexp_fit_plots(t,a,tt,yy,organ,r_squared,residuals,skip_points=0,sigmas=None,**kwargs):
+def biexp_fit_plots(t,a,tt,yy,organ, r_squared,residuals, xlabel = 't (days)', ylabel = 'A (MBq)', skip_points=0,sigmas=None,**kwargs):
     fig, axes = plt.subplots(1, 3, figsize=(10,4))
 
-    if sigmas:
-        axes[0].errorbar(t,a,yerr=sigmas,fmt='o')
+    if sigmas is not None and any(sigma is not None for sigma in sigmas):
+        axes[0].errorbar(t,a,yerr=sigmas,fmt='o',color='#1f77b4',markeredgecolor='black')
         # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
     else:
         axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
 
     if skip_points:
-        axes[0].plot(tt[tt>=t[skip_points]],yy)
-        axes[1].semilogy(tt[tt>=t[skip_points]],yy)
+        axes[0].plot(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
+        axes[1].semilogy(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
     else:
         axes[0].plot(tt,yy)
         axes[1].semilogy(tt,yy)
 
     axes[0].set_title('{} Bi-Exponential'.format(organ))
-    axes[0].set_xlabel('t (days)')
-    axes[0].set_ylabel('A (MBq)')
+    axes[0].set_xlabel(xlabel)
+    axes[0].set_ylabel(ylabel)
     axes[0].text(0.6,0.85,'$R^2={:.4f}$'.format(r_squared),transform=axes[0].transAxes)
     
 
 
     axes[1].semilogy(t[skip_points:],a[skip_points:],'o',color='#1f77b4',markeredgecolor='black')
-    axes[1].set_xlabel('t (days)')
-    axes[1].set_ylabel('A (MBq)')
+    axes[1].set_xlabel(xlabel)
+    axes[1].set_ylabel(ylabel)
     axes[1].set_title('{} Bi-Exponential'.format(organ))
 
-    axes[2].plot(t[skip_points:],residuals,'o')
+    try:
+        axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
+    except:
+        t = np.append(0,t)
+        axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
     axes[2].set_title('Residuals')
-    axes[2].set_xlabel('t (days)')
-    axes[2].set_ylabel('A (MBq)')
+    axes[2].set_xlabel(xlabel)
+    axes[2].set_ylabel(ylabel)
 
 
     axes[0].set_xlim(left=0)
     axes[0].set_ylim(bottom=0)
 
     axes[1].set_xlim(left=0)
-    axes[1].set_ylim(a[1:].min()*0.8,a.max()*1.1)
+
 
 
     plt.tight_layout()

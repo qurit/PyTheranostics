@@ -11,6 +11,7 @@ from datetime import datetime
 # import pydicom
 import numpy as np
 import pprint
+import math
 
 this_dir=Path(__file__).resolve().parent.parent
 CALIBRATIONS_DATA_FILE = Path(this_dir,"data","gamma_camera_sensitivities.json")
@@ -46,12 +47,30 @@ class GammaCamera(PlanarQC):
                     camera_model = 'Discovery 870'
             elif kwargs['site_id'] == 'CAGQ':
                 if self.ds.ManufacturerModelName == 'Encore2':
-                    camera_model = 'Symbia T6'
+                    camera_model = 'Intevo T6'
             elif kwargs['site_id'] == 'CAGA':
                 if self.ds.ManufacturerModelName == 'Encore2':
                     camera_model = 'Intevo T6'
             elif kwargs['site_id'] == 'CAHN':
                 if self.ds.ManufacturerModelName == 'Tandem_Discovery_670_ES':
+                    camera_model = 'Discovery 670'
+            elif kwargs['site_id'] == 'CAGH':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670':
+                    camera_model = 'Discovery 670'
+            elif kwargs['site_id'] == 'CANL':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670_Pro':
+                    camera_model = 'Discovery 670'
+            elif kwargs['site_id'] == 'CAMN':
+                if self.ds.ManufacturerModelName == 'Tandem_Optima_640':
+                    camera_model = 'Optima 640'
+            elif kwargs['site_id'] == 'CAMP':
+                if self.ds.ManufacturerModelName == 'Encore2':
+                    camera_model = 'Symbia'
+            elif kwargs['site_id'] == 'CATW':
+                if self.ds.ManufacturerModelName == 'Encore2':
+                    camera_model = 'Symbia T-16'
+            elif kwargs['site_id'] == 'CATC':
+                if self.ds.ManufacturerModelName == 'Tandem_Discovery_670':
                     camera_model = 'Discovery 670'
 
          # find activity of source        
@@ -59,7 +78,6 @@ class GammaCamera(PlanarQC):
             df = self.db_df['cal_data']
 
             df2 = df[(df.site_id == kwargs['site_id']) & (df.source_id == source_id) & (df.cal_type == 'planar') & (df.model == camera_model)]
-
             A_ref = df2.ref_act_MBq.values[0]
             ref_time = df2.ref_time.values[0]
 
@@ -80,8 +98,8 @@ class GammaCamera(PlanarQC):
 
             
             # Decay the reference activity
-            A_decayed = decay_act(A_ref,delta_t,self.isotope_dic['half_life'])
-            print(f"The activity of the source at the time of the scan was {A_decayed} MBq\n")
+            self.A_decayed = decay_act(A_ref,delta_t,self.isotope_dic['half_life'])
+            print(f"The activity of the source at the time of the scan was {self.A_decayed} MBq\n")
 
        #deal with energy windows
         nwin = self.ds.NumberOfEnergyWindows
@@ -113,29 +131,29 @@ class GammaCamera(PlanarQC):
             ewin[keys[ind]]['counts']['Detector2'] = np.sum(img[i+1,:,:])
         
         
-        win_check = {}
+        self.win_check = {}
 
         # TODO: Improve this part
         for el in ewin:
             for k,w in self.isotope_dic['windows_kev'].items():
                 if int(ewin[el]['center']) in range(round(w[0]),round(w[2])):
-                    win_check[k] = ewin[el]
+                    self.win_check[k] = ewin[el]
  
 
         ewin_montage(img, ewin)
 
         print("Info about the different energy windows and detectors:")
-        pprint.pprint(win_check)
+        pprint.pprint(self.win_check)
         print('\n')
 
-        Cp = tew_scatt(win_check)
+        self.Cp = tew_scatt(self.win_check)
 
         print("Primary counts in each detector")
-        pprint.pprint(Cp)     
+        pprint.pprint(self.Cp)     
 
-        # print(A_decayed,delta_t,ref_time,acq_time)
+        # print(self.A_decayed,delta_t,ref_time,acq_time)
         # Calculate sensitivity in cps/MBq
-        sensitivity = {k: v / (A_decayed*acq_duration) for k, v in Cp.items()}
+        sensitivity = {k: v / (self.A_decayed*acq_duration) for k, v in self.Cp.items()}
         sensitivity['Average'] = sum(sensitivity.values()) / len(sensitivity)
 
         #calculate calibration factor in units of MBq/cps
@@ -153,7 +171,27 @@ class GammaCamera(PlanarQC):
         print("Calibration Results. Sensitivity in cps/MBq. Calibration factor in MBq/cps")
         pprint.pprint(self.cal_dic)
 
+    def calculate_uncertainty(self, site_id, camera_model):
+        u_prim_list = []
+        for detector in ['Detector1', 'Detector2']:
+            u_pw = math.sqrt(self.win_check['photopeak']['counts'][detector])
+            u_sc = math.sqrt(self.win_check['low_scatter']['counts'][detector] + self.win_check['upper_scatter']['counts'][detector])
+            u_prim = math.sqrt(u_pw**2 + u_sc**2)
+            u_prim_list.append(u_prim)
 
+        final_u_counts = 1/2 * math.sqrt(u_prim_list[0]**2 + u_prim_list[1]**2) + np.std(u_prim_list)
+        counts = (self.Cp['Detector1'] + self.Cp['Detector2']) / 2
+        u_activity = self.A_decayed * 0.03747
+        u_time = 0.001
+        
+        
+        
+        uncertainty_cf = self.cal_dic[site_id][camera_model]['calibration_factor']['Average'] * math.sqrt((final_u_counts/counts)**2 + (u_activity/ self.A_decayed)**2 + (u_time/self.ds.ActualFrameDuration/1000 )**2)
+        uncertainty_sensitivity = self.cal_dic[site_id][camera_model]['sensitivity']['Average'] * math.sqrt((final_u_counts/counts)**2 + (u_activity/ self.A_decayed)**2 + (u_time/self.ds.ActualFrameDuration/1000 )**2)
+        
+        return uncertainty_cf, uncertainty_sensitivity
+        
+            
     def calfactor_to_database(self,**kwargs):
         if 'site_id' in kwargs:
             site_id = kwargs['site_id']
