@@ -46,7 +46,7 @@
     }
   },
   "CAGQ": {
-    "Symbia T6": {
+    "Intevo T6": {
       "manufacturer": "Siemens",
       "collimator": "MEGL",
       "sensitivity": {
@@ -83,13 +83,109 @@
       "collimator": "MEGP",
       "sensitivity": {
         "Detector1": 5.4473409731355,
-        "Detector2": 5.504354553570881,
+        "Detector2": 5.50435455357088,
         "Average": 5.47584776335319
       },
       "calibration_factor": {
         "Detector1": 0.1835758042192828,
-        "Detector2": 0.18167434351612807,
+        "Detector2": 0.1816743435161281,
         "Average": 0.18262012444765996
+      }
+    }
+  },
+  "CAGH": {
+    "Discovery 670": {
+      "manufacturer": "GE",
+      "collimator": "MEGP",
+      "sensitivity": {
+        "Detector1": 4.1788204361413674,
+        "Detector2": 4.310877287769975,
+        "Average": 4.244848861955671
+      },
+      "calibration_factor": {
+        "Detector1": 0.23930197893915212,
+        "Detector2": 0.23197134440291664,
+        "Average": 0.23557964783209828
+      }
+    }
+  },
+  "CANL": {
+    "Discovery 670": {
+      "manufacturer": "GE",
+      "collimator": "MEGP",
+      "sensitivity": {
+        "Detector1": 5.602733148591548,
+        "Detector2": 5.503354573870704,
+        "Average": 5.553043861231126
+      },
+      "calibration_factor": {
+        "Detector1": 0.17848431711429744,
+        "Detector2": 0.1817073544103237,
+        "Average": 0.18008141570455685
+      }
+    }
+  },
+  "CAMP": {
+    "Symbia": {
+      "manufacturer": "Siemens",
+      "collimator": "MELP",
+      "sensitivity": {
+        "Detector1": 12.638422153168579,
+        "Detector2": 12.433212013841661,
+        "Average": 12.535817083505119
+      },
+      "calibration_factor": {
+        "Detector1": 0.07912380104737125,
+        "Detector2": 0.0804297392248052,
+        "Average": 0.07977142561499403
+      }
+    }
+  },
+  "CAMN": {
+    "Optima 640": {
+      "manufacturer": "GE",
+      "collimator": "MEGP",
+      "sensitivity": {
+        "Detector1": 5.018211058716569,
+        "Detector2": 5.038670563623577,
+        "Average": 5.028440811170073
+      },
+      "calibration_factor": {
+        "Detector1": 0.1992742011643796,
+        "Detector2": 0.19846504893958508,
+        "Average": 0.1988688019909911
+      }
+    }
+  },
+  "CATW": {
+    "Symbia T-16": {
+      "manufacturer": "Siemens",
+      "collimator": "MELP",
+      "sensitivity": {
+        "Detector1": 9.362240875537339,
+        "Detector2": 9.152297872478481,
+        "Average": 9.25726937400791
+      },
+      "calibration_factor": {
+        "Detector1": 0.10681203499184759,
+        "Detector2": 0.10926217808175377,
+        "Average": 0.10802321501065412
+      }
+    }
+  },
+  "CATC": {
+    "Discovery 670": {
+      "manufacturer": "GE",
+      "collimator": "MEGP",
+      "sensitivity": {
+        "Detector1": 4.499525006936407,
+        "Detector2": 4.631769336408067,
+        "Average": 4.5656471716722375
+      },
+      "calibration_factor": {
+        "Detector1": 0.2222456811459906,
+        "Detector2": 0.2159002159584007,
+        "Average": 0.21902699932761882
       }
     }
   }
