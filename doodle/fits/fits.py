@@ -68,7 +68,7 @@ def fit_tac(
         - exp_order = -2 -> Bi-exponential with uptake constrain.
         - exp_order = 3 -> Tri-exponential"""
 
-    if exp_order < 1 or exp_order > 3:
+    if abs(exp_order) < 1 or abs(exp_order) > 3:
         raise ValueError("Not supported. Please use order 1, 2 or 3.")
 
     # Add (0,0) ?
