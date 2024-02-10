@@ -1,4 +1,3 @@
-# %%
 import os
 
 import matplotlib.pyplot as plt
@@ -9,8 +8,6 @@ import SimpleITK as sitk
 from doodle.fits.fits import find_a_initial, fit_monoexp
 from doodle.plots.plots import monoexp_fit_plots
 
-
-# %%
 class PatientDosimetry:
     def __init__(self, patient_id, cycle, isotope, CT, SPECTMBq, roi_masks_resampled, activity_tp1_df, inj_timepoint1 = None, activity_tp2_df = None, inj_timepoint2 = None):
         self.patient_id = patient_id
@@ -48,7 +45,7 @@ class PatientDosimetry:
                 
     def fitting(self, method, injactivity = None):
         if method == 'Hanscheid':
-            t = 24 #h ?????????????????????????????????????????????????????????????????????????????????????????????????????????
+            t = 24
             inj_activity = injactivity # MBq
 
         
@@ -72,16 +69,7 @@ class PatientDosimetry:
                 a_tp2 = self.activity_tp2_df.iloc[index][['Integral Total (BQML*ml)']].values
                 activity = [a_tp1, a_tp2]
                 activity = np.array([float(arr[0]) for arr in activity]) # reduce dimensons and extract values
-    #            popt,tt,yy,residuals = fit_monoexp(ts,activity,deayconst,monoguess=(1e6,1e-5))
-    #            monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
-    #            plt.show()
-    #            elif function == 2:
-    #                popt,tt,yy,residuals = fit_biexp_uptake(ts,activity,decayconst,uptakeguess=(6,1e-3 , 1e-3))
-    #                biexp_fit_plots(ts / (3600 * 24), activity / 10**6, tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
-    #                #monoexp_fit_plots(ts, activity, tt,yy,row['organ'],popt[2],residuals)
-    #                #plt.show()
-                #else:
-                #    print('Function unknown')
+
                 popt,tt,yy,residuals = fit_monoexp(ts,activity,decayconst,monoguess=(1e6,1e-5))
                 monoexp_fit_plots(ts  / (3600 * 24) ,activity / 10**6,tt  / (3600 * 24),yy / 10**6,row['organ'],popt[2],residuals)
                 plt.show()
@@ -140,42 +128,6 @@ class PatientDosimetry:
         
     def create_TIA(self):
 
-        ##############################################################################################
-        ####################################### OPTION 1 #############################################
-        ##############################################################################################
-#        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#
-#        organs = [organ for organ in self.organslist if organ != "ROB"]
-#        print(organs)
-#        for organ in organs:
-#            self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-                     
-        ##############################################################################################
-        ####################################### OPTION 1 #############################################
-        ##############################################################################################
-#        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-
-                                    
-        #organs = [organ for organ in self.organslist if organ != "WBCT"]
-        #last_element = organs.pop()  # Remove the ROB
-        #organs.insert(0, last_element)  # Insert it at the beginning
-        #organs = np.array(organs)
-        #print(organs)
-        #for organ in organs:
-        #    self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-
-        ##############################################################################################
-        ####################################### OPTION 2 #############################################
-        ##############################################################################################
-
         if self.cycle == 1:
             time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
         else:
@@ -198,38 +150,6 @@ class PatientDosimetry:
             
         TIA_ROB = TIA_WB - TIA_organs
         self.TIA = TIA_ROB + TIA_organs
-
-        ##############################################################################################
-        ####################################### OPTION 3 #############################################
-        ##############################################################################################
-
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#                            
-#        TIA_WB = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        TIA_organs = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#            
-#        TIA_WB[self.roi_masks_resampled['WBCT']] = self.SPECTMBq[self.roi_masks_resampled['WBCT']] * np.exp(self.lamda_eff_dict['WBCT'] * time) / self.lamda_eff_dict['WBCT']
-#        organs = [organ for organ in self.organslist if organ not in ["WBCT", "ROB", "Liver_Reference", "TotalTumorBurden", "Kidney_L_m", 'Kidney_R_m']]
-#        index_skeleton = organs.index('Skeleton')
-#        organs.pop(index_skeleton)
-#
-#        # Insert 'Skeleton' at the beginning of the list
-#        organs.insert(0, 'Skeleton')
-#        print(organs)
-#        for organ in organs:
-#            TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-#            
-#        TIA_ROB = TIA_WB - TIA_organs
-#        TIA_ROB_value = np.sum(np.sum(np.sum(TIA_ROB)))
-#        ROB_no_voxels = np.sum(np.sum(np.sum(self.roi_masks_resampled['ROB'])))
-#
-#        TIA_value_per_voxel = TIA_ROB_value / ROB_no_voxels
-#        TIA_ROB[self.roi_masks_resampled['ROB']] = TIA_value_per_voxel
-#        
-#        self.TIA = TIA_ROB + TIA_organs
         
 
     def flip_images(self):
@@ -240,8 +160,6 @@ class PatientDosimetry:
         self.image_visualisation(self.CTp)
         print('TIA image:')
         self.image_visualisation(self.TIAp)
-        #print('SPECTMBq image:')
-        #self.image_visualisation(self.SPECTMBqp)
         
         return self.TIAp, self.SPECTMBqp 
         
@@ -265,5 +183,3 @@ class PatientDosimetry:
         with open(image_path, 'w') as fileID:
             fileID.write('%.2f' % self.total_acc_A)
             
-        
-# %%
