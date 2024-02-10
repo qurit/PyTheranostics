@@ -35,11 +35,11 @@ def get_exponential(
                        -2: (1, 1, -1, 1),  
                        3: (1, 1, 1, 1, 1, 1)
                        }
-    # Bounds:
+    # Bounds: It can't decay slower than physical decay!
     bounds = {1: ([0, decayconst], numpy.inf), 
               2: ([0, decayconst, 0, decayconst], numpy.inf),
               -2: ([0, decayconst, -numpy.inf, decayconst], [numpy.inf, numpy.inf, 0, numpy.inf]),
-              3: None}
+              3: (-numpy.inf, numpy.inf)}
 
     if order == 1:
         func = monoexp_fun
@@ -50,7 +50,7 @@ def get_exponential(
     else:
         NotImplementedError("Function not implemented.")
 
-    return func, default_initial[order] if param_init is not None else param_init, bounds[order]
+    return func, default_initial[order] if param_init is None else param_init, bounds[order]
 
 def fit_tac(
         time: numpy.ndarray, 
