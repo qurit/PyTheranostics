@@ -1,14 +1,13 @@
-from typing import Tuple
 import json
 import math
 
 import pandas
 from dosimetry.olinda import load_phantom_mass, load_s_values
 
-from doodle.fits import fit_monoexp
+from doodle.fits import fit_tac
 
 
-def marrow_selfdose(df_blood: pandas.DataFrame, radionuclide: str, gender: str) -> float:
+def marrow_selfdose(df_blood: pandas.DataFrame, radionuclide: str, gender: str, exp_order: int) -> float:
 
     """
     Computes the bone-marrow self-dose due to activity concentration in the red-marrow, following
@@ -19,8 +18,6 @@ def marrow_selfdose(df_blood: pandas.DataFrame, radionuclide: str, gender: str) 
     Returns:
     Dose (RM <-- RM)
 
-    Limitations:
-     - Assumes mono-exponential model of Time Activity Concentration vs Time.
     """
     # Load Radionuclide data
     with open("../data/isotopes.json", "r") as rad_data:
@@ -40,10 +37,10 @@ def marrow_selfdose(df_blood: pandas.DataFrame, radionuclide: str, gender: str) 
     RMBLR = 1.0  # Activity concentration in Red Marrow over blood. Generally 1 for PSMA and SSRT.
 
     # Compute Time-Integrated Activity Concetrations. 
-    TAC_blood_param, _ = fit_monoexp(time=df_blood["Time"].to_numpy(),
-                             activity=df_blood["Activity_Conc"].to_numpy(),
-                             decayconst=decay_constant,
-                             monoguess=(df_blood["Time"].iloc[0], decay_constant))
+    TAC_blood_param, _ = fit_tac(time=df_blood["Time"].to_numpy(),
+                                activity=df_blood["Activity_Conc"].to_numpy(),
+                                decayconst=decay_constant,
+                                exp_order=exp_order)
     TIAC_blood = TAC_blood_param[0] / TAC_blood_param[1]  # Use analytical formula for mono-exponential decay.
 
 
