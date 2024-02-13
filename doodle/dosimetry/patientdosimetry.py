@@ -1,28 +1,19 @@
-# %%
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from scipy import integrate
-from scipy.optimize import curve_fit
-from datetime import datetime
-import re
-import glob
-import pydicom 
-from rt_utils import RTStructBuilder
-import gatetools as gt
 import SimpleITK as sitk
-import itk
-from skimage import io
-from skimage.transform import resize
-from skimage import img_as_bool
-from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake, fit_trapezoid
-from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
+
+from doodle.fits.fits import (find_a_initial, fit_biexp_uptake, fit_monoexp,
+                              fit_trapezoid)
+from doodle.plots.plots import biexp_fit_plots, monoexp_fit_plots
 
 
 # %%
-class PatientDosimetry:
-    def __init__(self, patient_id, cycle, isotope, 
+class BaseDosimetry:
+    """Base class for Image-based dosimetry calculations"""
+    def __init__(self, patient_id: str, cycle: int, isotope, 
                  CT, SPECTMBq, roi_masks_resampled,
                  injected_activity_MBq, injection_datetime, 
                  activity_tp1_df, 
@@ -157,42 +148,6 @@ class PatientDosimetry:
         
     def create_TIA(self):
 
-        ##############################################################################################
-        ####################################### OPTION 1 #############################################
-        ##############################################################################################
-#        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#
-#        organs = [organ for organ in self.organslist if organ != "ROB"]
-#        print(organs)
-#        for organ in organs:
-#            self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-                     
-        ##############################################################################################
-        ####################################### OPTION 1 #############################################
-        ##############################################################################################
-#        self.TIA = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-
-                                    
-        #organs = [organ for organ in self.organslist if organ != "WBCT"]
-        #last_element = organs.pop()  # Remove the ROB
-        #organs.insert(0, last_element)  # Insert it at the beginning
-        #organs = np.array(organs)
-        #print(organs)
-        #for organ in organs:
-        #    self.TIA[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-
-        ##############################################################################################
-        ####################################### OPTION 2 #############################################
-        ##############################################################################################
-
         if self.cycle == 1:
             time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
         else:
@@ -217,37 +172,6 @@ class PatientDosimetry:
         TIA_ROB = TIA_WB - TIA_organs
         self.TIA = TIA_ROB + TIA_organs
 
-        ##############################################################################################
-        ####################################### OPTION 3 #############################################
-        ##############################################################################################
-
-#        if self.cycle == 1:
-#            time = self.inj_timepoint2.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#        else:
-#            time = self.inj_timepoint1.loc[0, 'delta_t_days'] * 24 * 3600 # s
-#                            
-#        TIA_WB = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#        TIA_organs = np.zeros((self.SPECTMBq.shape[0], self.SPECTMBq.shape[1], self.SPECTMBq.shape[2]))
-#            
-#        TIA_WB[self.roi_masks_resampled['WBCT']] = self.SPECTMBq[self.roi_masks_resampled['WBCT']] * np.exp(self.lamda_eff_dict['WBCT'] * time) / self.lamda_eff_dict['WBCT']
-#        organs = [organ for organ in self.organslist if organ not in ["WBCT", "ROB", "Liver_Reference", "TotalTumorBurden", "Kidney_L_m", 'Kidney_R_m']]
-#        index_skeleton = organs.index('Skeleton')
-#        organs.pop(index_skeleton)
-#
-#        # Insert 'Skeleton' at the beginning of the list
-#        organs.insert(0, 'Skeleton')
-#        print(organs)
-#        for organ in organs:
-#            TIA_organs[self.roi_masks_resampled[organ]] = self.SPECTMBq[self.roi_masks_resampled[organ]] * np.exp(self.lamda_eff_dict[organ] * time) / self.lamda_eff_dict[organ]
-#            
-#        TIA_ROB = TIA_WB - TIA_organs
-#        TIA_ROB_value = np.sum(np.sum(np.sum(TIA_ROB)))
-#        ROB_no_voxels = np.sum(np.sum(np.sum(self.roi_masks_resampled['ROB'])))
-#
-#        TIA_value_per_voxel = TIA_ROB_value / ROB_no_voxels
-#        TIA_ROB[self.roi_masks_resampled['ROB']] = TIA_value_per_voxel
-#        
-#        self.TIA = TIA_ROB + TIA_organs
         
 
     def flip_images(self):
@@ -258,8 +182,6 @@ class PatientDosimetry:
         self.image_visualisation(self.CTp)
         print('TIA image:')
         self.image_visualisation(self.TIAp)
-        #print('SPECTMBq image:')
-        #self.image_visualisation(self.SPECTMBqp)
         
         return self.TIAp, self.SPECTMBqp 
         
