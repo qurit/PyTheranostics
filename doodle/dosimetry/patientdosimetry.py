@@ -16,7 +16,7 @@ import itk
 from skimage import io
 from skimage.transform import resize
 from skimage import img_as_bool
-from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake
+from doodle.fits.fits import monoexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake, fit_trapezoid
 from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
 
 
@@ -95,6 +95,8 @@ class PatientDosimetry:
             elif method == 'biexp':
                 popt, tt, yy, residuals = fit_biexp_uptake(ts, activity, decayconst, uptakeguess=(6, 1e-3, 1e-3))
                 biexp_fit_plots(ts / (3600 * 24), activity / 10**6, tt / (3600 * 24), yy / 10**6, organ, popt[2], residuals)
+            elif method == 'trapezoid':
+                auc = fit_trapezoid(ts, activity, decayconst)
             else:
                 print(f'Unknown method for organ {organ}')
                 continue
