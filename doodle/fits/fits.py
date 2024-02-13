@@ -175,3 +175,35 @@ def fit_triexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True
     # popt_df.columns = ['A0','lambda_eff','R2']
 
     return popt,tt,yy,residuals
+
+def find_a0(f, b, t):
+    return f * np.exp(b * t)
+
+def fit_trapezoid(t,a,decayconst,skip_points=0,ignore_weights=True,limit_bounds=False, sigmas = None):
+    lambda_lu = np.log(2)/(decayconst) 
+    ts_trap = np.insert(t, 0, 0.)
+    activity_trap = np.insert(a, 0, 0.)
+    print(lambda_lu)
+    print(t[-1])
+    a0 = find_a0(a[-1], lambda_lu, t[-1])
+
+    print(ts_trap, activity_trap)
+    print(a0)
+    print(integrate.trapezoid(activity_trap, ts_trap))
+    print(integrate.quad(fit_monoexp, t[-1], np.inf, args=(a0, lambda_lu)))
+    auc = integrate.trapezoid(activity_trap, ts_trap) + integrate.quad(fit_monoexp, t[-1], np.inf, args=(a0, lambda_lu))
+    acts3 = fit_monoexp(ts2, a0, lambda_lu)
+    ts3 = np.arange(t, 300, 0.1)
+
+
+    ax.plot(ts3, acts3, c = 'orange', zorder=0, linewidth=0.9)
+    ax.plot(ts_trap, activity_trap, linestyle='-', color='cornflowerblue', zorder=0, linewidth=0.9)
+    ax.scatter(t, a, c='black', zorder=1)
+    ax.set_xlabel('Time (h)')
+    ax.set_ylabel('Activity (MBq)')
+    ax.set_title('Trapezoid', color = 'cornflowerblue', fontsize = 10)
+    ax.legend()
+    plt.xlim([0, 300])
+    plt.ylim([0, 120])
+
+    return auc
