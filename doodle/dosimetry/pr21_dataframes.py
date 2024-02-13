@@ -1,4 +1,4 @@
-# %%
+from typing import Tuple, Callable, List, Dict
 import os
 import numpy as np
 import pandas as pd
@@ -24,215 +24,161 @@ import tempfile
 from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import UID
 
-# %%
-def getinputdata(patient_id, cycle):
+def load_CT(
+    folder: str, 
+    patient_id: str, 
+    cycle: str
+    ) -> Tuple[np.ndarray, Tuple[float, float, float]]:
+    """Load CT data from DICOM files in the specified folder."""
+    
+    CT_folder = f"{folder}/{patient_id}/cycle0{cycle}/CT1"
+    dicom_slices  = [pydicom.dcmread(fname) for fname in glob.glob(CT_folder + "/*.dcm", recursive=False)]
+
+    pixel_arrays = [slice.pixel_array for slice in dicom_slices if hasattr(slice, "pixel_array")]
+    CT = np.stack(pixel_arrays, axis=-1)
+
+    dicom_slices = [f for f in dicom_slices if hasattr(f, "SliceLocation")]
+    sorted_slices = sorted(dicom_slices, key=lambda s: s.SliceLocation)
+
+    voxel_size_x, voxel_size_y = sorted_slices[0].PixelSpacing
+    voxel_size_z = sorted_slices[0].SliceThickness
+    voxel_sizes = (voxel_size_x, voxel_size_y, voxel_size_z)
+
+    img_shape = list(sorted_slices[0].pixel_array.shape) + [len(sorted_slices)]
+    img3d = np.zeros(img_shape)
+
+    for i, slice_obj in enumerate(sorted_slices):
+        img2d = slice_obj.pixel_array
+        img3d[:, :, i] = img2d
+
+    CT = np.squeeze(img3d)
+    CT = CT - 1024
+
+    return CT, tuple(voxel_sizes)
+
+def voxel_sizes(
+    header: pydicom.dataset.FileDataset
+    ) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]:
+    """Calculate shape and voxel size."""
+    
+    xdim=header.Rows
+    ydim=header.Columns
+    zdim=header.NumberOfFrames
+    shape = (xdim, ydim, zdim)
+
+    xsize=header.PixelSpacing[0]
+    ysize=header.PixelSpacing[1]
+    zsize=header.SpacingBetweenSlices
+    voxel_sizes = (xsize, ysize, zsize)
+
+    return shape, voxel_sizes
+
+def load_and_resample_RT(
+    folder: str, 
+    patient_id: str, 
+    cycle: str,
+    no: int,
+    ) -> Tuple[Dict[str, Tuple[int, int, int]], Dict[str, np.ndarray]]:
+    """Load and resample RT data from DICOM files in the specified folder."""
+    
+    def clean_roi_name(roi_name: str) -> str:
+        cleaned_roi_name = roi_name.replace(" ", "").replace('-', '_').replace('(', '_').replace(')', '')
+        return cleaned_roi_name
+
+    def resample_mask(mask: np.ndarray) -> np.ndarray:
+        return img_as_bool(resize(mask, (128, 128, 233)))
+
+    patient_path = f"{folder}/{patient_id}/cycle0{cycle}"
+
+    masks_shape = {}
+    masks_resampled = {}
+
+    RT = RTStructBuilder.create_from(
+        dicom_series_path=glob.glob(os.path.join(patient_path, f'CT{no}_RT'))[0],
+        rt_struct_path=glob.glob(os.path.join(patient_path, f'CT{no}_RT/rt-struct.dcm'))[0]
+    )
+    roi_masks = {}
+    roi_names = RT.get_roi_names()
+    
+    # Adjusting names
+    for roi_name in roi_names:
+        cleaned_roi_name = clean_roi_name(roi_name)
+        mask = RT.get_roi_mask_by_name(roi_name)
+        roi_masks[cleaned_roi_name] = mask
+        
+    # Resampling to (128, 128, 233)
+    masks_resampled = {organ: resample_mask(mask) for organ, mask in roi_masks.items()}
+    masks_shape = masks_resampled[list(roi_masks.keys())[0]].shape
+
+    return masks_shape, masks_resampled
+
+def remainder(
+    shape: Tuple[int, int, int], 
+    masks: dict
+    ) -> dict:
+    # Create th ROI ROB (WBCT-everything else)
+    all_organs = np.zeros((shape[0], shape[1], shape[2]))
+    organs = [organ for organ in masks.keys() if (organ != "WBCT" and organ not in ["Kidney_L_m", "Kidney_R_m", 
+                                                                                    'Liver_Reference', 
+                                                                                    'L1', 'L2', 'L3', 'L4', 'L5',
+                                                                                    'Humerus_R', 'Humerus_L',
+                                                                                    'Femur_L', 'Femur_R',
+                                                                                    'TotalTumorBurden'])]
+    for organ in organs:
+        all_organs +=  masks[organ]
+    rob = masks['WBCT'] - all_organs
+    rob = rob.astype(bool)
+    masks['ROB'] = rob
+    
+    return masks
+
+def getinputdata(
+    patient_id: str, 
+    cycle: str
+    ) -> Tuple[np.ndarray, pydicom.dataset.FileDataset, pydicom.dataset.FileDataset, dict, dict]:
+    """Get CT, SPECT and Masks for further processing."""
+    
     folder = "/mnt/y/Sara/PR21_dosimetry"
     
-    #######################################################################################
-    # Activities from Patient statistics from MIM
-    mimcsv_tp1 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp1.csv"
-    activity_tp1_df = pd.read_csv(mimcsv_tp1)
-    activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace(' ', '')
-    activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace('-', '_')
-    activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace('(', '_')
-    activity_tp1_df['Contour'] = activity_tp1_df['Contour'].str.replace(')', '')
-    
-    if cycle == '1':
-        mimcsv_tp2 = f"{folder}/activity/{patient_id}_cycle0{cycle}_tp2.csv"
-        activity_tp2_df = pd.read_csv(mimcsv_tp2)
-        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace(' ', '')
-        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace('-', '_')
-        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace('(', '_')
-        activity_tp2_df['Contour'] = activity_tp2_df['Contour'].str.replace(')', '')
-    else:
-        pass
-    #######################################################################################
-    
-    
-    # Retrieve information about date of acquisition
-    # It is crucial, because name of files in incjection .csv are named with acq date
-    acq1 = activity_tp1_df.loc[1, 'Series Date']
-    date_object = datetime.strptime(acq1, "%Y-%m-%d")
-    data1 = date_object.strftime("%Y%m%d")
-    if cycle == '1':
-        acq2 = activity_tp2_df.loc[1, 'Series Date']
-        date_object = datetime.strptime(acq2, "%Y-%m-%d")
-        data2 = date_object.strftime("%Y%m%d")
-    else:
-        pass
-    
-    # injection timepoint data have in their name hyphen CAVA-00X, so here i create patient id with hyphen
-    # Use regular expression to insert a hyphen after every group of letters
-    x_with_hyphen = re.sub(r'([A-Za-z]+)', r'\1-', patient_id)
-    # Remove the trailing hyphen (if any)
-    if x_with_hyphen.endswith('-'):
-        x_with_hyphen = x_with_hyphen[:-1]
-    
-    #######################################################################################    
-    # Load injection timepoint data
-    injection_folder = f"{folder}/injection_timepoints"
-    file_path = f"{injection_folder}/PR21-{x_with_hyphen}.{data1}.injection.info.csv"
-    inj_timepoint1 = pd.read_csv(file_path)
-    if cycle == '1':
-        file_path = f"{injection_folder}/PR21-{x_with_hyphen}.{data2}.injection.info.csv"
-        inj_timepoint2 = pd.read_csv(file_path)    
-    else:
-        pass
-    #######################################################################################
-    
-    #######################################################################################
     # Load CT
-    CT_folder = f"{folder}/{patient_id}/cycle0{cycle}/CT" # this CT is resampled
-    files = []
-    for fname in glob.glob(CT_folder + "/*.dcm", recursive=False):
-        files.append(pydicom.dcmread(fname))
-        pixel_arrays = [slice.pixel_array for slice in files]
-        CT = np.stack(pixel_arrays, axis=-1)
-    slices = []
-    skipcount = 0
-    for f in files:
-        if hasattr(f, "SliceLocation"):
-            slices.append(f)
-        else:
-            skipcount = skipcount + 1
-    slices = sorted(slices, key=lambda s: s.SliceLocation)
-    
-    CT_xysize = slices[0].PixelSpacing
-    CT_zsize = slices[0].SliceThickness
-    sp = [CT_xysize[0], CT_xysize[1], CT_zsize]
-    img_shape = list(slices[0].pixel_array.shape)
-    img_shape.append(len(slices))
-    img3d = np.zeros(img_shape)
-    for i, s in enumerate(slices):
-        img2d = s.pixel_array
-        img3d[:, :, i] = img2d
-    CT = np.squeeze(img3d)
-    CT = CT - 1024  # Caution! Loaded CT has not accounted for shift in HUs! 'Rescale Intercept': -1024    
-    #######################################################################################
-    
-    
-    #######################################################################################
-    # Load SPECT
-    SPECT_folder = f"{folder}/{patient_id}/cycle0{cycle}/SPECT"
-    SPECT_hdr = pydicom.read_file(glob.glob(os.path.join(SPECT_folder, '*.dcm'))[0]) # I added [0] because glob.glob(os.path.join(folder_path, '*.dcm')), produce a list. not a path, but the 1st element of the list is a path
-    SPECT_xdim=SPECT_hdr.Rows
-    SPECT_ydim=SPECT_hdr.Columns
-    SPECT_zdim=SPECT_hdr.NumberOfFrames
-    SPECT_xsize=SPECT_hdr.PixelSpacing[0]
-    SPECT_ysize=SPECT_hdr.PixelSpacing[1]
-    SPECT_zsize=SPECT_hdr.SpacingBetweenSlices
-    SPECT_volume_voxel=SPECT_xsize*SPECT_ysize*SPECT_zsize/1000
-    
-    SPECT = SPECT_hdr.pixel_array
-    SPECT = np.transpose(SPECT, (1, 2, 0)) # from (233,128,128) to (128,128,233)
-    SPECT.astype(np.float64)
-    scalefactor = SPECT_hdr.RealWorldValueMappingSequence[0].RealWorldValueSlope
-    SPECT = SPECT * scalefactor # in Bq/ml
-    SPECTMBq = SPECT * SPECT_volume_voxel / 1E6 # in MBq
-    #######################################################################################
-    
-    
-    #######################################################################################
-    # Load RT
-    patient_path = f"{folder}/{patient_id}/cycle0{cycle}"
-    RT = RTStructBuilder.create_from(
-        dicom_series_path = glob.glob(os.path.join(patient_path, 'CT2'))[0], # this CT is not resampled, the one to which RT structures are attached
-        rt_struct_path = glob.glob(os.path.join(patient_path, 'CT2/rt-struct.dcm'))[0]
-        )
-    roi_masks = {} 
-    roi_names = RT.get_roi_names()
-    # Adjusting names so they much dataframe
-    for roi_name in roi_names:
-        cleaned_roi_name = roi_name.replace(" ", "")
-        cleaned_roi_name = cleaned_roi_name.replace('-', '_')
-        cleaned_roi_name = cleaned_roi_name.replace('(', '_')
-        cleaned_roi_name = cleaned_roi_name.replace(')', '')
-        mask = RT.get_roi_mask_by_name(roi_name)
-        roi_masks[f"{cleaned_roi_name}"] = mask
-    # Resampling to 128, 128, 233 
-    roi_masks_resampled = {}
-    organslist = activity_tp1_df['Contour'].unique()
-    for organ in organslist:
-        mask_image = roi_masks[organ]  # Access the mask using the 'organ' variable
-        resized = img_as_bool(resize(mask_image, (128, 128, 233)))  # Resize to (128, 128, 233)
-        roi_masks_resampled[organ] = resized
-        RT_xdim = resized.shape[0]
-        RT_ydim = resized.shape[1]
-        RT_zdim = resized.shape[2]
-        
-        
-    # Create th ROI ROB (WBCT-everything else)
-    all_organs = np.zeros((RT_xdim, RT_ydim, RT_zdim))
-    organs = [organ for organ in organslist if organ != "WBCT"]
-    for organ in organs:
-        all_organs +=  roi_masks_resampled[organ]
-    rob = roi_masks_resampled['WBCT'] - all_organs
-    rob = rob.astype(bool)
-    roi_masks_resampled['ROB'] = rob
-    
-    
-    #######################################################################################
+    CT, CT_voxel_sizes = load_CT(folder, patient_id, cycle)
 
-    #######################################################################################
-        # create ROB = WBCT - organs
-        # 1/specify the organs that will constitute for the knoe
-    organs_df = activity_tp1_df[(activity_tp1_df['Contour'] == 'TotalTumorBurden') | 
-                               (activity_tp1_df['Contour'] == 'Kidney_L_a') |
-                               (activity_tp1_df['Contour'] == 'Kidney_R_a') |
-                               (activity_tp1_df['Contour'] == 'Liver') |
-                               (activity_tp1_df['Contour'] == 'ParotidglandL') |
-                               (activity_tp1_df['Contour'] == 'ParotidglandR') |
-                               (activity_tp1_df['Contour'] == 'Spleen') |
-                               (activity_tp1_df['Contour'] == 'Skeleton') |
-                               (activity_tp1_df['Contour'] == 'Bladder_Experimental') |
-                               (activity_tp1_df['Contour'] == 'SubmandibularglandL') |
-                               (activity_tp1_df['Contour'] == 'SubmandibularglandR')]
-    # Specify the values for the ROB observation - time point 1
-    rob_observation = {
-        'Contour': 'ROB',
-        'Series Date': activity_tp1_df.loc[1, 'Series Date'],
-        'Integral Total (BQML*ml)': (activity_tp1_df.loc[activity_tp1_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - organs_df['Integral Total (BQML*ml)'].sum()).values[0],
-        'Total (BQML)': (activity_tp1_df.loc[activity_tp1_df['Contour'] == 'WBCT', 'Total (BQML)'] - organs_df['Total (BQML)'].sum()).values[0],
-        'Volume (ml)': (activity_tp1_df.loc[activity_tp1_df['Contour'] == 'WBCT', 'Volume (ml)'] - organs_df['Volume (ml)'].sum()).values[0],
-        'Voxel Count (#)': (activity_tp1_df.loc[activity_tp1_df['Contour'] == 'WBCT', 'Voxel Count (#)'] - organs_df['Voxel Count (#)'].sum()).values[0]
-    }
-    rob_observation = pd.DataFrame([rob_observation])
-    if "ROB" not in activity_tp1_df['Contour'].values:
-        activity_tp1_df = pd.concat([activity_tp1_df, rob_observation], ignore_index=True)
+    # Load SPECT1
+    SPECT1_folder_path = f"{folder}/{patient_id}/cycle0{cycle}/SPECT1"
+    SPECT1_hdr = pydicom.read_file(glob.glob(os.path.join(SPECT1_folder_path, '*.dcm'))[0])
+    SPECT1_shape, SPECT1_voxel_sizes = voxel_sizes(SPECT1_hdr)
     
+    # Load SPECT2
     if cycle == '1':
-        # Specify the values for the ROB observation - time point 2
-        rob_observation = {
-            'Contour': 'ROB',
-            'Series Date': activity_tp2_df.loc[1, 'Series Date'],
-            'Integral Total (BQML*ml)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Integral Total (BQML*ml)'] - organs_df['Integral Total (BQML*ml)'].sum()).values[0],
-            'Total (BQML)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Total (BQML)'] - organs_df['Total (BQML)'].sum()).values[0],
-            'Volume (ml)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Volume (ml)'] - organs_df['Volume (ml)'].sum()).values[0],
-            'Voxel Count (#)': (activity_tp2_df.loc[activity_tp2_df['Contour'] == 'WBCT', 'Voxel Count (#)'] - organs_df['Voxel Count (#)'].sum()).values[0]
-        }
-        rob_observation = pd.DataFrame([rob_observation])
-        if "ROB" not in activity_tp2_df['Contour'].values:
-            activity_tp2_df = pd.concat([activity_tp2_df, rob_observation], ignore_index=True)
-        activity_tp2_df = pd.concat([activity_tp2_df, rob_observation], ignore_index=True)
-    else:
-        pass
+        SPECT2_folder_path = f"{folder}/{patient_id}/cycle0{cycle}/SPECT2"
+        SPECT2_hdr = pydicom.read_file(glob.glob(os.path.join(SPECT2_folder_path, '*.dcm'))[0])
+        SPECT2_shape, SPECT2_voxel_sizes = voxel_sizes(SPECT2_hdr)
+    
+    # Load RT1
+    masks1_shape, masks1_resampled = load_and_resample_RT(folder, patient_id, cycle, 1)
+    masks1_resampled = remainder(masks1_shape, masks1_resampled)
+    
+    # Load RT2
+    if cycle == '1':
+        masks2_shape, masks2_resampled = load_and_resample_RT(folder, patient_id, cycle, 2)
+        masks2_resampled = remainder(masks2_shape, masks2_resampled)
+    
+    
     # Define your data for three observations: SPECT, CT, RT
     data = [
-        {' ': 'SPECT', 'xdim': SPECT_xdim, 'ydim': SPECT_ydim, 'zdim': SPECT_zdim, 'xsize': SPECT_xsize, 'ysize': SPECT_ysize, 'zsize': SPECT_zsize},
-        {' ': 'CT', 'xdim': CT.shape[0], 'ydim': CT.shape[1], 'zdim': CT.shape[2], 'xsize': CT_xysize[0], 'ysize': CT_xysize[1], 'zsize': CT_zsize},
-        {' ': 'RT', 'xdim': RT_xdim, 'ydim': RT_ydim, 'zdim': RT_zdim, 'xsize': "", 'ysize': "", 'zsize': ""}
+        {' ': 'SPECT1', 'xdim': SPECT1_shape[0], 'ydim': SPECT1_shape[1], 'zdim': SPECT1_shape[2], 'xsize': SPECT1_voxel_sizes[0], 'ysize': SPECT1_voxel_sizes[1], 'zsize': SPECT1_voxel_sizes[2]},
+        {' ': 'SPECT2', 'xdim': SPECT2_shape[0], 'ydim': SPECT2_shape[1], 'zdim': SPECT2_shape[2], 'xsize': SPECT2_voxel_sizes[0], 'ysize': SPECT2_voxel_sizes[1], 'zsize': SPECT2_voxel_sizes[2]},
+        {' ': 'CT', 'xdim': CT.shape[0], 'ydim': CT.shape[1], 'zdim': CT.shape[2], 'xsize': CT_voxel_sizes[0], 'ysize': CT_voxel_sizes[1], 'zsize': CT_voxel_sizes[2]},
+        {' ': 'Mask1', 'xdim': masks1_shape[0], 'ydim': masks1_shape[1], 'zdim': masks1_shape[2], 'xsize': "", 'ysize': "", 'zsize': ""},
+        {' ': 'Mask2', 'xdim': masks2_shape[0], 'ydim': masks2_shape[1], 'zdim': masks2_shape[2], 'xsize': "", 'ysize': "", 'zsize': ""}
     ]
-
-    # Create a DataFrame
     df = pd.DataFrame(data)
-
-    # Print the summary table
     print(df)
 
     if cycle == '1':
-        return activity_tp1_df, activity_tp2_df, inj_timepoint1, inj_timepoint2, CT, SPECTMBq, roi_masks_resampled
+        return CT, SPECT1_hdr, SPECT2_hdr, masks1_resampled, masks2_resampled
     else:
-        return activity_tp1_df, inj_timepoint1, CT, SPECTMBq, roi_masks_resampled
+        return  CT, SPECT1_hdr, masks1_resampled
     
     
     
