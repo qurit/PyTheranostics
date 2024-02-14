@@ -1,7 +1,7 @@
 {
     "Lu177":{
-        "half_life":6.647,
-        "half_life_units":"days",
+        "half_life": 159.528,
+        "half_life_units":"hours",
         "nwin":4,
         "windows_kev":{
             "photopeak":[187.2,208,228.8],
