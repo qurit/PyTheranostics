@@ -25,4 +25,16 @@ class LongitudinalStudy:
 
         return None
     
+    def volume_of(self, region: str, time_id: int) -> float:
+        """Returns the volume of a region of interest, in mL"""
+        return numpy.sum(self.masks[time_id][region]) * self.voxel_volume(time_id=time_id)
+    
+    def sum_of(self, region: str, time_id: int) -> float:
+        """Returns the sum of voxel values within a region of interest. If imaging data is
+         quantitative Nuclear Medicine, this method returns activity in region, in Bq."""
+        return numpy.sum(self.masks[time_id][region] * self.images[time_id])
+
+    def voxel_volume(self, time_id: int) -> float:
+        """Returns the volume of a voxel in mL"""
+        return self.meta[time_id]["x_dim"] * self.meta[time_id]["y_dim"] * self.meta[time_id]["z_dim"]
     
