@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 import numpy
 import pandas
 
-from doodle.fits.fits import fit_tac, get_exponential
+from doodle.fits.fits import fit_tac
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
@@ -69,7 +69,8 @@ class BaseDosimetry:
 
         for roi_name, _ in self.nm_data.masks[0].items():
             if roi_name not in self.config["rois"]:
-                print(f"Skipping {roi_name}, as it was not included in the list of ROIs for dose calculations.")
+                print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
+                      " configuration input file.")
                 continue
 
             # Time (relative to time of injection, in hours)
@@ -133,7 +134,7 @@ class BaseDosimetry:
             # TODO: QA of fit. (e.g., plots)
             fit_params, _ = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
-                activity=numpy.aarray(region_data["Activity_Bq"]),
+                activity=numpy.array(region_data["Activity_Bq"]),
                 decayconst=decay_constant,
                 exp_order=self.config[region]["exp_order"],
                 through_origin=self.config[region]["through_origin"]
@@ -153,7 +154,7 @@ class BaseDosimetry:
 
         return None
     
-    def analytical_integrate(self, exp_params: List[float]) -> float:
+    def numerical_integrate(self, exp_params: List[float]) -> float:
         """Perform numerical integration of exponential function"""
         if len(exp_params < 4):
             exp_func = monoexp_fun
