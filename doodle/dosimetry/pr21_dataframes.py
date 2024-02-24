@@ -10,14 +10,11 @@ import re
 import glob
 import pydicom 
 from rt_utils import RTStructBuilder
-import gatetools as gt
 import scipy
 import SimpleITK as sitk
 from skimage import io
 from skimage.transform import resize
 from skimage import img_as_bool
-from  doodle.fits.fits import monoexp_fun, fit_monoexp
-from doodle.plots.plots import monoexp_fit_plots
 from pathlib import Path
 import sys
 import tempfile

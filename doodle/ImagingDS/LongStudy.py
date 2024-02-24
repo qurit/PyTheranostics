@@ -9,7 +9,8 @@ class LongitudinalStudy:
     """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs 
     /regions of interest and meta-data."""
 
-    def __init__(self, images: Dict[int, SimpleITK.Image],
+    def __init__(self, 
+                 images: Dict[int, SimpleITK.Image],
                  meta: Dict[int, MetaDataType]
                  ) -> None:
         """
@@ -27,7 +28,9 @@ class LongitudinalStudy:
     
     def array_at(self, time_id: int) -> numpy.ndarray:
         """Access Array Data"""
-        return numpy.transpose(SimpleITK.GetArrayFromImage(self.images[time_id]), axes=(1, 2, 0))
+        return numpy.transpose(
+            numpy.squeeze(SimpleITK.GetArrayFromImage(self.images[time_id])), axes=(1, 2, 0)
+            )
 
     def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray]) -> None:
         """Add a Dictionary of masks for a given time point."""
@@ -44,10 +47,13 @@ class LongitudinalStudy:
         """Returns the volume of a region of interest, in mL"""
         return numpy.sum(self.masks[time_id][region]) * self.voxel_volume(time_id=time_id)
     
-    def sum_of(self, region: str, time_id: int) -> float:
-        """Returns the sum of voxel values within a region of interest. If imaging data is
-         quantitative Nuclear Medicine, this method returns activity in region, in Bq."""
-        return numpy.sum(self.masks[time_id][region] * self.array_at(time_id=time_id))
+    def activity_in(self, region: str, time_id: int) -> float:
+        """Returns the activity within a region of interest. The units of the nuclear medicine data
+        should be Bq/mL."""
+        if self.meta[time_id]["Radionuclide"] == "N/A":
+            raise AssertionError("Can't compute activity if the image data does not represent the distribution of a radionuclide")
+
+        return numpy.sum(self.masks[time_id][region] * self.array_at(time_id=time_id) * self.voxel_volume(time_id=time_id))
 
     def voxel_volume(self, time_id: int) -> float:
         """Returns the volume of a voxel in mL"""
