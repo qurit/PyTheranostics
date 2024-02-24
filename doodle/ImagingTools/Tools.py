@@ -1,5 +1,5 @@
 import numpy
-from typing import Any, Tuple, Dict, List
+from typing import Any, Tuple, Dict, List, Optional
 import SimpleITK
 from SimpleITK import Image
 import pydicom
@@ -9,10 +9,14 @@ from skimage.transform import resize
 from skimage import img_as_bool
 from pathlib import Path
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
+from doodle.dicomtools.dicomtools import sitk_load_dcm_series
 
 MetaDataType = Dict[str, Any]  # This could be improved ...
 
-def load_metadata(dir: str, is_CT: bool = True) -> MetaDataType:
+# TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
+# the code below)
+
+def load_metadata(dir: str, modality: str) -> MetaDataType:
     """Loads relevant meta-data from a dicom dataset. """
 
     dicom_slices  = [pydicom.dcmread(fname) for fname in glob.glob(dir + "/*.dcm", recursive=False)]
@@ -20,13 +24,15 @@ def load_metadata(dir: str, is_CT: bool = True) -> MetaDataType:
     if len(dicom_slices) == 0:
         raise AssertionError(f"No Dicom data was found under {dir}")
     
-    if is_CT:
+    radionuclide = "N/A"
+
+    if modality == "CT": 
         dicom_slices = [f for f in dicom_slices if hasattr(f, "SliceLocation")]
         dicom_slices = sorted(dicom_slices, key=lambda s: s.SliceLocation)
 
         if dicom_slices[0].Modality != "CT":
             raise ValueError(f"Wrong modality. User specified CT, howere dicom indicates {dicom_slices[0].Modality}.")
-
+        
     else:
         # Should only be a single DICOM file for SPECT Reconstruction
         if len(dicom_slices) > 1:
@@ -35,31 +41,73 @@ def load_metadata(dir: str, is_CT: bool = True) -> MetaDataType:
         if dicom_slices[0].Modality != "NM":
             raise ValueError(f"Wrong modality. User specified NM, howere dicom indicates {dicom_slices[0].Modality}.")
 
+        radionuclide = modality.split("_")[0]
 
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
     meta = {"AcquisitionDate": slice_.AcquisitionDate,
             "AcquisitionTime": slice_.AcquisitionTime,
-            "PatientID": slice_.PatientID}
+            "PatientID": slice_.PatientID,
+            "Radionuclide": radionuclide}
 
     return meta
 
+def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tuple[float, float]] = None) -> Image:
+    """Read dicom metadata to extract appropriate scaling for Image voxel values, then 
+    apply to original image and generate a new SimpleITK image object.
+    """
+    if scale_factor is None:
+        # We use pydicom to access the appropriate tag:
+        # First, find the SPECT dicom file:
+        path_dir = Path(dir)
+        nm_files = [files for files in path_dir.glob("*.dcm")]
+        if len(nm_files) != 1:
+            raise AssertionError(f"Found more than 1 .dcm file inside {path_dir.name}, not sure which is is SPECT.")
+        
+        dcm_data = pydicom.dcmread(str(nm_files[0]))
+        slope = dcm_data.RealWorldValueMappingSequence[0].RealWorldValueSlope
+        intercept = dcm_data.RealWorldValueMappingSequence[0].RealWorldValueIntercept
+    else:
+        slope = scale_factor[0]
+        intercept = scale_factor[1]
+
+    # Re-scale voxel values
+    image_array = numpy.squeeze(SimpleITK.GetArrayFromImage(image)) 
+    image_array = slope * image_array.astype(numpy.float32) + intercept
+
+    # Generate re-scaled SimpleITK.Image object by building a new Image from re_scaled array, and copying
+    # metadata from original image.
+    re_scaled_image = SimpleITK.GetImageFromArray(image_array)
+    
+    # Set Manually basic meta:
+    re_scaled_image.SetSpacing(list(image.GetSpacing())[:-1])
+    re_scaled_image.SetOrigin(list(image.GetOrigin())[:-1])
+    tmp_direction = list(image.GetDirection())
+    re_scaled_image.SetDirection(tmp_direction[0:3] + tmp_direction[4:7] + tmp_direction[8:11])
+
+    # Here we set the additional meta-data.
+    for key in image.GetMetaDataKeys():
+        re_scaled_image.SetMetaData(key, image.GetMetaData(key))
+
+    return re_scaled_image
+
+
 def load_from_dicom_dir(
-    dir: str, is_CT: bool = True
-    ) -> Tuple[SimpleITK.Image, MetaDataType]:
+    dir: str, modality: str
+    ) -> Tuple[Image, MetaDataType]:
     """Load CT or SPECT data from DICOM files in the specified folder.
     Returns the Image object and some relevant metadata. 
     """
     # Read image content and spatial information using SimpleITK
-    reader = SimpleITK.ImageSeriesReader()
-    dicom_files = reader.GetGDCMSeriesFileNames(dir)
-    reader.SetFileNames(dicom_files)
-    
-    image = reader.Execute()
+    image = sitk_load_dcm_series(dcm_dir=Path(dir))
+
+    # If Q-SPECT, need to re-scale Data as SimpleITK does not do it:
+    if modality != "CT":
+        image = apply_qspect_dcm_scaling(image=image, dir=dir)
 
     # Load Meta Data using pydicom.
-    meta = load_metadata(dir=dir, is_CT=is_CT)
+    meta = load_metadata(dir=dir, modality=modality)
 
     return image, meta
 
@@ -105,16 +153,16 @@ def load_and_resample_RT(
 
     return roi_masks, roi_masks_resampled
 
-def create_logitudinal_from_dicom(dicom_dirs: List[str], is_CT: bool = True) -> LongitudinalStudy:
+def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -> LongitudinalStudy:
     """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
     corresponds to the order of the time points... should fix this to make it robust and look at dicom header info for
     sorting time-points."""
 
-    images: Dict[int, SimpleITK.Image] = {}
+    images: Dict[int, Image] = {}
     metadata: Dict[int, MetaDataType] = {}
 
     for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(dir=dir, is_CT=is_CT)
+        image, meta = load_from_dicom_dir(dir=dir, modality=modality)
         images[time_id] = image
         metadata[time_id] = meta
 

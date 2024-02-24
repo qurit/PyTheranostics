@@ -10,16 +10,15 @@ from doodle.fits.fits import fit_tac
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
-
+from doodle.MiscTools.Tools import calculate_time_difference
 
 class BaseDosimetry:
     """Base Dosimetry Class. Takes Nuclear Medicine Data and CT Data to perform Organ-level 
     patient-specific dosimetry by computing organ time-integrated activity curves and
     leveraging organ level S-values"""
 
-    def __init__(self, patient_id: str, cycle: int,
+    def __init__(self,
                  config: Dict[str, Any],
-                 database_dir: str,
                  nm_data: LongitudinalStudy, 
                  ct_data: LongitudinalStudy,
                  clinical_data: Optional[pandas.DataFrame] = None
@@ -42,9 +41,10 @@ class BaseDosimetry:
         self.config = config
         
         # Store data
-        self.patient_id = patient_id 
-        self.cycle = cycle
-        self.db_dir = Path(database_dir)
+        self.patient_id = config["PatientID"] 
+        self.cycle = config["Cycle"]
+        self.db_dir = Path(config["DatabaseDir"])
+        self.check_mandatory_fields()
         self.check_patient_in_db() # TODO: Traceability/database?
 
         self.nm_data = nm_data
@@ -55,9 +55,13 @@ class BaseDosimetry:
         self.radionuclide = self.check_nm_data()
 
         # DataFrame storing results
-        self.results = self.initialize_results()
+        self.results = self.initialize()
         
-    def initialize_results(self) -> pandas.DataFrame:
+    def check_mandatory_fields(self) -> None:
+        if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
+            raise ValueError(f"Incomplete Configuration file.")
+
+    def initialize(self) -> pandas.DataFrame:
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
@@ -65,7 +69,11 @@ class BaseDosimetry:
             }  # BoneMarrow is a special case.
         
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_Bq"]
-        time_ids = [time_id for time_id in self.nm_data.masks.keys]
+        time_ids = [time_id for time_id in self.nm_data.masks.keys()]
+
+        # Normalize Acquisition Times, relative to time of injection
+        for time_id in self.nm_data.meta.keys():
+            self.normalize_time_to_injection(time_id=time_id)
 
         for roi_name, _ in self.nm_data.masks[0].items():
             if roi_name not in self.config["rois"]:
@@ -87,7 +95,7 @@ class BaseDosimetry:
             
             # Activity, in Bq
             tmp_results[roi_name].append(
-                [self.nm_data.sum_of(region=roi_name, time_id=time_id) 
+                [self.nm_data.activity_in(region=roi_name, time_id=time_id) 
                    for time_id in time_ids]
                    )
 
@@ -101,17 +109,18 @@ class BaseDosimetry:
         with open("../data/isotopes.json", "r") as rad_data:
             radionuclide_data = json.load(rad_data)
 
-        if "radionuclide" not in self.nm_data.meta:
+        if "Radionuclide" not in self.nm_data.meta[0]:
             raise ValueError("Nuclear Medicine Data missing radionuclide")
         
-        if self.nm_data.meta["radionuclide"] not in radionuclide_data:
-            raise ValueError(f"Data for {self.nm_data.meta['radionuclide']} is not available.")
+        if self.nm_data.meta[0]["Radionuclide"] not in radionuclide_data:
+            raise ValueError(f"Data for {self.nm_data.meta['Radionuclide']} is not available.")
         
-        return radionuclide_data
+        return radionuclide_data[self.nm_data.meta[0]["Radionuclide"]]
     
-    def check_patient_in_db() -> None:
+    def check_patient_in_db(self) -> None:
         """Check if prior dosimetry exists for this patient"""
-        raise RuntimeWarning("Database search function not implemented. Dosimetry for this patient might "
+        # TODO: handle logging: error/warnings/prints.
+        print("Database search function not implemented. Dosimetry for this patient might "
                              "already exists...")
         return None
     
@@ -136,8 +145,8 @@ class BaseDosimetry:
                 time=numpy.array(region_data["Time_hr"]),
                 activity=numpy.array(region_data["Activity_Bq"]),
                 decayconst=decay_constant,
-                exp_order=self.config[region]["exp_order"],
-                through_origin=self.config[region]["through_origin"]
+                exp_order=self.config["rois"][region]["fit_order"],
+                through_origin=self.config["rois"][region]["through_origin"]
             )
 
             # Fitting Parameters
@@ -167,3 +176,12 @@ class BaseDosimetry:
         
         return quad(exp_func, 0, numpy.inf, args=tuple(exp_params))
         
+    def normalize_time_to_injection(self, time_id: int) -> None:
+        """Express acquisition time corresponding to time_id in terms of injection time"""
+
+        acq_time = f"{self.nm_data.meta[time_id]['AcquisitionDate']} {self.nm_data.meta[time_id]['AcquisitionTime']}"
+        inj_time = f"{self.config['InjectionDate']} {self.config['InjectionTime']}"
+
+        self.nm_data.meta[time_id]["Time"] = calculate_time_difference(date_str1=acq_time, date_str2=inj_time)
+
+        return None
