@@ -11,6 +11,9 @@ def monoexp_fun(x: numpy.ndarray, a: float, b: float) -> numpy.ndarray:
 def biexp_fun(x: numpy.ndarray, a: float, b: float, c: float, d: float) -> numpy.ndarray:
     return a * exp(-b * x) + c * exp(-d * x)
 
+def biexp_fun_uptake(x: numpy.ndarray, a: float, b: float, c: float) -> numpy.ndarray:
+    return a * exp(-b * x) - a * exp(-c * x)
+
 def triexp_fun(x: numpy.ndarray, a: float, b: float, c: float, d: float, e: float, f: float) -> numpy.ndarray:
     return a * exp(-b * x) + c * exp(-d * x) + e * exp(-f * x)
 
