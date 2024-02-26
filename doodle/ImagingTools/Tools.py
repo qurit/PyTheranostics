@@ -25,6 +25,7 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
         raise AssertionError(f"No Dicom data was found under {dir}")
     
     radionuclide = "N/A"
+    injected_activity = "N/A"
 
     if modality == "CT": 
         dicom_slices = [f for f in dicom_slices if hasattr(f, "SliceLocation")]
@@ -42,6 +43,7 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
             raise ValueError(f"Wrong modality. User specified NM, howere dicom indicates {dicom_slices[0].Modality}.")
 
         radionuclide = modality.split("_")[0]
+        injected_activity = dicom_slices[0].RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
 
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
@@ -49,7 +51,9 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     meta = {"AcquisitionDate": slice_.AcquisitionDate,
             "AcquisitionTime": slice_.AcquisitionTime,
             "PatientID": slice_.PatientID,
-            "Radionuclide": radionuclide}
+            "Radionuclide": radionuclide,
+            "Injected_Activity_MBq": injected_activity
+            }
 
     return meta
 
@@ -137,7 +141,8 @@ def load_and_resample_RT(
     # we build a 'database')
     RT = RTStructBuilder.create_from(
         dicom_series_path=glob.glob(str(CT_folder))[0],
-        rt_struct_path=glob.glob(str(CT_folder/"rt-struct.dcm"))[0]
+        #rt_struct_path=glob.glob(str(CT_folder/"rt-struct.dcm"))[0]
+        rt_struct_path=glob.glob(str(CT_folder/"RTstruct/*.dcm"))[0]
     )
     roi_masks = {}
     roi_names = RT.get_roi_names()
