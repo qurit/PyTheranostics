@@ -7,7 +7,8 @@ import numpy
 import pandas
 
 from doodle.fits.fits import fit_tac
-from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun
+from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
+from doodle.plots.plots import plot_tac
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
@@ -107,6 +108,7 @@ class BaseDosimetry:
 
         # Load Radionuclide data
         with open("../data/isotopes.json", "r") as rad_data:
+        #with open("/home/skurkowska/doodle/doodle/data/isotopes.json", "r") as rad_data:
             radionuclide_data = json.load(rad_data)
 
         if "Radionuclide" not in self.nm_data.meta[0]:
@@ -134,29 +136,41 @@ class BaseDosimetry:
             3. Integrate each TAC and determine TIAC/MBq (or residence time) for each organ of interest
                and update DataFrame.
             """
-        decay_constant = math.log(2) / (self.radionuclide["half_life"] * 3600)  # 1/s
+        decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h
 
-        tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_s": [], "TIAC_h": [], "Lambda_eff": []}
+        tmp_tiac_data = {"Fit_params": [], "TIAC_Bq_h": [], "TIAC_h": [], "Lambda_eff": []}
 
         for region, region_data in self.results.iterrows():
-
             # TODO: QA of fit. (e.g., plots)
-            fit_params, _ = fit_tac(
+            fit_params, residuals = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
                 activity=numpy.array(region_data["Activity_Bq"]),
                 decayconst=decay_constant,
                 exp_order=self.config["rois"][region]["fit_order"],
-                through_origin=self.config["rois"][region]["through_origin"]
+                param_init=self.config["rois"][region]["param_init"]
             )
-
-            # Fitting Parameters
+            
+            plot_tac(
+                time = numpy.array(region_data["Time_hr"]) / 24,
+                activity = numpy.array(region_data["Activity_Bq"]) / 10**6,
+                exp_order = self.config["rois"][region]["fit_order"],
+                parameters = fit_params,
+                residuals = residuals / 10**6,
+                organ = region, 
+                xlabel = 't (days)', 
+                ylabel = 'A (MBq)')
+            
+            # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
             tmp_tiac_data["Fit_params"].append(fit_params)
-            tmp_tiac_data["TIAC_Bq_s"].append(
+            tmp_tiac_data["TIAC_Bq_h"].append(
                 self.numerical_integrate(fit_params[:-1])
             )
 
+            # Lambda effective 
+            tmp_tiac_data["Lambda_eff"].append(fit_params[0])
+
             # Residence Time
-            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_Bq_s"][-1] / (self.nm_data.meta["Injected_Activity"] * 3600))
+            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_Bq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"] * 10 **6 ))
 
         for key, values in tmp_tiac_data.items():
             self.results.loc[:, key] = values
@@ -165,15 +179,17 @@ class BaseDosimetry:
     
     def numerical_integrate(self, exp_params: List[float]) -> float:
         """Perform numerical integration of exponential function"""
-        if len(exp_params < 4):
-            exp_func = monoexp_fun
-        elif len(exp_params < 6):
+        if len(exp_params) < 3:
+            exp_func = monoexp_fun 
+        elif len(exp_params) < 4:
+            exp_func = biexp_fun_uptake      
+        elif len(exp_params) < 6:
             exp_func = biexp_fun
         elif len(exp_params) == 6:
             exp_func = triexp_fun
         else:
             raise ValueError("Too many parameters to define a function. Only supported mono, bi or tri-exponentials")
-        
+
         return quad(exp_func, 0, numpy.inf, args=tuple(exp_params))
         
     def normalize_time_to_injection(self, time_id: int) -> None:
