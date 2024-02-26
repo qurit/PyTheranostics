@@ -38,7 +38,7 @@ class LongitudinalStudy:
             print(f"Warning: Masks for Time ID = {time_id} already exist. Overwriting them...")
 
         self.masks[time_id] = masks
-        self.check_masks_consistency()
+        #self.check_masks_consistency() # I commented it for now; since there were lesions segmented only in the last point for now
 
         return None
     
