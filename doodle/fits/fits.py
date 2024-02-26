@@ -1,7 +1,7 @@
 from typing import Any, Callable, Optional, Tuple
 
 import numpy
-from doodle.fits.functions import biexp_fun, monoexp_fun, triexp_fun
+from doodle.fits.functions import biexp_fun, monoexp_fun, triexp_fun, biexp_fun_uptake
 from scipy.optimize import curve_fit
 
 
@@ -38,13 +38,15 @@ def get_exponential(
     # Bounds: It can't decay slower than physical decay!
     bounds = {1: ([0, decayconst], numpy.inf), 
               2: ([0, decayconst, 0, decayconst], numpy.inf),
-              -2: ([0, decayconst, -numpy.inf, decayconst], [numpy.inf, numpy.inf, 0, numpy.inf]),
+              -2: ([0, decayconst, decayconst], [numpy.inf, numpy.inf, numpy.inf]),
               3: (-numpy.inf, numpy.inf)}
 
     if order == 1:
         func = monoexp_fun
-    elif abs(order) == 2:
+    elif order == 2:
         func = biexp_fun
+    elif order == -2:
+        func = biexp_fun_uptake
     elif order == 3:
         func = triexp_fun
     else:
@@ -59,8 +61,7 @@ def fit_tac(
         exp_order: int = 1,
         weights: Optional[numpy.ndarray] = None,
         param_init: Optional[Tuple[float, ...]] = None,
-        maxev: int = 100000,
-        through_origin: bool = False
+        maxev: int = 100000
                 ) -> Tuple[numpy.ndarray, numpy.ndarray]:
     """Generic Time Activity Curve fitting function. Supports:
         - exp_order = 1 -> Mono-exponential
@@ -70,13 +71,7 @@ def fit_tac(
 
     if abs(exp_order) < 1 or abs(exp_order) > 3:
         raise ValueError("Not supported. Please use order 1, 2 or 3.")
-
-    # Add (0,0) ?
-    if through_origin:
-        time = numpy.append(0, time)
-        activity = numpy.append(0, activity)
-        weights = numpy.append(1, weights) if weights is not None else weights
-
+    
     # Get function
     exp_function, initial_params, bounds = get_exponential(order=exp_order, 
                                                            param_init=param_init, 
