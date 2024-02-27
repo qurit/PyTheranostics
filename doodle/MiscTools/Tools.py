@@ -1,6 +1,7 @@
 from datetime import datetime
 
-def calculate_time_difference(date_str1: str, date_str2: str) -> float:
+def calculate_time_difference(date_str1: str, date_str2: str, 
+                              date_format: str = "%Y%m%d %H%M%S") -> float:
     """
     Calculate the time difference in hours between two dates.
     
@@ -9,14 +10,12 @@ def calculate_time_difference(date_str1: str, date_str2: str) -> float:
     Parameters:
         date_str1 (str): The first date as a string in "YYYYMMDD HHMMSS" format.
         date_str2 (str): The second date as a string in "YYYYMMDD HHMMSS" format.
+        date_format (str): The date format of input date_str
         
     Returns:
         float: The difference between the dates in hours.
     """
-    
-    # Define the date format
-    date_format = "%Y%m%d %H%M%S"
-    
+        
     # Clean up:
     date_str1 = date_str1.split(".")[0]
     date_str2 = date_str2.split(".")[0]

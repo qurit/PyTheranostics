@@ -116,7 +116,8 @@ def load_from_dicom_dir(
     return image, meta
 
 def load_and_resample_RT(
-    dir: str,
+    ref_dicom_dir: str,
+    rt_struct_dir: str,
     target_shape: Tuple[int, int, int]
     ) -> Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]:
     """Load and resample RT data from DICOM files in the specified folder."""
@@ -132,7 +133,8 @@ def load_and_resample_RT(
     def resample_mask(mask: numpy.ndarray, shape: Tuple[int, int, int]) -> numpy.ndarray:
         return img_as_bool(resize(mask, shape))
 
-    CT_folder = Path(dir)
+    CT_folder = Path(ref_dicom_dir)
+    RT_folder = Path(rt_struct_dir)
 
     if not CT_folder.exists():
         raise FileNotFoundError(f"Folder {CT_folder.name} does not exists.")
@@ -141,8 +143,7 @@ def load_and_resample_RT(
     # we build a 'database')
     RT = RTStructBuilder.create_from(
         dicom_series_path=glob.glob(str(CT_folder))[0],
-        #rt_struct_path=glob.glob(str(CT_folder/"rt-struct.dcm"))[0]
-        rt_struct_path=glob.glob(str(CT_folder/"RTstruct/*.dcm"))[0]
+        rt_struct_path=glob.glob(str(RT_folder) + "/*.dcm")[0]
     )
     roi_masks = {}
     roi_names = RT.get_roi_names()
