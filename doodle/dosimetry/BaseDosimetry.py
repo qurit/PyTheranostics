@@ -51,6 +51,8 @@ class BaseDosimetry:
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
+        if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
+            raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
 
         # Veryfy radionuclide information is present in nm_data.
         self.radionuclide = self.check_nm_data()
@@ -100,7 +102,23 @@ class BaseDosimetry:
                    for time_id in time_ids]
                    )
 
-        return pandas.DataFrame.from_dict(tmp_results, orient="index", columns=cols)
+        return pandas.DataFrame.from_dict(
+            self.initialize_bone_marrow(tmp_results), 
+            orient="index", 
+            columns=cols
+            )
+
+    def initialize_bone_marrow(self, temp_results: Dict[str, List[float]]) -> Dict[str, List[float]]:
+        """Initialize activity and times for Bone-Marrow blood-based measurements"""
+        
+        if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None:
+            temp_results["BoneMarrow"] = [
+                self.clinical_data["Time_hr"].to_list(),
+                self.clinical_data["Volume_mL"].to_list(),
+                self.clinical_data["Activity_Bq"].to_list()
+            ]
+        
+        return temp_results
 
     def check_nm_data(self) -> Dict[str, Any]:
         """Verify that radionuclide info is present in NM data, and that radionuclide data (e.g., half-life) 
@@ -133,8 +151,6 @@ class BaseDosimetry:
             2.b For Bone-Marrow, if blood-counting, utilize external function.
             2.c For Bone-Marrow, if image-based, utilize atlas method.
             
-            3. Integrate each TAC and determine TIAC/MBq (or residence time) for each organ of interest
-               and update DataFrame.
             """
         decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h
 
@@ -201,3 +217,4 @@ class BaseDosimetry:
         self.nm_data.meta[time_id]["Time"] = calculate_time_difference(date_str1=acq_time, date_str2=inj_time)
 
         return None
+    
