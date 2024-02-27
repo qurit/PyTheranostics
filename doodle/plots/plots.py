@@ -91,20 +91,21 @@ def plot_tac(
     axes[0].set_xlabel(xlabel)
     axes[0].set_ylabel(ylabel)
     axes[0].text(0.6, 0.85, f'$R^2={parameters[-1]:.4f}$', transform=axes[0].transAxes)
-
+    axes[0].set_xlim(0, axes[0].get_xlim()[1])  
+    axes[0].set_ylim(0, axes[0].get_ylim()[1]) 
+    
     axes[1].semilogy(time[skip_points:], activity[skip_points:], 'o', color='#1f77b4', markeredgecolor='black')
     axes[1].set_xlabel(xlabel)
     axes[1].set_ylabel(ylabel)
     axes[1].set_title(f'{label}')
+    axes[1].set_xlim(0, axes[1].get_xlim()[1])  
+    axes[1].set_ylim(0, axes[1].get_ylim()[1]) 
 
     axes[2].plot(time[skip_points:], residuals, 'o', color='#1f77b4', markeredgecolor='black')
     axes[2].set_title('Residuals')
     axes[2].set_xlabel(xlabel)
     axes[2].set_ylabel(ylabel)
     
-    for ax in axes:
-        ax.set_xlim(0, ax.get_xlim()[1])  # Set xlim with 0 as the initial point
-        ax.set_ylim(0, ax.get_ylim()[1])  # Set ylim with 0 as the initial point
 
     plt.tight_layout()
 
