@@ -44,7 +44,8 @@ def plot_tac(
         ylabel:str = 'A (MBq)',
         skip_points=0,
         sigmas=None,
-        **kwargs) -> Tuple[np.ndarray, np.ndarray]:
+        **kwargs) -> None:
+    
     """Generic Time Activity Curve plotting function. Supports:
         - exp_order = 1 -> Mono-exponential
         - exp_order = 2 -> Bi-exponential
@@ -100,6 +101,10 @@ def plot_tac(
     axes[2].set_title('Residuals')
     axes[2].set_xlabel(xlabel)
     axes[2].set_ylabel(ylabel)
+    
+    for ax in axes:
+        ax.set_xlim(0, ax.get_xlim()[1])  # Set xlim with 0 as the initial point
+        ax.set_ylim(0, ax.get_ylim()[1])  # Set ylim with 0 as the initial point
 
     plt.tight_layout()
 
