@@ -32,13 +32,15 @@ class LongitudinalStudy:
             numpy.squeeze(SimpleITK.GetArrayFromImage(self.images[time_id])), axes=(1, 2, 0)
             )
 
-    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray]) -> None:
+    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], strict: bool = True) -> None:
         """Add a Dictionary of masks for a given time point."""
         if time_id in self.masks:
             print(f"Warning: Masks for Time ID = {time_id} already exist. Overwriting them...")
 
         self.masks[time_id] = masks
-        #self.check_masks_consistency() # I commented it for now; since there were lesions segmented only in the last point for now
+
+        if strict:
+            self.check_masks_consistency()
 
         return None
     
