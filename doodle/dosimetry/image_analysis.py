@@ -96,18 +96,33 @@ class Image:
             organ_data = gt.createDVH(doseimage, itkVol)
             print(organ_data)
             
-    # equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
+    # monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
     # and 177Lu-DOTATATE: the role of associated risk factors"
-    def calculate_bed(self):
+    # biexp
+    def calculate_bed(self, 
+                      kinetic: str
+                      ) -> None:
+        
         bed_df = self.df[self.df['organ'].isin(list(self.radiobiology_dic.keys()))] # only organs that we know the radiobiology parameters
         organs = np.array(bed_df['organ'].unique())
         bed = {}
+        
+
         for organ in organs:
             t_repair = self.radiobiology_dic[organ]['t_repair']
             alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-            t_eff = (np.log(2) / bed_df.loc[bed_df['organ'] == organ]['lamda_eff_1/s'].values[0]) / 3600
-            abs_dose = bed_df.loc[bed_df['organ'] == organ]['mean_ad[Gy]'].values[0]
-            bed[organ] = abs_dose + 1/alpha_beta * t_repair/(t_repair + t_eff) * abs_dose**2
+            beta_alpha = 1 / alpha_beta
+            AD = bed_df.loc[bed_df['organ'] == organ]['mean_ad[Gy]'].values[0]
+            if kinetic == 'monoexp':
+                t_eff = (np.log(2) / bed_df.loc[bed_df['organ'] == organ]['lamda_eff_1/s'].values[0]) / 3600
+                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+            elif kinetic == 'biexp':
+                t_washout = np.log(2) / 1.87576481e-02
+                t_uptake = np.log(2) / 1.46357750e-01
+                bed[organ] = AD (1 + (AD / (t_washout - t_uptake)) * beta_alpha * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
+            
             print(f'{organ}', bed[organ])
             
         self.df['bed[Gy]'] = self.df['organ'].map(bed)
