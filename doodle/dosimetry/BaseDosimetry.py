@@ -165,7 +165,6 @@ class BaseDosimetry:
         tmp_tiac_data = {"Fit_params": [], "TIAC_Bq_h": [], "TIAC_h": [], "Lambda_eff": []}
 
         for region, region_data in self.results.iterrows():
-            # TODO: QA of fit. (e.g., plots)
             fit_params, residuals = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
                 activity=numpy.array(region_data["Activity_Bq"]),
