@@ -98,8 +98,6 @@ def plot_tac(
     axes[1].set_xlabel(xlabel)
     axes[1].set_ylabel(ylabel)
     axes[1].set_title(f'{label}')
-    axes[1].set_xlim(0, axes[1].get_xlim()[1])  
-    axes[1].set_ylim(0, axes[1].get_ylim()[1]) 
 
     axes[2].plot(time[skip_points:], residuals, 'o', color='#1f77b4', markeredgecolor='black')
     axes[2].set_title('Residuals')
