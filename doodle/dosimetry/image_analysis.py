@@ -11,17 +11,7 @@ this_dir=Path(__file__).resolve().parent.parent
 RADIOBIOLOGY_DATA_FILE = Path(this_dir,"data","radiobiology.json") #important to remember that in dictionary, alpha_beta is in Gy, and t_repair in h
 
 
-class Image:
-#    def __init__(self, df, patient_id, cycle, image, roi_masks_resampled, organlist):
-#        self.df = df
-#        self.patient_id = patient_id
-#        self.cycle = int(cycle)
-#        self.image = image 
-#        self.roi_masks_resampled = roi_masks_resampled
-#        self.organlist = organlist
-#        with open(RADIOBIOLOGY_DATA_FILE) as f:
-#            self.radiobiology_dic = json.load(f)
-    
+class Image:    
     def __init__(self, df, patient_id, cycle, image, roi_masks_resampled):
         self.df = df
         self.patient_id = patient_id
