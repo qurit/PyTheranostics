@@ -218,3 +218,6 @@ class BaseDosimetry:
 
         return None
     
+    def compute_dose(self) -> None:
+        pass
+    
