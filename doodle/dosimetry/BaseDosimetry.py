@@ -12,6 +12,8 @@ from doodle.plots.plots import plot_tac
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
+from doodle.dosimetry.BoneMarrow import bm_scaling_factor
+
 
 class BaseDosimetry:
     """Base Dosimetry Class. Takes Nuclear Medicine Data and CT Data to perform Organ-level 
@@ -112,10 +114,18 @@ class BaseDosimetry:
         """Initialize activity and times for Bone-Marrow blood-based measurements"""
         
         if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None:
+            
+            # Computing blood-based method -> Scale activity concentration in blood 
+            # to activity in Bone-Marrow, using ICRP phantom mass and haematocrit.
+            scaling_factor = bm_scaling_factor(
+                gender=self.config["Gender"], 
+                hematocrit=self.clinical_data["Haematocrit"].unique()[0]
+                )
+
             temp_results["BoneMarrow"] = [
                 self.clinical_data["Time_hr"].to_list(),
                 self.clinical_data["Volume_mL"].to_list(),
-                self.clinical_data["Activity_Bq"].to_list()
+                [act * scaling_factor for act in self.clinical_data["Activity_Bq"].to_list()]
             ]
         
         return temp_results
@@ -126,7 +136,6 @@ class BaseDosimetry:
 
         # Load Radionuclide data
         with open("../data/isotopes.json", "r") as rad_data:
-        #with open("/home/skurkowska/doodle/doodle/data/isotopes.json", "r") as rad_data:
             radionuclide_data = json.load(rad_data)
 
         if "Radionuclide" not in self.nm_data.meta[0]:
@@ -148,7 +157,6 @@ class BaseDosimetry:
         """Computes Time-Integrated Activity over each source-organ.
         Steps: 
 
-            2.b For Bone-Marrow, if blood-counting, utilize external function.
             2.c For Bone-Marrow, if image-based, utilize atlas method.
             
             """
@@ -178,6 +186,8 @@ class BaseDosimetry:
             
             # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
             tmp_tiac_data["Fit_params"].append(fit_params)
+
+            # Calculate Integral
             tmp_tiac_data["TIAC_Bq_h"].append(
                 self.numerical_integrate(fit_params[:-1])
             )
