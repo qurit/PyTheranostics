@@ -5,10 +5,8 @@ import numpy as np
 import SimpleITK as sitk
 import argparse
 from pathlib import Path
-import json
 
-this_dir=Path(__file__).resolve().parent.parent
-RADIOBIOLOGY_DATA_FILE = Path(this_dir,"data","radiobiology.json") #important to remember that in dictionary, alpha_beta is in Gy, and t_repair in h
+
 
 
 class Image:    
@@ -19,8 +17,7 @@ class Image:
         self.image = image
         self.roi_masks_resampled = roi_masks_resampled
         self.organlist = self.roi_masks_resampled.keys()
-        with open(RADIOBIOLOGY_DATA_FILE) as f:
-            self.radiobiology_dic = json.load(f)
+
             
     def SPECT_image_array(self, SPECT, scalefactor, xspacing, yspacing, zspacing):
         SPECT_image = SPECT.pixel_array
@@ -96,35 +93,3 @@ class Image:
             organ_data = gt.createDVH(doseimage, itkVol)
             print(organ_data)
             
-    # monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
-    # and 177Lu-DOTATATE: the role of associated risk factors"
-    # biexp
-    def calculate_bed(self, 
-                      kinetic: str
-                      ) -> None:
-        
-        bed_df = self.df[self.df['organ'].isin(list(self.radiobiology_dic.keys()))] # only organs that we know the radiobiology parameters
-        organs = np.array(bed_df['organ'].unique())
-        bed = {}
-        
-
-        for organ in organs:
-            t_repair = self.radiobiology_dic[organ]['t_repair']
-            alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-            beta_alpha = 1 / alpha_beta
-            AD = bed_df.loc[bed_df['organ'] == organ]['mean_ad[Gy]'].values[0]
-            if kinetic == 'monoexp':
-                t_eff = (np.log(2) / bed_df.loc[bed_df['organ'] == organ]['lamda_eff_1/s'].values[0]) / 3600
-                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
-            elif kinetic == 'biexp':
-                t_washout = np.log(2) / 1.87576481e-02
-                t_uptake = np.log(2) / 1.46357750e-01
-                bed[organ] = AD (1 + (AD / (t_washout - t_uptake)) * beta_alpha * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
-                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
-                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
-            
-            print(f'{organ}', bed[organ])
-            
-        self.df['bed[Gy]'] = self.df['organ'].map(bed)
-
-
