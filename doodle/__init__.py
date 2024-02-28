@@ -30,7 +30,7 @@ from doodle.shared.corrections import (
 
 from doodle.plots.plots import (
     ewin_montage,
-    monoexp_fit_plots
+    plot_tac
 )
 
 from doodle.segmentation.tools import (
@@ -41,9 +41,8 @@ from doodle.segmentation.tools import (
 from doodle.fits.fits import (
     monoexp_fun,
     biexp_fun,
-    fit_monoexp,
-    fit_biexp,
-    fit_biexp_uptake
+    triexp_fun
+
 )
 
 from doodle.dicomtools.dicomtools import (

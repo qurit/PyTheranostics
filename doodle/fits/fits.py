@@ -1,209 +1,98 @@
-import numpy as np
-from numpy import exp,log
-import pandas as pd
+from typing import Any, Callable, Optional, Tuple
 
-import matplotlib.pylab as plt
-
-from scipy import integrate
+import numpy
+from doodle.fits.functions import biexp_fun, monoexp_fun, triexp_fun, biexp_fun_uptake
 from scipy.optimize import curve_fit
 
 
-def monoexp_fun(x, a, b):
-    return a * exp(-b * x)
+def calculate_r_squared(
+        time: numpy.ndarray,
+        activity: numpy.ndarray,
+        popt: numpy.ndarray,
+        func: Callable
+    ) -> Tuple[float, numpy.ndarray]:
+    """ Calculate r_squared and residuals between fit and data-points.
+    """
 
-def biexp_fun(x, a, b, c, d):
-    return a * exp(-b * x) + c * exp(-d * x)
+    residuals = activity - func(time, *popt)
 
-def triexp_fun(x, a, b, c, d, e, f):
-    return a * exp(-b * x) + c * exp(-d * x) + e * exp(-f * x)
-
-def find_a_initial(f, b, t):
-    return f * exp(b * t)
-
-def get_residuals(t,a,skip_points,popt,eq='monoexp'):
-
-    if eq == 'monoexp':
-        residuals = a[skip_points:] - monoexp_fun(t[skip_points:],popt[0],popt[1])
-    elif eq == 'biexp':
-        residuals = a[skip_points:] - biexp_fun(t[skip_points:],popt[0],popt[1],popt[2],popt[3])
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((a[skip_points:]-np.mean(a[skip_points:]))**2)
+    ss_res = numpy.sum(residuals**2)
+    ss_tot = numpy.sum((activity - numpy.mean(activity))**2)
     r_squared = 1 - (ss_res / ss_tot)
 
     return r_squared, residuals
 
-def Hanscheid(a, t):
-    return a * ((2 * t) / (log(2)))
+def get_exponential(
+        order: int, 
+        param_init: Optional[Tuple[float, ...]], 
+        decayconst: float) -> Tuple[Callable, Tuple[float, ...], Optional[Tuple[Any, ...]]]:
+    """Retrieve an exponential function given an input order 'order', initial parameters and a decay-constant
+    value (for defatult constrains)"""
 
+    # Default initial parameters:
+    default_initial = {1: (1, 1),
+                       2: (1, 1, 1, 0.1),
+                       -2: (1, 1, -1, 1),  
+                       3: (1, 1, 1, 1, 1, 1)
+                       }
+    # Bounds: It can't decay slower than physical decay!
+    bounds = {1: ([0, decayconst], numpy.inf), 
+              2: ([0, decayconst, 0, decayconst], numpy.inf),
+              -2: ([0, decayconst, decayconst], [numpy.inf, numpy.inf, numpy.inf]),
+              3: (-numpy.inf, numpy.inf)}
 
-
-def fit_monoexp(t,a,decayconst,skip_points=0,ignore_weights=True,monoguess=(1,1),maxev=100000,limit_bounds=False, sigmas = None):
-
-    if ignore_weights:
-        weights = None
+    if order == 1:
+        func = monoexp_fun
+    elif order == 2:
+        func = biexp_fun
+    elif order == -2:
+        func = biexp_fun_uptake
+    elif order == 3:
+        func = triexp_fun
     else:
-        weights = sigmas
+        NotImplementedError("Function not implemented.")
 
-    #monoexponential fit
-    # bounds show that the minimum decay is with physical decay, can't decay slower. (decayconst to inf)
+    return func, default_initial[order] if param_init is None else param_init, bounds[order]
+
+def fit_tac(
+        time: numpy.ndarray, 
+        activity: numpy.ndarray, 
+        decayconst: float = 1000000,
+        exp_order: int = 1,
+        weights: Optional[numpy.ndarray] = None,
+        param_init: Optional[Tuple[float, ...]] = None,
+        maxev: int = 100000
+                ) -> Tuple[numpy.ndarray, numpy.ndarray]:
+    """Generic Time Activity Curve fitting function. Supports:
+        - exp_order = 1 -> Mono-exponential
+        - exp_order = 2 -> Bi-exponential
+        - exp_order = -2 -> Bi-exponential with uptake constrain.
+        - exp_order = 3 -> Tri-exponential"""
+
+    if abs(exp_order) < 1 or abs(exp_order) > 3:
+        raise ValueError("Not supported. Please use order 1, 2 or 3.")
     
-    if limit_bounds:
-        upper_bound = decayconst
-    else:
-        upper_bound = decayconst #* 1e6 ## to check! it works with preclinical dosimetry; is it the same in humn cases?
-    
-     
-    if weights:    
-        popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
-                                p0=monoguess,bounds=([0,upper_bound],np.inf),maxfev=maxev)
-    else:
-        popt, pconv = curve_fit(monoexp_fun,t[skip_points:],a[skip_points:],sigma=weights,
-                                p0=monoguess,bounds=([0,upper_bound],np.inf), maxfev=maxev)
+    # Get function
+    exp_function, initial_params, bounds = get_exponential(order=exp_order, 
+                                                           param_init=param_init, 
+                                                           decayconst=decayconst)
 
+    # Checks
+    if time.shape != activity.shape:
+        raise AssertionError("Time and Activity arrays have different shapes.")
 
-    [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='monoexp')
+    if weights is not None and weights and weights.shape != time.shape:
+        raise AssertionError("Time and Weights arrays have different shapes.")
 
-    popt = np.append(popt,r_squared)
+    if time.shape[0] < 2 * abs(exp_order):
+        raise AssertionError(f"Only {time.shape[0]} data points available. Not enough points to perform fit.")
 
-    # create times for displaying the function
-    tt = np.linspace(0,t.max()*2.5,1000)
-    yy = monoexp_fun(tt,*popt[:2])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
+    popt, _ = curve_fit(exp_function, time, activity, sigma=weights,
+                        p0=initial_params,
+                        bounds=bounds, maxfev=maxev)
 
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
+    r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=exp_function)
 
-    return popt,tt,yy,residuals
+    popt = numpy.append(popt, r_squared)
 
-
-def fit_biexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,biguess=(1,1,1,0.1),maxev=100000, sigmas = None):
-
-  
-    if ignore_weights:
-        weights = None
-    else:
-        weights = sigmas
-        #weights = np.append(1,weights)
-
-    if any(weight is not None for weight in weights): 
-        popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
-                                    p0=biguess,bounds=([0,decayconst,0,decayconst],np.inf),maxfev=maxev)
-    else:
-        popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],
-                                    p0=biguess,bounds=([0,decayconst,0,decayconst],np.inf),maxfev=maxev)
-    
-
-    [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='biexp')
-
-    popt = np.append(popt,r_squared)
-
-    # create times for displaying the function
-    tt = np.linspace(0,t.max()*2.5,1000)
-    yy = biexp_fun(tt,*popt[:4])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
-
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
-
-    return popt,tt,yy,residuals
-
-
-
-def fit_biexp_uptake(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,uptakeguess=(1,1,-1,1),maxev=100000, sigmas = None):
-
-     # Append point (0,0) if flag set to true.
-    if append_zero:
-        t = np.append(0,t)
-        a = np.append(0,a)
-        if ignore_weights:
-            weights = None
-        else:
-            weights = sigmas
-            weights = np.append(1,weights)
-
-
-    if any(weight is not None for weight in weights): 
-        popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],sigma=weights[skip_points:],
-                                    p0=uptakeguess,bounds=([0,decayconst,-np.inf,decayconst],[np.inf,np.inf,0,np.inf]),maxfev=maxev)
-    else:
-        popt, pconv = curve_fit(biexp_fun,t[skip_points:],a[skip_points:],
-                                    p0=biguess,bounds=([0,decayconst,0,decayconst],np.inf),maxfev=maxev)
-        
-
-
-    [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='biexp')
-
-    popt = np.append(popt,r_squared)
-
-    # create times for displaying the function
-    tt = np.linspace(0,t.max()*2.5,1000)
-    yy = biexp_fun(tt,*popt[:4])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
-
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
-
-    return popt,tt,yy,residuals
-
-def fit_triexp(t,a,decayconst,skip_points=0,ignore_weights=True,append_zero=True,uptakeguess=(1,1,1,1,1,1),maxev=100000):
-
-     # Append point (0,0) if flag set to true.
-    if append_zero:
-        t = np.append(0,t)
-        a = np.append(0,a)
-        if ignore_weights:
-            weights = None
-        else:
-            weights = sigmas
-            weights = np.append(1,weights)
-
-
-    popt, pconv = curve_fit(triexp_fun,t,a,sigma=weights,
-                            p0=uptakeguess,bounds=None,maxfev=maxev)
-    
-
-    [r_squared, residuals] = get_residuals(t,a,skip_points,popt,eq='triexp')
-
-    popt = np.append(popt,r_squared)
-
-    # create times for displaying the function
-    tt = np.linspace(0,t.max()*2.5,1000)
-    yy = biexp_fun(tt,*popt[:6])
-    # yy = monoexp_fun(tt[tt>=t[skip_points]],*popt[:2])
-
-    # popt_df = pd.DataFrame(popt).T
-    # popt_df.columns = ['A0','lambda_eff','R2']
-
-    return popt,tt,yy,residuals
-
-def find_a0(f, b, t):
-    return f * np.exp(b * t)
-
-def fit_trapezoid(t,a,decayconst,skip_points=0,ignore_weights=True,limit_bounds=False, sigmas = None):
-    lambda_lu = np.log(2)/(decayconst) 
-    ts_trap = np.insert(t, 0, 0.)
-    activity_trap = np.insert(a, 0, 0.)
-    print(lambda_lu)
-    print(t[-1])
-    a0 = find_a0(a[-1], lambda_lu, t[-1])
-
-    print(ts_trap, activity_trap)
-    print(a0)
-    print(integrate.trapezoid(activity_trap, ts_trap))
-    print(integrate.quad(fit_monoexp, t[-1], np.inf, args=(a0, lambda_lu)))
-    auc = integrate.trapezoid(activity_trap, ts_trap) + integrate.quad(fit_monoexp, t[-1], np.inf, args=(a0, lambda_lu))
-    acts3 = fit_monoexp(ts2, a0, lambda_lu)
-    ts3 = np.arange(t, 300, 0.1)
-
-
-    ax.plot(ts3, acts3, c = 'orange', zorder=0, linewidth=0.9)
-    ax.plot(ts_trap, activity_trap, linestyle='-', color='cornflowerblue', zorder=0, linewidth=0.9)
-    ax.scatter(t, a, c='black', zorder=1)
-    ax.set_xlabel('Time (h)')
-    ax.set_ylabel('Activity (MBq)')
-    ax.set_title('Trapezoid', color = 'cornflowerblue', fontsize = 10)
-    ax.legend()
-    plt.xlim([0, 300])
-    plt.ylim([0, 120])
-
-    return auc
+    return popt, residuals

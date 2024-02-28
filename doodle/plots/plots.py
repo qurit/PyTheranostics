@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
+from typing import Tuple
 
 def ewin_montage(img,ewin):
     '''
@@ -31,91 +33,83 @@ def ewin_montage(img,ewin):
 
 
 
+def plot_tac(
+        time: np.ndarray, 
+        activity: np.ndarray, 
+        exp_order: int,
+        parameters: np.ndarray, 
+        residuals: np.ndarray, 
+        organ: str, 
+        xlabel: str = 't (days)', 
+        ylabel:str = 'A (MBq)',
+        skip_points=0,
+        sigmas=None,
+        **kwargs) -> None:
+    
+    """Generic Time Activity Curve plotting function. Supports:
+        - exp_order = 1 -> Mono-exponential
+        - exp_order = 2 -> Bi-exponential
+        - exp_order = -2 -> Bi-exponential with uptake constrain.
+        - exp_order = 3 -> Tri-exponential"""
+        
+    if abs(exp_order) < 1 or abs(exp_order) > 3:
+        raise ValueError("Not supported. Please use order 1, 2 or 3.")
+      
+    if exp_order == 1:
+        fit_function = monoexp_fun
+        parameters = np.array([parameters[0] / 10**6, parameters[1] * 24, parameters[2]])
+        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}}$'
+    elif exp_order == 2:
+        fit_function = biexp_fun
+        parameters = np.array([parameters[0] / 10**6, parameters[1] * 24, parameters[2] / 10**6, parameters[3] * 24, parameters[4]])
+        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 1)} e^{{-{round(parameters[3], 2)} t}}$'
+    elif exp_order == -2:
+        fit_function = biexp_fun_uptake
+        parameters = np.array([parameters[0] / 10**6, parameters[1] * 24, parameters[2] * 24, parameters[3]])
+        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(parameters[2], 2)} t}}$'
+    elif exp_order == 3:
+        print('To be implemented')
 
+    tt = np.linspace(0, time.max() * 2.5, 1000)
+    yy = fit_function(tt, *parameters[:-1])
+    
+    fig, axes = plt.subplots(1, 3, figsize=(10, 4))
 
-def monoexp_fit_plots(t,a,tt,yy,organ, r_squared, residuals, xlabel = 't (days)', ylabel = 'A (MBq)',skip_points=0,sigmas=None,**kwargs):
-    fig, axes = plt.subplots(1, 3, figsize=(10,4))
     if sigmas is not None and any(sigma is not None for sigma in sigmas):
-        axes[0].errorbar(t,a,yerr=sigmas,fmt='o', color='#1f77b4',markeredgecolor='black')
-        # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
+        axes[0].errorbar(time, activity, yerr=sigmas, fmt='o', color='#1f77b4', markeredgecolor='black')
     else:
-        axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
+        axes[0].plot(time, activity, 'o', color='#1f77b4', markeredgecolor='black')
 
     if skip_points:
-        axes[0].plot(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
-        axes[1].semilogy(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
+        axes[0].plot(tt[tt >= time[skip_points]], yy[tt >= time[skip_points]])
+        axes[1].semilogy(tt[tt >= time[skip_points]], yy[tt >= time[skip_points]])
     else:
-        axes[0].plot(tt,yy)
-        axes[1].semilogy(tt,yy)
+        axes[0].plot(tt, yy)
+        axes[1].semilogy(tt, yy)
 
-    axes[0].set_title('{} Mono-Exponential'.format(organ))
+    axes[0].set_title(f'{organ}')
     axes[0].set_xlabel(xlabel)
     axes[0].set_ylabel(ylabel)
-    axes[0].text(0.6,0.85,'$R^2={:.4f}$'.format(r_squared),transform=axes[0].transAxes)
-
-    axes[1].semilogy(t[skip_points:],a[skip_points:],'o',color='#1f77b4',markeredgecolor='black')
+    axes[0].text(0.6, 0.85, f'$R^2={parameters[-1]:.4f}$', transform=axes[0].transAxes)
+    axes[0].set_xlim(0, axes[0].get_xlim()[1])  
+    axes[0].set_ylim(0, axes[0].get_ylim()[1]) 
+    
+    axes[1].semilogy(time[skip_points:], activity[skip_points:], 'o', color='#1f77b4', markeredgecolor='black')
     axes[1].set_xlabel(xlabel)
     axes[1].set_ylabel(ylabel)
-    axes[1].set_title('{} Mono-Exponential'.format(organ))
+    axes[1].set_title(f'{label}')
+    axes[1].set_xlim(0, axes[1].get_xlim()[1])  
+    axes[1].set_ylim(0, axes[1].get_ylim()[1]) 
 
-    axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
+    axes[2].plot(time[skip_points:], residuals, 'o', color='#1f77b4', markeredgecolor='black')
     axes[2].set_title('Residuals')
     axes[2].set_xlabel(xlabel)
     axes[2].set_ylabel(ylabel)
-
-    plt.tight_layout()
-
-    if 'save_path' in kwargs:
-        plt.savefig(f"{kwargs['save_path']}/{organ}_monoexp_fit.png",dpi=300)
-
-
-
-def biexp_fit_plots(t,a,tt,yy,organ, r_squared,residuals, xlabel = 't (days)', ylabel = 'A (MBq)', skip_points=0,sigmas=None,**kwargs):
-    fig, axes = plt.subplots(1, 3, figsize=(10,4))
-
-    if sigmas is not None and any(sigma is not None for sigma in sigmas):
-        axes[0].errorbar(t,a,yerr=sigmas,fmt='o',color='#1f77b4',markeredgecolor='black')
-        # axes[1,0].errorbar(t,a,yerr=sigmas,fmt='o')
-    else:
-        axes[0].plot(t,a,'o',color='#1f77b4',markeredgecolor='black')
-
-    if skip_points:
-        axes[0].plot(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
-        axes[1].semilogy(tt[tt>=t[skip_points]],yy[tt >= t[skip_points]])
-    else:
-        axes[0].plot(tt,yy)
-        axes[1].semilogy(tt,yy)
-
-    axes[0].set_title('{} Bi-Exponential'.format(organ))
-    axes[0].set_xlabel(xlabel)
-    axes[0].set_ylabel(ylabel)
-    axes[0].text(0.6,0.85,'$R^2={:.4f}$'.format(r_squared),transform=axes[0].transAxes)
     
 
-
-    axes[1].semilogy(t[skip_points:],a[skip_points:],'o',color='#1f77b4',markeredgecolor='black')
-    axes[1].set_xlabel(xlabel)
-    axes[1].set_ylabel(ylabel)
-    axes[1].set_title('{} Bi-Exponential'.format(organ))
-
-    try:
-        axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
-    except:
-        t = np.append(0,t)
-        axes[2].plot(t[skip_points:],residuals,'o', color='#1f77b4',markeredgecolor='black')
-    axes[2].set_title('Residuals')
-    axes[2].set_xlabel(xlabel)
-    axes[2].set_ylabel(ylabel)
-
-
-    axes[0].set_xlim(left=0)
-    axes[0].set_ylim(bottom=0)
-
-    axes[1].set_xlim(left=0)
-
-
-
     plt.tight_layout()
 
     if 'save_path' in kwargs:
-        plt.savefig(f"{kwargs['save_path']}/{organ}_biexpuptake_fit.png",dpi=300)
+        plt.savefig(f"{kwargs['save_path']}/{organ}_{fit_function.__name__}_fit.png", dpi=300)
+
+    return None

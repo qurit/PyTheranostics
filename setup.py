@@ -16,9 +16,10 @@ setup(name='DOODLE',
         'doodle.plots',
         'doodle.qc',
         'doodle.segmentation',
+        'doodle.registration',
         'doodle.shared'],
       include_package_data=True,
       install_requires = [
-          'numpy','matplotlib','pandas==1.5.3','pydicom','openpyxl','rt_utils','scikit-image'
+          'numpy','matplotlib','pandas==1.5.3','pydicom','openpyxl','rt_utils','scikit-image', 'simpleitk'
       ],
       zip_safe=False)

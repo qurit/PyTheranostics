@@ -129,6 +129,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Sara's notebooks
-doodle/local
 
+# Other
+Notebooks
+xcatPhantom
+doodle/local
+doodle/.vscode
