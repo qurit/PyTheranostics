@@ -1,11 +1,12 @@
 import json
 import math
+import abc
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from os import path
 
 import numpy
 import pandas
-
 from doodle.fits.fits import fit_tac
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
 from doodle.plots.plots import plot_tac
@@ -13,7 +14,7 @@ from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
 
-class BaseDosimetry:
+class BaseDosimetry(metaclass = abc.ABCMeta):
     """Base Dosimetry Class. Takes Nuclear Medicine Data and CT Data to perform Organ-level 
     patient-specific dosimetry by computing organ time-integrated activity curves and
     leveraging organ level S-values"""
@@ -125,8 +126,8 @@ class BaseDosimetry:
         is available in internal database."""
 
         # Load Radionuclide data
-        with open("../data/isotopes.json", "r") as rad_data:
-        #with open("/home/skurkowska/doodle/doodle/data/isotopes.json", "r") as rad_data:
+        rad_data_path = path.dirname(__file__) + "/../data/isotopes.json"
+        with open(rad_data_path, "r") as rad_data:
             radionuclide_data = json.load(rad_data)
 
         if "Radionuclide" not in self.nm_data.meta[0]:
@@ -218,6 +219,45 @@ class BaseDosimetry:
 
         return None
     
+    @abc.abstractmethod
     def compute_dose(self) -> None:
-        pass
+        """The abstract method to compute Dose to Organs and voxels. Must be implemented in all daughter dosimetry
+        classes inheriting from BaseDosimetry. Should run `compute_tiac()` first."""
+        self.compute_tiac()
+        return None
     
+         # monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
+    # and 177Lu-DOTATATE: the role of associated risk factors"
+    # biexp   
+    
+    def calculate_bed(self,
+                      kinetic: str
+                      ) -> None:
+        this_dir=Path(__file__).resolve().parent.parent
+        RADIOBIOLOGY_DATA_FILE = Path(this_dir,"data","radiobiology.json")
+        with open(RADIOBIOLOGY_DATA_FILE) as f:
+            self.radiobiology_dic = json.load(f)
+        bed_df = self.df_ad[self.df_ad.index.isin(list(self.radiobiology_dic.keys()))] # only organs that we know the radiobiology parameters
+        organs = numpy.array(bed_df.index.unique())
+        bed = {}
+        
+
+        for organ in organs:
+            t_repair = self.radiobiology_dic[organ]['t_repair']
+            alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
+            AD = float(bed_df.loc[bed_df.index == organ]['Total'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+            if kinetic == 'monoexp':
+                t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
+                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+            elif kinetic == 'biexp':
+                mean_lambda_washout = (self.results.loc['Kidney_L_m']['Fit_params'][1] + self.results.loc['Kidney_R_m']['Fit_params'][1]) / 2
+                mean_lambda_uptake = (self.results.loc['Kidney_L_m']['Fit_params'][2] + self.results.loc['Kidney_R_m']['Fit_params'][2]) / 2
+                t_washout = numpy.log(2) /  mean_lambda_washout
+                t_uptake = numpy.log(2) /  mean_lambda_uptake
+                bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
+            
+            print(f'{organ}', bed[organ])
+            
+        self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
