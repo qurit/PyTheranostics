@@ -6,5 +6,9 @@
   "Kidney_R_a": {
     "alpha_beta": 2.6,
     "t_repair": 2.8
+  },
+  "Kidneys": {
+    "alpha_beta": 2.6,
+    "t_repair": 2.8
   }
 }
