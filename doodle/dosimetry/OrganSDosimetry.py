@@ -47,7 +47,10 @@ class OrganSDosimetry(BaseDosimetry):
 
         self.results_olinda = self.results_olinda.rename(index={'Bladder_Experimental': 'Urinary Bladder Contents', 
                                                   'Skeleton': 'Cortical Bone', 
-                                                  'WBCT': 'Total Body'}) # TODO Cortical Bone vs Trabercular Bone
+                                                  'WBCT': 'Total Body',
+                                                  'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
+        
+        self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
             
     def create_Olinda_file(self, dirname, savefile=False):
         this_dir=path.dirname(__file__)
@@ -65,10 +68,12 @@ class OrganSDosimetry(BaseDosimetry):
             temporg = org
             ind=template[template['Data'].str.contains(temporg)].index
             sourceorgan=template.iloc[ind[0]].str.split('|')[0][0]
+            print(sourceorgan)
             massorgan=template.iloc[ind[0]].str.split('|')[0][1]
             kineticdata=self.results_olinda.loc[org]['TIAC_h']
             massdata=round(self.results_olinda.loc[org]['Volume_CT_mL'], 1)
-            template.iloc[ind[0]]=sourceorgan+'|'+str(massorgan)+'|'+'{:7f}'.format(kineticdata)         
+            template.iloc[ind[0]]=sourceorgan+'|'+str(massorgan)+'|'+'{:7f}'.format(kineticdata)  
+            print(len(ind))       
             if len(ind) == 2:
                 template.iloc[ind[1]]=sourceorgan+'|'+'{:7f}'.format(kineticdata)            
             elif len(ind) == 3:
