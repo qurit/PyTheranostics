@@ -32,7 +32,7 @@ def get_exponential(
     # Default initial parameters:
     default_initial = {1: (1, 1),
                        2: (1, 1, 1, 0.1),
-                       -2: (1, 1, -1, 1),  
+                       -2: (1, 1, 1),  
                        3: (1, 1, 1, 1, 1, 1)
                        }
     # Bounds: It can't decay slower than physical decay!

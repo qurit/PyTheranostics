@@ -21,7 +21,8 @@ def load_s_values(gender: str, radionuclide: str) -> pandas.DataFrame:
 
 def load_phantom_mass(gender: str, organ: str) -> float:
     """Load the mass of organs in the standar ICRP Male/Female phantom"""
-    masses = pandas.read_csv("./phantomdata/human_phantom_massess.csv")
+    phantom_data_path = path.dirname(__file__) + "/phantomdata/human_phantom_masses.csv"
+    masses = pandas.read_csv(phantom_data_path)
 
     if organ not in masses["Organ"].to_list():
         raise ValueError(f"Organ {organ} not found in phantom data.")
