@@ -35,6 +35,7 @@ def get_exponential(
                        -2: (1, 1, 1),  
                        3: (1, 1, 1, 1, 1, 1)
                        }
+    
     # Bounds: It can't decay slower than physical decay!
     bounds = {1: ([0, decayconst], numpy.inf), 
               2: ([0, decayconst, 0, decayconst], numpy.inf),
@@ -61,6 +62,7 @@ def fit_tac(
         exp_order: int = 1,
         weights: Optional[numpy.ndarray] = None,
         param_init: Optional[Tuple[float, ...]] = None,
+        through_origin: bool = False,
         maxev: int = 100000
                 ) -> Tuple[numpy.ndarray, numpy.ndarray]:
     """Generic Time Activity Curve fitting function. Supports:
@@ -87,6 +89,7 @@ def fit_tac(
     if time.shape[0] < 2 * abs(exp_order):
         raise AssertionError(f"Only {time.shape[0]} data points available. Not enough points to perform fit.")
 
+        
     popt, _ = curve_fit(exp_function, time, activity, sigma=weights,
                         p0=initial_params,
                         bounds=bounds, maxfev=maxev)

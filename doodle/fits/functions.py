@@ -14,8 +14,8 @@ def biexp_fun(x: numpy.ndarray, a: float, b: float, c: float, d: float) -> numpy
 def biexp_fun_uptake(x: numpy.ndarray, a: float, b: float, c: float) -> numpy.ndarray:
     return a * exp(-b * x) - a * exp(-c * x)
 
-def triexp_fun(x: numpy.ndarray, a: float, b: float, c: float, d: float, e: float, f: float) -> numpy.ndarray:
-    return a * exp(-b * x) + c * exp(-d * x) + e * exp(-f * x)
+def triexp_fun(x: numpy.ndarray, a: float, b: float, c: float, d: float, f: float) -> numpy.ndarray:
+    return a * exp(-b * x) + c * exp(-d * x) - (a+c) * exp(-f * x)
 
 def find_a_initial(f: numpy.ndarray, b: numpy.ndarray, t: numpy.ndarray) -> numpy.ndarray:
     return f * exp(b * t)

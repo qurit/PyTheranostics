@@ -99,6 +99,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 continue
 
             # Time (relative to time of injection, in hours)
+            if self.config["rois"][roi_name]["through_origin"]:
+                tmp_results[roi_name].append(0)
+                
             tmp_results[roi_name].append(
                 [self.nm_data.meta[time_id]["Time"]
                   for time_id in time_ids]
@@ -111,6 +114,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 )
             
             # Activity, in MBq
+            if self.config["rois"][roi_name]["through_origin"]:
+                tmp_results[roi_name].append(0)
+                
             tmp_results[roi_name].append(
                 [self.nm_data.activity_in(region=roi_name, time_id=time_id) * self.toMBq
                    for time_id in time_ids]
@@ -127,6 +133,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None:
             
+            
+            
             # Computing blood-based method -> Scale activity concentration in blood 
             # to activity in Bone-Marrow, using ICRP phantom mass and haematocrit.
             scaling_factor = bm_scaling_factor(
@@ -135,9 +143,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 )
 
             temp_results["BoneMarrow"] = [
-                self.clinical_data["Time_hr"].to_list(),
-                self.clinical_data["Volume_mL"].to_list(),
-                [act * scaling_factor * self.toMBq for act in self.clinical_data["Activity_Bq"].to_list()]
+                 self.clinical_data["Time_hr"].to_list(),
+                 self.clinical_data["Volume_mL"].to_list(),
+                 [act * scaling_factor * self.toMBq for act in self.clinical_data["Activity_Bq"].to_list()]
             ]
         
         return temp_results
@@ -185,7 +193,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 activity=numpy.array(region_data["Activity_MBq"]),
                 decayconst=decay_constant,
                 exp_order=self.config["rois"][region]["fit_order"],
-                param_init=self.config["rois"][region]["param_init"]
+                param_init=self.config["rois"][region]["param_init"],
+                through_origin=self.config["rois"][region]["through_origin"]
             )
             
             plot_tac(
@@ -223,9 +232,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             exp_func = monoexp_fun 
         elif len(exp_params) < 4:
             exp_func = biexp_fun_uptake      
-        elif len(exp_params) < 6:
+        elif len(exp_params) < 5:
             exp_func = biexp_fun
-        elif len(exp_params) == 6:
+        elif len(exp_params) < 7:
             exp_func = triexp_fun
         else:
             raise ValueError("Too many parameters to define a function. Only supported mono, bi or tri-exponentials")
