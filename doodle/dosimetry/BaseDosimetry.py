@@ -2,6 +2,7 @@ import json
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import abc
 
 import numpy
 import pandas
@@ -15,7 +16,7 @@ from doodle.MiscTools.Tools import calculate_time_difference
 from doodle.dosimetry.BoneMarrow import bm_scaling_factor
 
 
-class BaseDosimetry:
+class BaseDosimetry(metaclass=abc.ABCMeta):
     """Base Dosimetry Class. Takes Nuclear Medicine Data and CT Data to perform Organ-level 
     patient-specific dosimetry by computing organ time-integrated activity curves and
     leveraging organ level S-values"""
@@ -42,6 +43,7 @@ class BaseDosimetry:
         
         # Configuration
         self.config = config
+        self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
         # Store data
         self.patient_id = config["PatientID"] 
@@ -61,10 +63,19 @@ class BaseDosimetry:
 
         # DataFrame storing results
         self.results = self.initialize()
+
+        # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
+        self.dose_maps: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
         
     def check_mandatory_fields(self) -> None:
         if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
             raise ValueError(f"Incomplete Configuration file.")
+        
+        if "ReferenceTimePoint" not in self.config:
+            print("No Reference Time point was given. Assigning time ID = 0")
+            self.config["ReferenceTimePoint"] = 0
+        
+        return None
 
     def initialize(self) -> pandas.DataFrame:
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
@@ -73,7 +84,7 @@ class BaseDosimetry:
             roi_name: [] for roi_name in self.config["rois"] if roi_name != "BoneMarrow"
             }  # BoneMarrow is a special case.
         
-        cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_Bq"]
+        cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
         # Normalize Acquisition Times, relative to time of injection
@@ -98,9 +109,9 @@ class BaseDosimetry:
                   for time_id in time_ids]
                 )
             
-            # Activity, in Bq
+            # Activity, in MBq
             tmp_results[roi_name].append(
-                [self.nm_data.activity_in(region=roi_name, time_id=time_id) 
+                [self.nm_data.activity_in(region=roi_name, time_id=time_id) * self.toMBq
                    for time_id in time_ids]
                    )
 
@@ -125,7 +136,7 @@ class BaseDosimetry:
             temp_results["BoneMarrow"] = [
                 self.clinical_data["Time_hr"].to_list(),
                 self.clinical_data["Volume_mL"].to_list(),
-                [act * scaling_factor for act in self.clinical_data["Activity_Bq"].to_list()]
+                [act * scaling_factor * self.toMBq for act in self.clinical_data["Activity_Bq"].to_list()]
             ]
         
         return temp_results
@@ -161,33 +172,35 @@ class BaseDosimetry:
             
             """
         decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h
+        if self.radionuclide["half_life_units"] != "hours":
+            raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
-        tmp_tiac_data = {"Fit_params": [], "TIAC_Bq_h": [], "TIAC_h": [], "Lambda_eff": []}
+        tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
 
         for region, region_data in self.results.iterrows():
             fit_params, residuals = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
-                activity=numpy.array(region_data["Activity_Bq"]),
+                activity=numpy.array(region_data["Activity_MBq"]),
                 decayconst=decay_constant,
                 exp_order=self.config["rois"][region]["fit_order"],
                 param_init=self.config["rois"][region]["param_init"]
             )
             
             plot_tac(
-                time = numpy.array(region_data["Time_hr"]) / 24,
-                activity = numpy.array(region_data["Activity_Bq"]) / 10**6,
+                time = numpy.array(region_data["Time_hr"]),
+                activity = numpy.array(region_data["Activity_MBq"]),
                 exp_order = self.config["rois"][region]["fit_order"],
                 parameters = fit_params,
-                residuals = residuals / 10**6,
+                residuals = residuals,
                 organ = region, 
-                xlabel = 't (days)', 
+                xlabel = 't (hours)', 
                 ylabel = 'A (MBq)')
             
             # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
             tmp_tiac_data["Fit_params"].append(fit_params)
 
             # Calculate Integral
-            tmp_tiac_data["TIAC_Bq_h"].append(
+            tmp_tiac_data["TIAC_MBq_h"].append(
                 self.numerical_integrate(fit_params[:-1])
             )
 
@@ -195,7 +208,7 @@ class BaseDosimetry:
             tmp_tiac_data["Lambda_eff"].append(fit_params[0])
 
             # Residence Time
-            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_Bq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"] * 10 **6 ))
+            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
 
         for key, values in tmp_tiac_data.items():
             self.results.loc[:, key] = values
@@ -227,3 +240,10 @@ class BaseDosimetry:
 
         return None
     
+    # @abc.abstractmethod
+    def compute_dose(self) -> None:
+        """The abstract method to compute Dose to Organs and voxels. Must be implemented in all daughter dosimetry
+        classes inheriting from BaseDosimetry. Should run `compute_tiac()` first."""
+        self.compute_tiac()
+        return None
+

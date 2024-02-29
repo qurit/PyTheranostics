@@ -40,7 +40,7 @@ def plot_tac(
         parameters: np.ndarray, 
         residuals: np.ndarray, 
         organ: str, 
-        xlabel: str = 't (days)', 
+        xlabel: str = 't (hours)', 
         ylabel:str = 'A (MBq)',
         skip_points=0,
         sigmas=None,
@@ -57,20 +57,18 @@ def plot_tac(
       
     if exp_order == 1:
         fit_function = monoexp_fun
-        parameters = np.array([parameters[0] / 10**6, parameters[1] * 24, parameters[2]])
         label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}}$'
     elif exp_order == 2:
         fit_function = biexp_fun
-        parameters = np.array([parameters[0] / 10**6, parameters[1] * 24, parameters[2] / 10**6, parameters[3] * 24, parameters[4]])
         label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 1)} e^{{-{round(parameters[3], 2)} t}}$'
     elif exp_order == -2:
         fit_function = biexp_fun_uptake
-        parameters = np.array([parameters[0] / 10**6, parameters[1] * 24, parameters[2] * 24, parameters[3]])
         label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(parameters[2], 2)} t}}$'
     elif exp_order == 3:
-        print('To be implemented')
+        fit_function = triexp_fun
+        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 2)} e^{{-{round(parameters[3], 2)} t}} + {round(parameters[4], 1)} e^{{-{round(parameters[5], 2)} t}}$"
 
-    tt = np.linspace(0, time.max() * 2.5, 1000)
+    tt = np.linspace(0, time.max() * 2, 1000)
     yy = fit_function(tt, *parameters[:-1])
     
     fig, axes = plt.subplots(1, 3, figsize=(10, 4))
@@ -91,15 +89,15 @@ def plot_tac(
     axes[0].set_xlabel(xlabel)
     axes[0].set_ylabel(ylabel)
     axes[0].text(0.6, 0.85, f'$R^2={parameters[-1]:.4f}$', transform=axes[0].transAxes)
-    axes[0].set_xlim(0, axes[0].get_xlim()[1])  
-    axes[0].set_ylim(0, axes[0].get_ylim()[1]) 
+    axes[0].set_xlim(-10, axes[0].get_xlim()[1])  
+    axes[0].set_ylim(0.00001, axes[0].get_ylim()[1]) 
     
     axes[1].semilogy(time[skip_points:], activity[skip_points:], 'o', color='#1f77b4', markeredgecolor='black')
     axes[1].set_xlabel(xlabel)
     axes[1].set_ylabel(ylabel)
     axes[1].set_title(f'{label}')
-    axes[1].set_xlim(0, axes[1].get_xlim()[1])  
-    axes[1].set_ylim(0, axes[1].get_ylim()[1]) 
+    axes[1].set_xlim(-10, axes[1].get_xlim()[1])  
+    axes[1].set_ylim(0.00001, axes[1].get_ylim()[1]) 
 
     axes[2].plot(time[skip_points:], residuals, 'o', color='#1f77b4', markeredgecolor='black')
     axes[2].set_title('Residuals')
