@@ -4,6 +4,7 @@ import abc
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from os import path
+import abc
 
 import numpy
 import pandas
@@ -13,8 +14,10 @@ from doodle.plots.plots import plot_tac
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
+from doodle.dosimetry.BoneMarrow import bm_scaling_factor
 
-class BaseDosimetry(metaclass = abc.ABCMeta):
+class BaseDosimetry(metaclass=abc.ABCMeta):
+
     """Base Dosimetry Class. Takes Nuclear Medicine Data and CT Data to perform Organ-level 
     patient-specific dosimetry by computing organ time-integrated activity curves and
     leveraging organ level S-values"""
@@ -41,6 +44,7 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
         
         # Configuration
         self.config = config
+        self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
         # Store data
         self.patient_id = config["PatientID"] 
@@ -60,10 +64,19 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
 
         # DataFrame storing results
         self.results = self.initialize()
+
+        # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
+        self.dose_maps: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
         
     def check_mandatory_fields(self) -> None:
         if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
             raise ValueError(f"Incomplete Configuration file.")
+        
+        if "ReferenceTimePoint" not in self.config:
+            print("No Reference Time point was given. Assigning time ID = 0")
+            self.config["ReferenceTimePoint"] = 0
+        
+        return None
 
     def initialize(self) -> pandas.DataFrame:
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
@@ -72,7 +85,7 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
             roi_name: [] for roi_name in self.config["rois"] if roi_name != "BoneMarrow"
             }  # BoneMarrow is a special case.
         
-        cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_Bq"]
+        cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
         # Normalize Acquisition Times, relative to time of injection
@@ -97,9 +110,9 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
                   for time_id in time_ids]
                 )
             
-            # Activity, in Bq
+            # Activity, in MBq
             tmp_results[roi_name].append(
-                [self.nm_data.activity_in(region=roi_name, time_id=time_id) 
+                [self.nm_data.activity_in(region=roi_name, time_id=time_id) * self.toMBq
                    for time_id in time_ids]
                    )
 
@@ -113,10 +126,18 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
         """Initialize activity and times for Bone-Marrow blood-based measurements"""
         
         if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None:
+            
+            # Computing blood-based method -> Scale activity concentration in blood 
+            # to activity in Bone-Marrow, using ICRP phantom mass and haematocrit.
+            scaling_factor = bm_scaling_factor(
+                gender=self.config["Gender"], 
+                hematocrit=self.clinical_data["Haematocrit"].unique()[0]
+                )
+
             temp_results["BoneMarrow"] = [
                 self.clinical_data["Time_hr"].to_list(),
                 self.clinical_data["Volume_mL"].to_list(),
-                self.clinical_data["Activity_Bq"].to_list()
+                [act * scaling_factor * self.toMBq for act in self.clinical_data["Activity_Bq"].to_list()]
             ]
         
         return temp_results
@@ -149,37 +170,39 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
         """Computes Time-Integrated Activity over each source-organ.
         Steps: 
 
-            2.b For Bone-Marrow, if blood-counting, utilize external function.
             2.c For Bone-Marrow, if image-based, utilize atlas method.
             
             """
         decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h
+        if self.radionuclide["half_life_units"] != "hours":
+            raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
-        tmp_tiac_data = {"Fit_params": [], "TIAC_Bq_h": [], "TIAC_h": [], "Lambda_eff": []}
+        tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
 
         for region, region_data in self.results.iterrows():
-            # TODO: QA of fit. (e.g., plots)
             fit_params, residuals = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
-                activity=numpy.array(region_data["Activity_Bq"]),
+                activity=numpy.array(region_data["Activity_MBq"]),
                 decayconst=decay_constant,
                 exp_order=self.config["rois"][region]["fit_order"],
                 param_init=self.config["rois"][region]["param_init"]
             )
             
             plot_tac(
-                time = numpy.array(region_data["Time_hr"]) / 24,
-                activity = numpy.array(region_data["Activity_Bq"]) / 10**6,
+                time = numpy.array(region_data["Time_hr"]),
+                activity = numpy.array(region_data["Activity_MBq"]),
                 exp_order = self.config["rois"][region]["fit_order"],
                 parameters = fit_params,
-                residuals = residuals / 10**6,
+                residuals = residuals,
                 organ = region, 
-                xlabel = 't (days)', 
+                xlabel = 't (hours)', 
                 ylabel = 'A (MBq)')
             
             # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
             tmp_tiac_data["Fit_params"].append(fit_params)
-            tmp_tiac_data["TIAC_Bq_h"].append(
+
+            # Calculate Integral
+            tmp_tiac_data["TIAC_MBq_h"].append(
                 self.numerical_integrate(fit_params[:-1])
             )
 
@@ -187,7 +210,7 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
             tmp_tiac_data["Lambda_eff"].append(fit_params[0])
 
             # Residence Time
-            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_Bq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"] * 10 **6 ))
+            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
 
         for key, values in tmp_tiac_data.items():
             self.results.loc[:, key] = values
@@ -225,14 +248,15 @@ class BaseDosimetry(metaclass = abc.ABCMeta):
         classes inheriting from BaseDosimetry. Should run `compute_tiac()` first."""
         self.compute_tiac()
         return None
-    
-         # monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
-    # and 177Lu-DOTATATE: the role of associated risk factors"
-    # biexp   
-    
+        
     def calculate_bed(self,
                       kinetic: str
                       ) -> None:
+        """
+         monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC 
+         and 177Lu-DOTATATE: the role of associated risk factors"
+         biexp   
+        """
         this_dir=Path(__file__).resolve().parent.parent
         RADIOBIOLOGY_DATA_FILE = Path(this_dir,"data","radiobiology.json")
         with open(RADIOBIOLOGY_DATA_FILE) as f:
