@@ -66,7 +66,7 @@ def plot_tac(
         label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(parameters[2], 2)} t}}$'
     elif exp_order == 3:
         fit_function = triexp_fun
-        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 2)} e^{{-{round(parameters[3], 2)} t}} + {round(parameters[4], 1)} e^{{-{round(parameters[5], 2)} t}}$"
+        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 2)} e^{{-{round(parameters[3], 2)} t}} - {round(parameters[0] + parameters[2], 1)} e^{{-{round(parameters[4], 2)} t}}$"
 
     tt = np.linspace(0, time.max() * 2, 1000)
     yy = fit_function(tt, *parameters[:-1])
