@@ -8,7 +8,6 @@ from rt_utils import RTStructBuilder
 from skimage.transform import resize
 from skimage import img_as_bool
 from pathlib import Path
-from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from doodle.dicomtools.dicomtools import sitk_load_dcm_series
 
 MetaDataType = Dict[str, Any]  # This could be improved ...
@@ -17,7 +16,21 @@ MetaDataType = Dict[str, Any]  # This could be improved ...
 # the code below)
 
 def load_metadata(dir: str, modality: str) -> MetaDataType:
-    """Loads relevant meta-data from a dicom dataset. """
+    """Loads relevant meta-data from a dicom dataset.
+
+    Args:
+        dir (str): _description_
+        modality (str): _description_
+
+    Raises:
+        AssertionError: _description_
+        ValueError: _description_
+        AssertionError: _description_
+        ValueError: _description_
+
+    Returns:
+        MetaDataType: _description_
+    """
 
     dicom_slices  = [pydicom.dcmread(fname) for fname in glob.glob(dir + "/*.dcm", recursive=False)]
 
@@ -40,9 +53,11 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
             raise AssertionError(f"Found more than one potential SPECT dicom dataset")
         
         if dicom_slices[0].Modality != "NM":
-            raise ValueError(f"Wrong modality. User specified NM, howere dicom indicates {dicom_slices[0].Modality}.")
+            raise ValueError(f"Wrong modality. User specified NM, however dicom indicates {dicom_slices[0].Modality}.")
 
         radionuclide = modality.split("_")[0]
+        
+        # This only applies to Q-SPECT TODO: replace for something more generic.
         injected_activity = dicom_slices[0].RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
 
     # Global attributes. Should be the same in all slices!
@@ -57,9 +72,57 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
 
     return meta
 
+def itk_image_from_array(array: numpy.ndarray, ref_image: Image) -> Image:
+    """Create an ITK Image object with a new array and existing
+        meta-data from another reference ITK image.
+
+    Args:
+        array (numpy.ndarray): _description_
+        ref_image (Image): _description_
+
+    Returns:
+        Image: _description_
+    """
+    
+    image = SimpleITK.GetImageFromArray(array)
+
+    # Set Manually basic meta:
+    tmp_spacing = list(ref_image.GetSpacing())
+    tmp_origin = list(ref_image.GetOrigin())
+    
+    if len(tmp_spacing) - len(array.shape) == 1:  # Sometime we get NM data with 4 dimensions, the last one being just a dummy.
+        tmp_spacing = tmp_spacing[:-1]
+        tmp_origin = tmp_origin[:-1]
+    
+    image.SetSpacing(tmp_spacing)
+    image.SetOrigin(tmp_origin)
+    tmp_direction = list(ref_image.GetDirection())
+    
+    if len(tmp_direction) > 9:
+        image.SetDirection(tmp_direction[0:3] + tmp_direction[4:7] + tmp_direction[8:11])
+    else:
+        image.SetDirection(tmp_direction)
+
+    # Here we set the additional meta-data.
+    for key in ref_image.GetMetaDataKeys():
+        image.SetMetaData(key, ref_image.GetMetaData(key))
+
+    return image
+
 def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tuple[float, float]] = None) -> Image:
     """Read dicom metadata to extract appropriate scaling for Image voxel values, then 
     apply to original image and generate a new SimpleITK image object.
+
+    Args:
+        image (Image): _description_
+        dir (str): _description_
+        scale_factor (Optional[Tuple[float, float]], optional): _description_. Defaults to None.
+
+    Raises:
+        AssertionError: _description_
+
+    Returns:
+        Image: _description_
     """
     if scale_factor is None:
         # We use pydicom to access the appropriate tag:
@@ -82,26 +145,20 @@ def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tupl
 
     # Generate re-scaled SimpleITK.Image object by building a new Image from re_scaled array, and copying
     # metadata from original image.
-    re_scaled_image = SimpleITK.GetImageFromArray(image_array)
-    
-    # Set Manually basic meta:
-    re_scaled_image.SetSpacing(list(image.GetSpacing())[:-1])
-    re_scaled_image.SetOrigin(list(image.GetOrigin())[:-1])
-    tmp_direction = list(image.GetDirection())
-    re_scaled_image.SetDirection(tmp_direction[0:3] + tmp_direction[4:7] + tmp_direction[8:11])
-
-    # Here we set the additional meta-data.
-    for key in image.GetMetaDataKeys():
-        re_scaled_image.SetMetaData(key, image.GetMetaData(key))
-
-    return re_scaled_image
-
+    return itk_image_from_array(array=image_array, ref_image=image)
 
 def load_from_dicom_dir(
     dir: str, modality: str
     ) -> Tuple[Image, MetaDataType]:
     """Load CT or SPECT data from DICOM files in the specified folder.
     Returns the Image object and some relevant metadata. 
+
+    Args:
+        dir (str): _description_
+        modality (str): _description_
+
+    Returns:
+        Tuple[Image, MetaDataType]: _description_
     """
     # Read image content and spatial information using SimpleITK
     image = sitk_load_dcm_series(dcm_dir=Path(dir))
@@ -120,7 +177,19 @@ def load_and_resample_RT(
     rt_struct_dir: str,
     target_shape: Tuple[int, int, int]
     ) -> Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]:
-    """Load and resample RT data from DICOM files in the specified folder."""
+    """Load and resample RT data from DICOM files in the specified folder.
+
+    Args:
+        ref_dicom_dir (str): _description_
+        rt_struct_dir (str): _description_
+        target_shape (Tuple[int, int, int]): _description_
+
+    Raises:
+        FileNotFoundError: _description_
+
+    Returns:
+        Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]: _description_
+    """
     
     # TODO: separate RTtoMask loading from re-sampling. 
     # For generalizability, Re-sampling should use spacing and origin from reference and target 
@@ -159,19 +228,62 @@ def load_and_resample_RT(
 
     return roi_masks, roi_masks_resampled
 
-def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -> LongitudinalStudy:
-    """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
-    corresponds to the order of the time points... should fix this to make it robust and look at dicom header info for
-    sorting time-points."""
+def ensure_masks_disconnect(original_masks: Dict[str, numpy.ndarray]) -> Dict[str, numpy.ndarray]:
+    """_summary_
 
-    images: Dict[int, Image] = {}
-    metadata: Dict[int, MetaDataType] = {}
+    Args:
+        original_masks (Dict[str, numpy.ndarray]): _description_
 
-    for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(dir=dir, modality=modality)
-        images[time_id] = image
-        metadata[time_id] = meta
+    Returns:
+        Dict[str, numpy.ndarray]: _description_
+    """
+    # Create multi-label array from all masks. Each mask is a different ID, overwriting the previous one if there are overlaps.
+    all_original_mask = numpy.zeros(original_masks.shape, dtpye=numpy.int16)
+    
+    id = 1
+    final_regions: List[str] = []
+    for region, mask in original_masks.items():
+        all_original_mask[numpy.where(mask)] = id
+        final_regions.append(region)
+        id += 1
+        
+    # Split array into individual masks arrays.
+    final_masks: Dict[str, numpy.ndarray] = {}
+    for id_final in range(1, id):
+        final_masks[final_regions[id_final - 1]] = numpy.where(all_original_mask == id_final, True, False)
+        
+    return final_masks
 
-    return LongitudinalStudy(images=images, meta=metadata)
+def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]], requested_rois: List[str]) -> Dict[str, numpy.ndarray]:
+    """Extract masks from NM dataset, according to user-defined list. Enforce that masks are disconnected.
+        Constrains: 
+        - Tumors are always going to be removed from organs. 
+        - For non-tumor regions adjacent to eachother with overlapping voxels, the newly added region will prevail.
 
+    Returns:
+        Dict[str, numpy.ndarray]: Dictionary of compliant masks.
+    """
+    
+    # Get rois specified by user:
+    candidates = [region for region in requested_rois["rois"]]
+    
+    # Disconnect tumor masks (if there is any overlap among them)
+    tumor_labels = [region for region in candidates if "lesion" in region.lower() or "tumor" in region.lower() or "tumour" in region.lower()]
+    
+    tumors_masks = ensure_masks_disconnect(original_masks={tumor_label: mask_dataset[time_id][tumor_label] for tumor_label in tumor_labels})
+    
+    # Get mask of total tumor burden
+    tumor_burden_mask = numpy.zeros_like(tumors_masks[tumor_labels[0]])
+    
+    for _, tumor_mask in tumors_masks.items():
+        tumor_burden_mask[numpy.where(tumor_mask)] = True
 
+    # Remove tumor from normal tissue regions.
+    non_tumor_masks_aggregate: Dict[str, numpy.ndarray] = {
+        region: numpy.bool(
+            numpy.clip((mask_dataset[time_id][region]).astype(numpy.int8) - tumor_burden_mask.astype(numpy.int8), 0, 1)
+            ) for region in candidates if region not in tumor_labels
+        }
+    
+    return ensure_masks_disconnect(original_masks=non_tumor_masks_aggregate).update(tumors_masks)
+                
