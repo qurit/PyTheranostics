@@ -1,10 +1,16 @@
 from datetime import datetime
 import numpy
+from scipy.ndimage import median_filter
 
 def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
-    """
-    Convert a CT array, in HU into a density map in g/cc
+    """Convert a CT array, in HU into a density map in g/cc
     Conversion based on Schneider et al. 2000 (using GATE's material db example)
+
+    Args:
+        hu (numpy.ndarray): _description_
+
+    Returns:
+        numpy.ndarray: _description_
     """
     # Define the bin edges for HU values
     bins = numpy.array([-1050, -950, -852.884, -755.769, -658.653, -561.538, -464.422, -367.306, -270.191,
@@ -22,6 +28,9 @@ def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
     # Clip the HU array values to be within the range of defined bins
     hu_clipped = numpy.clip(hu, bins[0], bins[-1])
 
+    # Apply Median filter to remove a bit of remaining noise
+    hu_clipped = median_filter(hu_clipped, size=2)
+
     # Find the corresponding bin for each HU value
     bin_indices = numpy.digitize(hu_clipped, bins, right=True)
 
@@ -33,18 +42,17 @@ def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
 
 def calculate_time_difference(date_str1: str, date_str2: str, 
                               date_format: str = "%Y%m%d %H%M%S") -> float:
-    """
-    Calculate the time difference in hours between two dates.
+    """Calculate the time difference in hours between two dates.
     
-    The dates should be provided in the "YYYYMMDD HHMMSS" format.
-    
-    Parameters:
-        date_str1 (str): The first date as a string in "YYYYMMDD HHMMSS" format.
-        date_str2 (str): The second date as a string in "YYYYMMDD HHMMSS" format.
-        date_format (str): The date format of input date_str
-        
+       The dates should be provided in the "YYYYMMDD HHMMSS" format.
+
+    Args:
+        date_str1 (str): _description_
+        date_str2 (str): _description_
+        date_format (str, optional): _description_. Defaults to "%Y%m%d %H%M%S".
+
     Returns:
-        float: The difference between the dates in hours.
+        float: _description_
     """
         
     # Clean up:
