@@ -15,6 +15,7 @@ from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
 from doodle.dosimetry.BoneMarrow import bm_scaling_factor
+from doodle.ImagingTools.Tools import extract_masks
 
 class BaseDosimetry(metaclass=abc.ABCMeta):
 
@@ -56,18 +57,48 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
+        
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
 
         # Veryfy radionuclide information is present in nm_data.
         self.radionuclide = self.check_nm_data()
 
+        # Extract ROIs from user-specified list, and ensure there are no overlaps.
+        self.extract_masks_and_correct_overlaps()
+        
         # DataFrame storing results
         self.results = self.initialize()
 
         # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
         self.dose_maps: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
+    
+    def extract_masks_and_correct_overlaps(self) -> None:
+        """_summary_
+        """
         
+        # First check availability of requested rois in existing masks
+        for roi_name in self.config["rois"]:
+            if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
+                raise AssertionError(f"The following mask was not found: {roi_name}\n")
+            
+            
+        for roi_name in self.nm_data.masks[0]:
+            if roi_name not in self.config["rois"] and roi_name != "BoneMarrow":
+                print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
+                      " configuration input file.\n")
+                continue
+        
+        self.nm_data.masks = {time_id: extract_masks(
+            time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=self.config["rois"]
+            ) for time_id in self.nm_data.masks.keys()}
+        
+        self.ct_data.masks = {time_id: extract_masks(
+            time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=self.config["rois"]
+            ) for time_id in self.ct_data.masks.keys()}
+        
+        return None
+    
     def check_mandatory_fields(self) -> None:
         if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
             raise ValueError(f"Incomplete Configuration file.")
@@ -77,7 +108,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.config["ReferenceTimePoint"] = 0
         
         return None
-
+    
     def initialize(self) -> pandas.DataFrame:
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
@@ -93,15 +124,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.normalize_time_to_injection(time_id=time_id)
 
         for roi_name, _ in self.nm_data.masks[0].items():
-            if roi_name not in self.config["rois"]:
-                print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
-                      " configuration input file.")
-                continue
 
             # Time (relative to time of injection, in hours)
-            if self.config["rois"][roi_name]["through_origin"]:
-                tmp_results[roi_name].append(0)
-                
             tmp_results[roi_name].append(
                 [self.nm_data.meta[time_id]["Time"]
                   for time_id in time_ids]
@@ -113,10 +137,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                   for time_id in time_ids]
                 )
             
-            # Activity, in MBq
-            if self.config["rois"][roi_name]["through_origin"]:
-                tmp_results[roi_name].append(0)
-                
+            # Activity, in MBq                
             tmp_results[roi_name].append(
                 [self.nm_data.activity_in(region=roi_name, time_id=time_id) * self.toMBq
                    for time_id in time_ids]
@@ -172,6 +193,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # TODO: handle logging: error/warnings/prints.
         print("Database search function not implemented. Dosimetry for this patient might "
                              "already exists...")
+
+        self.db_dir.mkdir(parents=True, exist_ok=True)
+        
         return None
     
     def compute_tiac(self) -> None:
@@ -193,8 +217,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 activity=numpy.array(region_data["Activity_MBq"]),
                 decayconst=decay_constant,
                 exp_order=self.config["rois"][region]["fit_order"],
-                param_init=self.config["rois"][region]["param_init"],
-                through_origin=self.config["rois"][region]["through_origin"]
+                param_init=self.config["rois"][region]["param_init"]
             )
             
             plot_tac(
@@ -294,3 +317,16 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             print(f'{organ}', bed[organ])
             
         self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
+
+    def save_images_and_masks_at(self, time_id: int) -> None:
+        """Save CT, NM and masks for a specific time point.
+
+        Args:
+            time_id (int): The time point ID.
+        """
+        
+        self.ct_data.save_image_to_nii_at(time_id=time_id, out_path=self.db_dir, name="CT")
+        self.nm_data.save_image_to_nii_at(time_id=time_id, out_path=self.db_dir, name="SPECT")
+        self.nm_data.save_masks_to_nii_at(time_id=time_id, out_path=self.db_dir, regions=self.config["rois"])
+        
+        return None
