@@ -59,7 +59,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
 
-        # Veryfy radionuclide information is present in nm_data.
+        # Verify radionuclide information is present in nm_data.
         self.radionuclide = self.check_nm_data()
 
         # DataFrame storing results
