@@ -4,12 +4,14 @@ import skimage.io
 import scipy
 import skimage.io as io
 from scipy import signal
+import numpy
+import os
 
 
 class DoseVoxelKernel:
-    def __init__(self, TIAMBqs, CT):
-        self.TIAMBqs = np.asarray(TIAMBqs, dtype=np.float64)
-        self.CT = CT 
+    def __init__(self, isotope: str, voxel_size_mm: float) -> None:
+        self.kernel = numpy.fromfile(os.path(__file__) + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:1.2f}-mm-SoftICRP.img")
+        self.kernel = self.kernel.reshape((51, 51, 51)).astype(numpy.float64)
 
     def kernel(self):
         vsv = np.fromfile('/mnt/c/Users/skurkowska/Desktop/PR21_dosimetry/convolution/DK_softtissueICRP_mGyperMBqs.img', dtype='float32')
