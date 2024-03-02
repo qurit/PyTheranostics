@@ -71,6 +71,19 @@ class LongitudinalStudy:
         spacing = self.images[time_id].GetSpacing()
         return spacing[0]/10 * spacing[1]/10 * spacing[2]/10
     
+    def average_of(self, region: str, time_id: int) -> float:
+        """_summary_
+
+        Args:
+            region (str): _description_
+            time_id (int): _description_
+
+        Returns:
+            float: _description_
+        """
+        return numpy.average(self.array_at(time_id=time_id)[self.masks[time_id][region]])
+        
+        
     def check_masks_consistency(self) -> None:
         """Check that we have the same masks in all time points"""
         masks_list = [sorted(list(masks.keys())) for _, masks in self.masks.items()]
