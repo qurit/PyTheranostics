@@ -237,8 +237,13 @@ def ensure_masks_disconnect(original_masks: Dict[str, numpy.ndarray]) -> Dict[st
     Returns:
         Dict[str, numpy.ndarray]: _description_
     """
+    
+    if len(original_masks) == 0:
+        return original_masks
+    
     # Create multi-label array from all masks. Each mask is a different ID, overwriting the previous one if there are overlaps.
-    all_original_mask = numpy.zeros(original_masks.shape, dtpye=numpy.int16)
+    original_masks_names = [region for region in original_masks.keys()]   
+    all_original_mask = numpy.zeros(original_masks[original_masks_names[0]].shape, dtype=numpy.int16)
     
     id = 1
     final_regions: List[str] = []
@@ -265,7 +270,7 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     """
     
     # Get rois specified by user:
-    candidates = [region for region in requested_rois["rois"]]
+    candidates = [region for region in requested_rois]
     
     # Disconnect tumor masks (if there is any overlap among them)
     tumor_labels = [region for region in candidates if "lesion" in region.lower() or "tumor" in region.lower() or "tumour" in region.lower()]
@@ -273,17 +278,20 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     tumors_masks = ensure_masks_disconnect(original_masks={tumor_label: mask_dataset[time_id][tumor_label] for tumor_label in tumor_labels})
     
     # Get mask of total tumor burden
-    tumor_burden_mask = numpy.zeros_like(tumors_masks[tumor_labels[0]])
+    tumor_burden_mask = numpy.zeros_like(mask_dataset[time_id][candidates[0]])
     
     for _, tumor_mask in tumors_masks.items():
         tumor_burden_mask[numpy.where(tumor_mask)] = True
 
     # Remove tumor from normal tissue regions.
     non_tumor_masks_aggregate: Dict[str, numpy.ndarray] = {
-        region: numpy.bool(
+        region: (
             numpy.clip((mask_dataset[time_id][region]).astype(numpy.int8) - tumor_burden_mask.astype(numpy.int8), 0, 1)
-            ) for region in candidates if region not in tumor_labels
+            ).astype(bool) for region in candidates if region not in tumor_labels
         }
     
-    return ensure_masks_disconnect(original_masks=non_tumor_masks_aggregate).update(tumors_masks)
+    corrected_masks = ensure_masks_disconnect(original_masks=non_tumor_masks_aggregate)
+    corrected_masks.update(tumors_masks)
+    
+    return corrected_masks
                 
