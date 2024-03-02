@@ -71,7 +71,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.results = self.initialize()
 
         # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
-        self.dose_maps: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
+        self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
     
     def extract_masks_and_correct_overlaps(self) -> None:
         """_summary_
@@ -80,7 +80,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # First check availability of requested rois in existing masks
         for roi_name in self.config["rois"]:
             if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
-                raise AssertionError(f"The following mask was not found: {roi_name}\n")
+                raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
             
             
         for roi_name in self.nm_data.masks[0]:
@@ -90,11 +90,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 continue
         
         self.nm_data.masks = {time_id: extract_masks(
-            time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=self.config["rois"]
+            time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.nm_data.masks.keys()}
         
         self.ct_data.masks = {time_id: extract_masks(
-            time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=self.config["rois"]
+            time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.ct_data.masks.keys()}
         
         return None
