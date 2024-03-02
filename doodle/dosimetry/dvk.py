@@ -15,7 +15,8 @@ class DoseVoxelKernel:
         """
 
         self.kernel = numpy.fromfile(
-            os.path(__file__) + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:1.2f}-mm-mGyperMBqs-SoftICRP.img"
+            os.path.dirname(__file__) + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:1.2f}-mm-mGyperMBqs-SoftICRP.img",
+            dtype=numpy.float32
             )
         
         self.kernel = self.kernel.reshape((51, 51, 51)).astype(numpy.float64)
@@ -25,11 +26,13 @@ class DoseVoxelKernel:
         dose_mGy = signal.fftconvolve(tiac_mbq_s, self.kernel, mode='same', axes=None)
 
         if ct is not None:
+            # TODO: Handle erroneous scale-up of dose outside of body.
+            print("Warning -> Whole Body Mask is required to exclude dose deposition outside of the body.")
             dose_mGy = self.weight_dose_by_density(dose_map=dose_mGy, ct=ct)
 
         return dose_mGy
         
-    def weight_dose_by_density(dose_map: numpy.ndarray, ct: numpy.ndarray) -> numpy.ndarray:
+    def weight_dose_by_density(self, dose_map: numpy.ndarray, ct: numpy.ndarray) -> numpy.ndarray:
 
         return 1 / hu_to_rho(hu=ct) * dose_map
     

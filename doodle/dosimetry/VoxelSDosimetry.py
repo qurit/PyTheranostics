@@ -22,6 +22,8 @@ class VoxelSDosimetry(BaseDosimetry):
         self.tiac_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={})
         self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={})
         
+        self.toMBqs = 3600  # Convert MBqh toMBqs
+        
     def compute_voxel_tiac(self) -> None:
         """Takes parameters of the fit for each region, and compute TIAC for each voxel
         belonging to specified region"""
@@ -55,9 +57,10 @@ class VoxelSDosimetry(BaseDosimetry):
 
             tiac_map += region_mask * region_tiac * act_map_at_ref / f_to  # MBq_h
 
-        # Create ITK Image Object and embed it into a LongStudy.
-        tiac_image = itk_image_from_array(array=tiac_map, ref_image=self.nm_data.images[ref_time_id])
+        # Create ITK Image Object and embed it into a LongStudy.  #TODO: modularize, repeated code downwards.
+        tiac_image = itk_image_from_array(array=numpy.transpose(tiac_map, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])
         self.tiac_map = LongitudinalStudy(images={0: tiac_image}, meta={0: self.nm_data.meta[ref_time_id]})
+        self.tiac_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
 
         return None
 
@@ -67,22 +70,22 @@ class VoxelSDosimetry(BaseDosimetry):
         ref_time_id = self.config["ReferenceTimePoint"]
         nm_voxel_mm = self.nm_data.images[ref_time_id].GetSpacing()[0]
         
-        dose_kernel = DoseVoxelKernel(isotope=self.nm_data.meta["Radionuclide"], voxel_size_mm=nm_voxel_mm)
+        dose_kernel = DoseVoxelKernel(isotope=self.nm_data.meta[0]["Radionuclide"], voxel_size_mm=nm_voxel_mm)
         
         dose_map_array = dose_kernel.tiac_to_dose(
-            tiac_mbq_s=self.tiac_map.array_at(0), 
+            tiac_mbq_s=self.tiac_map.array_at(0) * self.toMBqs, 
             ct=self.ct_data.array_at(time_id=ref_time_id) if self.config["ScaleDoseByDensity"] else None
             )
         
+        # Create ITK Image Object and embed it into a LongStudy
         self.dose_map = LongitudinalStudy(
-            images={0: itk_image_from_array(array=dose_map_array, ref_image=self.nm_data.images[ref_time_id])},
+            images={0: itk_image_from_array(array=numpy.transpose(dose_map_array, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])},
             meta={0: self.nm_data.meta[ref_time_id]}
             )
+        self.dose_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
         
         return None
-        
-        
-    
+            
     def compute_dose(self) -> None:
         """Steps:
         Compute TIAC at the organ level
@@ -93,5 +96,5 @@ class VoxelSDosimetry(BaseDosimetry):
         self.compute_tiac()
         self.compute_voxel_tiac()
         self.apply_voxel_s()
-
-        # Compute Statistics for dose
+        
+        return None
