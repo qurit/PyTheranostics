@@ -97,6 +97,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.ct_data.masks.keys()}
         
+        # Add Remainder of Body info to Config. If no information about Whole-body was provided, use default mono-exp.
+        self.config["rois"]["RemainderOfBody"] = self.config["rois"]["WBCT"] if "WBCT" in self.config["rois"] else {"fit_order": 1, 'param_init': (1, 1)}
+        
         return None
     
     def check_mandatory_fields(self) -> None:
@@ -113,9 +116,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
-            roi_name: [] for roi_name in self.config["rois"] if roi_name != "BoneMarrow"
+            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody"
             }  # BoneMarrow is a special case.
-        
+                                            
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
@@ -123,8 +126,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         for time_id in self.nm_data.meta.keys():
             self.normalize_time_to_injection(time_id=time_id)
 
-        for roi_name, _ in self.nm_data.masks[0].items():
-
+        for roi_name in tmp_results.keys():
+            
             # Time (relative to time of injection, in hours)
             tmp_results[roi_name].append(
                 [self.nm_data.meta[time_id]["Time"]
@@ -153,8 +156,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Initialize activity and times for Bone-Marrow blood-based measurements"""
         
         if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None:
-            
-            
             
             # Computing blood-based method -> Scale activity concentration in blood 
             # to activity in Bone-Marrow, using ICRP phantom mass and haematocrit.
