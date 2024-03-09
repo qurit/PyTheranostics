@@ -120,11 +120,10 @@ class OrganSDosimetry(BaseDosimetry):
         df_ad['AD[Gy]'] = df_ad['Total'] * float(self.config['InjectedActivity']) / 1000
         self.df_ad = df_ad
         
-
-    
     def compute_dose(self):
         self.compute_tiac()
         self.prepare_data()
+        # TODO: finish-up the pipeline up to the Olinda File Export.
         
         
         
