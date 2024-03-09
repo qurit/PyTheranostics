@@ -14,7 +14,7 @@ class OrganSDosimetry(BaseDosimetry):
     def __init__(self,
                  config: Dict[str, Any],
                  nm_data: LongitudinalStudy, 
-                 ct_data: Optional[LongitudinalStudy],
+                 ct_data: LongitudinalStudy,
                  clinical_data: Optional[pandas.DataFrame] = None
                  ) -> None:
         super().__init__(config, nm_data, ct_data, clinical_data)
@@ -120,10 +120,13 @@ class OrganSDosimetry(BaseDosimetry):
         df_ad['AD[Gy]'] = df_ad['Total'] * float(self.config['InjectedActivity']) / 1000
         self.df_ad = df_ad
         
-    def compute_dose(self):
+        return None
+        
+    def compute_dose(self) -> None:
         self.compute_tiac()
         self.prepare_data()
         # TODO: finish-up the pipeline up to the Olinda File Export.
+        return None
         
         
         
