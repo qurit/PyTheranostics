@@ -104,7 +104,7 @@ class LongitudinalStudy:
             out_path (Path): The path to the folder where images will be written.
         """
         print(f"Writing Image ({name}) into nifty file.")
-        SimpleITK.WriteImage(image=self.images[time_id], fileName=out_path / f"Image_{time_id}{name}.nii.gz")
+        SimpleITK.WriteImage(image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32), fileName=out_path / f"Image_{time_id}{name}.nii.gz")
         return None
     
     def save_masks_to_nii_at(self, time_id: int, out_path: Path, regions: List[str]) -> None:
