@@ -19,6 +19,7 @@ class OrganSDosimetry(BaseDosimetry):
                  clinical_data: Optional[pandas.DataFrame] = None
                  ) -> None:
         super().__init__(config, nm_data, ct_data, clinical_data)
+        self.check_mandatory_fields_organ()
         
         """Inputs:
             config: Configuration parameters for dosimetry calculations, a Dict.
@@ -32,14 +33,8 @@ class OrganSDosimetry(BaseDosimetry):
                      Note: blood counting should be in units of Bq/mL.
         """    
         
-    def check_mandatory_fields(self) -> None:
-        if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
-            raise ValueError(f"Incomplete Configuration file.")
-        
-        if "ReferenceTimePoint" not in self.config:
-            print("No Reference Time point was given. Assigning time ID = 0")
-            self.config["ReferenceTimePoint"] = 0
-            
+    def check_mandatory_fields_organ(self) -> None:
+
         if "Organ" not in self.config["Level"]:
             print("Verify the level on which dosimetry should be performed.")
         
@@ -66,10 +61,19 @@ class OrganSDosimetry(BaseDosimetry):
                                                   'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
         
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
-            
+    
+    def create_output_file(self, 
+                           dirname: str, 
+                           savefile: bool = False
+                           ) -> None:  
+        if self.config["OutputFormat"] == "Olinda":  
+            self.create_Olinda_file(dirname, savefile)
+        else:
+            print("In the current version, we only support Olinda as external organ S-value software.") # TODO: other software case files
+                
     def create_Olinda_file(self, 
                            dirname: str, 
-                           savefile: bool = False,
+                           savefile: bool = False
                            ) -> None:
         """Creates .cas file that can be exported to Olinda/EXM."""
         this_dir=path.dirname(__file__)
@@ -119,6 +123,12 @@ class OrganSDosimetry(BaseDosimetry):
 
             template.to_csv(str(dirname) + '/' + f"{self.config['PatientID']}.cas", index=False)
 
+    def read_results(self, 
+                     olinda_results_path: str
+                     ) -> None:  
+        if self.config["OutputFormat"] == "Olinda":  
+            self.read_Olinda_results(olinda_results_path)
+            
     def read_Olinda_results(self, 
                             olinda_results_path: str
                             ) -> None:
