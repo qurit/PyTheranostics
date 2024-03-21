@@ -61,7 +61,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
 
-        # Veryfy radionuclide information is present in nm_data.
+        # Verify radionuclide information is present in nm_data.
         self.radionuclide = self.check_nm_data()
 
         # Extract ROIs from user-specified list, and ensure there are no overlaps.
@@ -304,7 +304,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         for organ in organs:
             t_repair = self.radiobiology_dic[organ]['t_repair']
             alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-            AD = float(bed_df.loc[bed_df.index == organ]['Total'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+            AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
             if kinetic == 'monoexp':
                 t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
                 bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
