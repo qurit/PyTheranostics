@@ -39,8 +39,14 @@ class OrganSDosimetry(BaseDosimetry):
         self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_m', 'Kidney_L_m']].sum()
         self.results_olinda = self.results_olinda.drop(['Kidney_R_m', 'Kidney_L_m'])
         
-        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR']].sum()
-        self.results_olinda = self.results_olinda.drop(['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR'])
+        #self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR']].sum()
+        #self.results_olinda = self.results_olinda.drop(['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR'])
+        
+        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a']].sum()
+        self.results_olinda = self.results_olinda.drop(['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a'])
+        
+        self.results_olinda.loc['Salivary Glands_mass'] = self.results_olinda.loc[['ParotidglandL_m', 'ParotidglandR_m', 'SubmandibularglandL_m', 'SubmandibularglandR_m']].sum()
+        self.results_olinda = self.results_olinda.drop(['ParotidglandL_m', 'ParotidglandR_m', 'SubmandibularglandL_m', 'SubmandibularglandR_m'])
 
         organs = self.results_olinda.index[self.results_olinda.index != 'WBCT']
         self.results_olinda.loc['WBCT'] = self.results_olinda.loc['WBCT'] - numpy.sum(self.results_olinda.loc[organs])

@@ -65,7 +65,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.radionuclide = self.check_nm_data()
 
         # Extract ROIs from user-specified list, and ensure there are no overlaps.
-        self.extract_masks_and_correct_overlaps()
+        #self.extract_masks_and_correct_overlaps()
         
         # DataFrame storing results
         self.results = self.initialize()
@@ -116,9 +116,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
-            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody"
+            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
-                                            
+        
+        print(tmp_results)                                   
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
@@ -211,7 +212,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
         tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
-
+        print(self.config["rois"])
+        print(self.results)
         for region, region_data in self.results.iterrows():
             fit_params, residuals = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
