@@ -46,17 +46,25 @@ class OrganSDosimetry(BaseDosimetry):
         self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
         self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIAC_h']]
         
-        self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_m', 'Kidney_L_m']].sum() # TODO: change vois name for more generic
+        self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_a', 'Kidney_L_a']].sum() # TODO: change vois name for more generic
+        self.results_olinda = self.results_olinda.drop(['Kidney_R_a', 'Kidney_L_a'])
+        
+        self.results_olinda.loc['Kidneys_mass'] = self.results_olinda.loc[['Kidney_R_m', 'Kidney_L_m']].sum() # TODO: change vois name for more generic
         self.results_olinda = self.results_olinda.drop(['Kidney_R_m', 'Kidney_L_m'])
+        
+        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['Parotid_L_a', 'Parotid_R_a', 'Submandibular_L_a', 'Submandibular_R_a']].sum()
+        self.results_olinda = self.results_olinda.drop(['Parotid_L_a', 'Parotid_R_a', 'Submandibular_L_a', 'Submandibular_R_a'])
+    
+        self.results_olinda.loc['Salivary Glands_mass'] = self.results_olinda.loc[['Parotid_L_m', 'Parotid_R_m', 'Submandibular_L_m', 'Submandibular_R_m']].sum()
+        self.results_olinda = self.results_olinda.drop(['Parotid_L_m', 'Parotid_R_m', 'Submandibular_L_m', 'Submandibular_R_m'])
         
         #self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR']].sum()
         #self.results_olinda = self.results_olinda.drop(['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR'])
         
-        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a']].sum()
-        self.results_olinda = self.results_olinda.drop(['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a'])
-        
-        self.results_olinda.loc['Salivary Glands_mass'] = self.results_olinda.loc[['ParotidglandL_m', 'ParotidglandR_m', 'SubmandibularglandL_m', 'SubmandibularglandR_m']].sum()
-        self.results_olinda = self.results_olinda.drop(['ParotidglandL_m', 'ParotidglandR_m', 'SubmandibularglandL_m', 'SubmandibularglandR_m'])
+        #self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a']].sum()
+        #self.results_olinda = self.results_olinda.drop(['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a'])
+        #
+
 
         organs = self.results_olinda.index[self.results_olinda.index != 'WBCT']
         self.results_olinda.loc['WBCT'] = self.results_olinda.loc['WBCT'] - numpy.sum(self.results_olinda.loc[organs])
@@ -66,7 +74,12 @@ class OrganSDosimetry(BaseDosimetry):
                                                   'WBCT': 'Total Body',
                                                   'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
         
+        self.results_olinda.loc['Salivary Glands']['Volume_CT_mL'] = self.results_olinda.loc['Salivary Glands_mass']['Volume_CT_mL']
+        self.results_olinda.loc['Kidneys']['Volume_CT_mL'] = self.results_olinda.loc['Kidneys_mass']['Volume_CT_mL']
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
+        self.results_olinda = self.results_olinda.drop(['Salivary Glands_mass'])
+        self.results_olinda = self.results_olinda.drop(['Kidneys_mass'])
+        
     
     def create_output_file(self, 
                            dirname: str, 
@@ -158,7 +171,7 @@ class OrganSDosimetry(BaseDosimetry):
                         stripped_line = stripped_line.replace('Effective Dose', 'Effective Dose,,,,')
                     stripped_line = stripped_line.rstrip(',')
                     data.append(stripped_line.split(','))
-        
+                
         if not data:
             print('No relevant data found in the file.')
             return
