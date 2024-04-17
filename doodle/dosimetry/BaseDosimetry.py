@@ -76,7 +76,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def extract_masks_and_correct_overlaps(self) -> None:
         """_summary_
         """
-        
+
         # First check availability of requested rois in existing masks
         for roi_name in self.config["rois"]:
             if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
@@ -88,7 +88,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
                       " configuration input file.\n")
                 continue
-        
         self.nm_data.masks = {time_id: extract_masks(
             time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.nm_data.masks.keys()}
@@ -99,7 +98,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         # Add Remainder of Body info to Config. If no information about Whole-body was provided, use default mono-exp.
         self.config["rois"]["RemainderOfBody"] = self.config["rois"]["WBCT"] if "WBCT" in self.config["rois"] else {"fit_order": 1, 'param_init': (1, 1)}
-        
         return None
     
     def check_mandatory_fields(self) -> None:
@@ -119,7 +117,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
         
-        print(tmp_results)                                   
+#        tmp_results: Dict[str, List[float]] = {
+#            roi_name: [] for roi_name in self.config["rois"]
+#        } # BoneMarrow is a special case.
+        
+        
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
@@ -212,8 +214,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
         tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
-        print(self.config["rois"])
-        print(self.results)
         for region, region_data in self.results.iterrows():
             fit_params, residuals = fit_tac(
                 time=numpy.array(region_data["Time_hr"]),
