@@ -57,6 +57,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
+        self.apply_lambda_from_previous_cycle = config["Apply_lambda_from_previous_cycle"] 
         
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
@@ -214,43 +215,85 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
         tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
-        for region, region_data in self.results.iterrows():
-            fit_params, residuals = fit_tac(
-                time=numpy.array(region_data["Time_hr"]),
-                activity=numpy.array(region_data["Activity_MBq"]),
-                decayconst=decay_constant,
-                exp_order=self.config["rois"][region]["fit_order"],
-                param_init=self.config["rois"][region]["param_init"]
-            )
-            
-            plot_tac(
-                time = numpy.array(region_data["Time_hr"]),
-                activity = numpy.array(region_data["Activity_MBq"]),
-                exp_order = self.config["rois"][region]["fit_order"],
-                parameters = fit_params,
-                residuals = residuals,
-                organ = region, 
-                xlabel = 't (hours)', 
-                ylabel = 'A (MBq)')
-            
-            # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
-            tmp_tiac_data["Fit_params"].append(fit_params)
+        
+        if self.apply_lambda_from_previous_cycle == 'No':
+            for region, region_data in self.results.iterrows():
+                fit_params, residuals = fit_tac(
+                    time=numpy.array(region_data["Time_hr"]),
+                    activity=numpy.array(region_data["Activity_MBq"]),
+                    decayconst=decay_constant,
+                    exp_order=self.config["rois"][region]["fit_order"],
+                    param_init=self.config["rois"][region]["param_init"]
+                )
 
-            # Calculate Integral
-            tmp_tiac_data["TIAC_MBq_h"].append(
-                self.numerical_integrate(fit_params[:-1])
-            )
+                plot_tac(
+                    time = numpy.array(region_data["Time_hr"]),
+                    activity = numpy.array(region_data["Activity_MBq"]),
+                    exp_order = self.config["rois"][region]["fit_order"],
+                    parameters = fit_params,
+                    residuals = residuals,
+                    organ = region, 
+                    xlabel = 't (hours)', 
+                    ylabel = 'A (MBq)')
 
-            # Lambda effective 
-            tmp_tiac_data["Lambda_eff"].append(fit_params[1])
+                # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
+                tmp_tiac_data["Fit_params"].append(fit_params)
 
-            # Residence Time
-            #tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
-            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
-            
-        for key, values in tmp_tiac_data.items():
-            self.results.loc[:, key] = values
+                # Calculate Integral
+                tmp_tiac_data["TIAC_MBq_h"].append(
+                    self.numerical_integrate(fit_params[:-1])
+                )
 
+                # Lambda effective 
+                tmp_tiac_data["Lambda_eff"].append(fit_params[1])
+
+                # Residence Time
+                #tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
+                tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
+
+            for key, values in tmp_tiac_data.items():
+                self.results.loc[:, key] = values
+                
+        elif self.apply_lambda_from_previous_cycle == 'Yes':
+            for region, region_data in self.results.iterrows():
+                
+                fit_params, residuals = fit_tac_with_fixed_lambda(
+                    time=numpy.array(region_data["Time_hr"]),
+                    activity=numpy.array(region_data["Activity_MBq"]),
+                    decayconst=decay_constant,
+                    exp_order=self.config["rois"][region]["fit_order"],
+                    param_init=self.config["rois"][region]["param_init"],
+                    fixed_b_value = self.config["b_fixed"]
+                )
+
+                plot_tac(
+                    time = numpy.array(region_data["Time_hr"]),
+                    activity = numpy.array(region_data["Activity_MBq"]),
+                    exp_order = self.config["rois"][region]["fit_order"],
+                    parameters = fit_params,
+                    residuals = residuals,
+                    organ = region, 
+                    xlabel = 't (hours)', 
+                    ylabel = 'A (MBq)')
+
+                # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
+                tmp_tiac_data["Fit_params"].append(fit_params)
+
+                # Calculate Integral
+                tmp_tiac_data["TIAC_MBq_h"].append(
+                    self.numerical_integrate(fit_params[:-1])
+                )
+
+                # Lambda effective 
+                tmp_tiac_data["Lambda_eff"].append(fit_params[1])
+
+                # Residence Time
+                #tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
+                tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
+
+            for key, values in tmp_tiac_data.items():
+                self.results.loc[:, key] = values
+                
         return None
     
     def numerical_integrate(self, exp_params: List[float]) -> float:
