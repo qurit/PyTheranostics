@@ -33,10 +33,25 @@ class VoxelSDosimetry(BaseDosimetry):
         
         # Check we're not having overlapping regions:
         masks = numpy.zeros_like(tiac_map, dtype=numpy.int8)
+        
+        for region, region_data in self.results.iterrows():
+            if "ROB" in region:
+                rob_region_data = region_data
+                rob_region_mask = self.nm_data.masks[ref_time_id][region]
+                rob_act_map_at_ref = self.nm_data.array_of_activity_at(time_id=ref_time_id, region=region) * self.toMBq
+                rob_region_tiac = rob_region_data["TIAC_MBq_h"][0]
+                rob_region_fit_params = rob_region_data["Fit_params"]
+                rob_exp_order = self.config["rois"][region]["fit_order"]
+                rob_region_fit, _, _ = get_exponential(order=rob_exp_order, param_init=None, decayconst=1.0)
+                rob_ref_time = rob_region_data["Time_hr"][self.config["ReferenceTimePoint"]]
+                rob_f_to = rob_region_fit(rob_ref_time, *tuple(rob_region_fit_params[:-1]))
+    
+                tiac_map += rob_region_mask * rob_region_tiac * rob_act_map_at_ref / rob_f_to  # MBq_h
+
 
         for region, region_data in self.results.iterrows():
             
-            if region == "BoneMarrow":
+            if region == "BoneMarrow" or region == "ROB":
                 continue
                 # Temp placeholder.
                 
