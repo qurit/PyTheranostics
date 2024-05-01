@@ -69,7 +69,7 @@ class OrganSDosimetry(BaseDosimetry):
         organs = self.results_olinda.index[self.results_olinda.index != 'WBCT']
         self.results_olinda.loc['WBCT'] = self.results_olinda.loc['WBCT'] - numpy.sum(self.results_olinda.loc[organs])
 
-        self.results_olinda = self.results_olinda.rename(index={'Bladder_Experimental': 'Urinary Bladder Contents', 
+        self.results_olinda = self.results_olinda.rename(index={'Bladder': 'Urinary Bladder Contents', 
                                                   'Skeleton': 'Cortical Bone', 
                                                   'WBCT': 'Total Body',
                                                   'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
@@ -103,7 +103,7 @@ class OrganSDosimetry(BaseDosimetry):
         elif self.config["Gender"] == "Female":
             template=pandas.read_csv(path.join(TEMPLATE_PATH,'adult_female.cas'))
         else:
-            print('Ensure that you correctly wrote patient gender in config file. We support: Male and Female.')
+            print('Ensure that you correctly wrote patient gender in config file. Olinda supports: Male and Female.')
         
         template.columns=['Data']
         match = re.match(r"([a-zA-Z]+)([0-9]+)", self.config["Radionuclide"])
