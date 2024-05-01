@@ -242,11 +242,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             )
 
             # Lambda effective 
-            tmp_tiac_data["Lambda_eff"].append(fit_params[0])
+            tmp_tiac_data["Lambda_eff"].append(fit_params[1])
 
             # Residence Time
-            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
-
+            #tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
+            tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
+            
         for key, values in tmp_tiac_data.items():
             self.results.loc[:, key] = values
 
