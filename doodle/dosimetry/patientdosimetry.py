@@ -96,7 +96,7 @@ class BaseDosimetry:
             self.new_data.at[index, 'lamda_eff_1/s'] = popt[1]
             self.new_data.at[index, 'a0_MBq'] = popt[0]
             self.new_data.at[index, 'tia_MBqs'] = popt[0]/popt[1]
-            self.new_data.at[index, 'tiac_h'] = (popt[0]/popt[1])/(inj_activity * 3600)
+            self.new_data.at[index, 'TIA_h'] = (popt[0]/popt[1])/(inj_activity * 3600)
             
         ########################### Dictionary with lamda eff of each VOIs ############################
         self.lamda_eff_dict = {}
@@ -130,7 +130,7 @@ class BaseDosimetry:
         self.new_data['lamda_eff_1/s'] = self.new_data['organ'].map(self.lamda_eff_dict)
         self.new_data['a0_MBq'] = self.new_data['organ'].map(a0_Bq_dict)
         self.new_data['tia_MBqs'] = self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s']
-        self.new_data['tiac_h'] = (self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s'])/(inj_activity * 3600)
+        self.new_data['TIA_h'] = (self.new_data['a0_Bq'] / self.new_data['lamda_eff_1/s'])/(inj_activity * 3600)
 
         return self.new_data, self.lamda_eff_dict
    
