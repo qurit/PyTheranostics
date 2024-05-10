@@ -21,9 +21,9 @@ class DoseVoxelKernel:
         
         self.kernel = self.kernel.reshape((51, 51, 51)).astype(numpy.float64)
             
-    def tiac_to_dose(self, tiac_mbq_s: numpy.ndarray, ct: Optional[numpy.ndarray] = None) -> numpy.ndarray:
+    def tia_to_dose(self, tia_mbq_s: numpy.ndarray, ct: Optional[numpy.ndarray] = None) -> numpy.ndarray:
 
-        dose_mGy = signal.fftconvolve(tiac_mbq_s, self.kernel, mode='same', axes=None)
+        dose_mGy = signal.fftconvolve(tia_mbq_s, self.kernel, mode='same', axes=None)
 
         if ct is not None:
             # TODO: Handle erroneous scale-up of dose outside of body.
