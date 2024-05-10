@@ -32,9 +32,9 @@ class OrganSDosimetry(BaseDosimetry):
         """    
 
     def prepare_data(self) -> None:
-        self.results_olinda = self.results[['Volume_CT_mL', 'TIAC_h']].copy()
+        self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
         self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
-        self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIAC_h']]
+        self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIA_h']]
         
         self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_m', 'Kidney_L_m']].sum()
         self.results_olinda = self.results_olinda.drop(['Kidney_R_m', 'Kidney_L_m'])
@@ -70,7 +70,7 @@ class OrganSDosimetry(BaseDosimetry):
             sourceorgan=template.iloc[ind[0]].str.split('|')[0][0]
             print(sourceorgan)
             massorgan=template.iloc[ind[0]].str.split('|')[0][1]
-            kineticdata=self.results_olinda.loc[org]['TIAC_h']
+            kineticdata=self.results_olinda.loc[org]['TIA_h']
             massdata=round(self.results_olinda.loc[org]['Volume_CT_mL'], 1)
             template.iloc[ind[0]]=sourceorgan+'|'+str(massorgan)+'|'+'{:7f}'.format(kineticdata)  
             print(len(ind))       
@@ -123,7 +123,7 @@ class OrganSDosimetry(BaseDosimetry):
         return None
         
     def compute_dose(self) -> None:
-        self.compute_tiac()
+        self.compute_tia()
         self.prepare_data()
         # TODO: finish-up the pipeline up to the Olinda File Export.
         return None
