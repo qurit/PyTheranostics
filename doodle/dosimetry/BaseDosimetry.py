@@ -10,7 +10,7 @@ import numpy
 import pandas
 from doodle.fits.fits import fit_tac, fit_tac_with_fixed_biokinetics
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
-from doodle.plots.plots import plot_tac
+from doodle.plots.plots import plot_tac, plot_tac_fixed_biokinetics
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
@@ -263,11 +263,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     fixed_biokinetics = self.config["rois"][region]["fixed_parameters"]
                 )
 
-                plot_tac(
+                plot_tac_fixed_biokinetics(
                     time = numpy.array(region_data["Time_hr"]),
                     activity = numpy.array(region_data["Activity_MBq"]),
                     exp_order = self.config["rois"][region]["fit_order"],
                     parameters = fit_params,
+                    fixed_biokinetics = self.config["rois"][region]["fixed_parameters"],
                     residuals = residuals,
                     organ = region, 
                     xlabel = 't (hours)', 
@@ -277,15 +278,36 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 tmp_tiac_data["Fit_params"].append(fit_params)
 
                 # Calculate Integral
-                tmp_tiac_data["TIAC_MBq_h"].append(
-                    self.numerical_integrate(fit_params[:-1])
+                if self.config["rois"][region]["fit_order"] == 1:
+                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    quad(monoexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
                 )
+                elif self.config["rois"][region]["fit_order"] == 2:
+                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    quad(biexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                )
+                elif self.config["rois"][region]["fit_order"] == -2:
+                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    quad(biexp_fun_uptake, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                )
+                elif self.config["rois"][region]["fit_order"] == 3:
+                    fit_param_0_value = fit_params[0]
+                    fit_param_1_value = fit_params[1]
+                    fixed_param_0_value = self.config["rois"][region]["fixed_parameters"][0]
+                    fixed_param_1_value = self.config["rois"][region]["fixed_parameters"][1]
+                    fixed_param_2_value = self.config["rois"][region]["fixed_parameters"][2]
 
-                # Lambda effective 
-                tmp_tiac_data["Lambda_eff"].append(fit_params[1])
+                    # Concatenating arrays
+                    concatenated_array = numpy.concatenate((numpy.array([fit_param_0_value]), 
+                                                         numpy.array([fit_param_1_value]), 
+                                                         numpy.array([fixed_param_0_value]), 
+                                                         numpy.array([fixed_param_1_value]), 
+                                                         numpy.array([fixed_param_2_value])))
 
-                # Residence Time
-                #tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
+                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    quad(triexp_fun, 0, numpy.inf, args=tuple(concatenated_array))
+                )
+                    
                 tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
 
             for key, values in tmp_tiac_data.items():
