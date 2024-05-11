@@ -101,7 +101,7 @@ def fit_tac(
     return popt, residuals
 
 
-def fit_tac_with_fixed_lambda(
+def fit_tac_with_fixed_biokinetics(
         time: numpy.ndarray, 
         activity: numpy.ndarray, 
         decayconst: float = 1000000,
@@ -109,6 +109,7 @@ def fit_tac_with_fixed_lambda(
         weights: Optional[numpy.ndarray] = None,
         param_init: Optional[Tuple[float, ...]] = None,
         through_origin: bool = False,
+        fixed_biokinetics: Optional[numpy.ndarray] = None,
         maxev: int = 100000
                 ) -> Tuple[numpy.ndarray, numpy.ndarray]:
     """Generic Time Activity Curve fitting function. Supports:
@@ -136,12 +137,12 @@ def fit_tac_with_fixed_lambda(
         raise AssertionError(f"Only {time.shape[0]} data points available. Not enough points to perform fit.")
 
     if exp_function == monoexp_fun:
-        popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_b_value), 
+        popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_biokinetics[0]), 
                             time, activity, sigma=weights,
                             p0=initial_params,
                             bounds=bounds, maxfev=maxev)
     elif exp_function == biexp_fun:
-        popt, _ = curve_fit(lambda x, a, c: exp_function(x, a, fixed_b_value, c, fixed_d_value), 
+        popt, _ = curve_fit(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1]), 
                             time, activity, sigma=weights,
                             p0=initial_params,
                             bounds=bounds, maxfev=maxev)
