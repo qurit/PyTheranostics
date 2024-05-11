@@ -8,7 +8,7 @@ import abc
 
 import numpy
 import pandas
-from doodle.fits.fits import fit_tac
+from doodle.fits.fits import fit_tac, fit_tac_with_fixed_biokinetics
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
 from doodle.plots.plots import plot_tac
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
@@ -57,7 +57,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
-        self.apply_lambda_from_previous_cycle = config["Apply_lambda_from_previous_cycle"] 
+        self.apply_biokinetics_from_previous_cycle = config["Apply_biokinetics_from_previous_cycle"] 
         
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
@@ -118,9 +118,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
         
-#        tmp_results: Dict[str, List[float]] = {
-#            roi_name: [] for roi_name in self.config["rois"]
-#        } # BoneMarrow is a special case.
         
         
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
@@ -216,7 +213,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
         
-        if self.apply_lambda_from_previous_cycle == 'No':
+        if self.apply_biokinetics_from_previous_cycle == 'No':
             for region, region_data in self.results.iterrows():
                 fit_params, residuals = fit_tac(
                     time=numpy.array(region_data["Time_hr"]),
@@ -254,16 +251,16 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             for key, values in tmp_tiac_data.items():
                 self.results.loc[:, key] = values
                 
-        elif self.apply_lambda_from_previous_cycle == 'Yes':
+        elif self.apply_biokinetics_from_previous_cycle == 'Yes':
             for region, region_data in self.results.iterrows():
                 
-                fit_params, residuals = fit_tac_with_fixed_lambda(
+                fit_params, residuals = fit_tac_with_fixed_biokinetics(
                     time=numpy.array(region_data["Time_hr"]),
                     activity=numpy.array(region_data["Activity_MBq"]),
                     decayconst=decay_constant,
                     exp_order=self.config["rois"][region]["fit_order"],
                     param_init=self.config["rois"][region]["param_init"],
-                    fixed_b_value = self.config["b_fixed"]
+                    fixed_biokinetics = self.config["rois"][region]["fixed_parameters"]
                 )
 
                 plot_tac(
