@@ -139,13 +139,28 @@ def fit_tac_with_fixed_biokinetics(
     if exp_function == monoexp_fun:
         popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_biokinetics[0]), 
                             time, activity, sigma=weights,
-                            p0=initial_params,
-                            bounds=bounds, maxfev=maxev)
+                            p0=param_init,
+                            bounds=(0, numpy.inf), maxfev=maxev)
+        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a: exp_function(x, a, fixed_biokinetics[0])))
     elif exp_function == biexp_fun:
         popt, _ = curve_fit(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1]), 
                             time, activity, sigma=weights,
-                            p0=initial_params,
-                            bounds=bounds, maxfev=maxev)
+                            p0=param_init,
+                            bounds=(0, numpy.inf), maxfev=maxev)
+        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1])))
+    elif exp_function == biexp_fun_uptake:
+        popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_biokinetics[0], fixed_biokinetics[1]), 
+                            time, activity, sigma=weights,
+                            p0=param_init,
+                            bounds=(0, numpy.inf), maxfev=maxev)
+        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a: exp_function(x, a, fixed_biokinetics[0], fixed_biokinetics[1])))
+    elif exp_function == triexp_fun:
+        popt, _ = curve_fit(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2]), 
+                            time, activity, sigma=weights,
+                            p0=param_init, maxfev=maxev)
+        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2])))
+
+    
 
     r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=exp_function)
 
