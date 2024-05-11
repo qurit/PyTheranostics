@@ -133,8 +133,6 @@ def fit_tac_with_fixed_biokinetics(
     if weights is not None and weights and weights.shape != time.shape:
         raise AssertionError("Time and Weights arrays have different shapes.")
 
-    if time.shape[0] < 2 * abs(exp_order):
-        raise AssertionError(f"Only {time.shape[0]} data points available. Not enough points to perform fit.")
 
     if exp_function == monoexp_fun:
         popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_biokinetics[0]), 
@@ -161,9 +159,6 @@ def fit_tac_with_fixed_biokinetics(
         r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2])))
 
     
-
-    r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=exp_function)
-
     popt = numpy.append(popt, r_squared)
 
     return popt, residuals

@@ -112,12 +112,12 @@ def plot_tac(
 
 
 
-def plot_tac_fixed_lamda(
+def plot_tac_fixed_biokinetics(
         time: np.ndarray, 
         activity: np.ndarray, 
         exp_order: int,
         parameters: np.ndarray,
-        fixed_parameters: np.ndarray, 
+        fixed_biokinetics: np.ndarray, 
         residuals: np.ndarray, 
         organ: str, 
         xlabel: str = 't (hours)', 
@@ -136,17 +136,17 @@ def plot_tac_fixed_lamda(
         raise ValueError("Not supported. Please use order 1, 2 or 3.")
       
     if exp_order == 1:
-        fit_function = (lambda x, a: monoexp_fun(x, a, fixed_parameters[0]))
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_parameters[0], 2)} t}}$'
+        fit_function = (lambda x, a: monoexp_fun(x, a, fixed_biokinetics[0]))
+        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}}$'
     elif exp_order == 2:
-        fit_function = (lambda x, a, c: biexp_fun(x, a, fixed_parameters[0], c, fixed_parameters[1]))
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_parameters[0], 2)} t}} + {round(parameters[1], 1)} e^{{-{round(fixed_parameters[1], 2)} t}}$'
+        fit_function = (lambda x, a, c: biexp_fun(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1]))
+        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}} + {round(parameters[1], 1)} e^{{-{round(fixed_biokinetics[1], 2)} t}}$'
     elif exp_order == -2:
-        fit_function = (lambda x, a: biexp_fun_uptake(x, a, fixed_parameters[0], fixed_parameters[1]))
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_parameters[0], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(fixed_parameters[1], 2)} t}}$'
+        fit_function = (lambda x, a: biexp_fun_uptake(x, a, fixed_biokinetics[0], fixed_biokinetics[1]))
+        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[1], 2)} t}}$'
     elif exp_order == 3:
-        fit_function = (lambda x, a, c: triexp_fun(x, a, fixed_parameters[0], c, fixed_parameters[1], fixed_parameters[2]))
-        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_parameters[0], 2)} t}} + {round(parameters[1], 2)} e^{{-{round(fixed_parameters[1], 2)} t}} - {round(parameters[0] + parameters[1], 1)} e^{{-{round(fixed_parameters[2], 2)} t}}$"
+        fit_function = (lambda x, a, c: triexp_fun(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2]))
+        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}} + {round(parameters[1], 2)} e^{{-{round(fixed_biokinetics[1], 2)} t}} - {round(parameters[0] + parameters[1], 1)} e^{{-{round(fixed_biokinetics[2], 2)} t}}$"
 
     tt = np.linspace(0, time.max() * 2, 1000)
     yy = fit_function(tt, *parameters[:-1])
