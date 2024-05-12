@@ -323,7 +323,7 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     
     for _, tumor_mask in tumors_masks.items():
         tumor_burden_mask[numpy.where(tumor_mask)] = True
-
+    
     # Remove tumor from normal tissue regions.
     non_tumor_masks_aggregate: Dict[str, numpy.ndarray] = {
         region: (
