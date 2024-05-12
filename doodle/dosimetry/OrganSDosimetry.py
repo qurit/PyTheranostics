@@ -57,14 +57,6 @@ class OrganSDosimetry(BaseDosimetry):
     
         self.results_olinda.loc['Salivary Glands_mass'] = self.results_olinda.loc[['Parotid_L_m', 'Parotid_R_m', 'Submandibular_L_m', 'Submandibular_R_m']].sum()
         self.results_olinda = self.results_olinda.drop(['Parotid_L_m', 'Parotid_R_m', 'Submandibular_L_m', 'Submandibular_R_m'])
-        
-        #self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR']].sum()
-        #self.results_olinda = self.results_olinda.drop(['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR'])
-        
-        #self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a']].sum()
-        #self.results_olinda = self.results_olinda.drop(['ParotidglandL_a', 'ParotidglandR_a', 'SubmandibularglandL_a', 'SubmandibularglandR_a'])
-        #
-
 
         organs = self.results_olinda.index[self.results_olinda.index != 'WBCT']
         self.results_olinda.loc['WBCT'] = self.results_olinda.loc['WBCT'] - numpy.sum(self.results_olinda.loc[organs])

@@ -299,15 +299,17 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
                     # Concatenating arrays
                     concatenated_array = numpy.concatenate((numpy.array([fit_param_0_value]), 
-                                                         numpy.array([fit_param_1_value]), 
+                                                          
                                                          numpy.array([fixed_param_0_value]), 
+                                                         numpy.array([fit_param_1_value]),
                                                          numpy.array([fixed_param_1_value]), 
                                                          numpy.array([fixed_param_2_value])))
 
                     tmp_tiac_data["TIAC_MBq_h"].append(
                     quad(triexp_fun, 0, numpy.inf, args=tuple(concatenated_array))
                 )
-                    
+                
+                tmp_tiac_data["Lambda_eff"].append(self.config["rois"][region]["fixed_parameters"])
                 tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
 
             for key, values in tmp_tiac_data.items():
