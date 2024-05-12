@@ -36,7 +36,7 @@ class VoxelSDosimetry(BaseDosimetry):
 
         for region, region_data in self.results.iterrows():
             
-            if region == "BoneMarrow":
+            if region == "BoneMarrow" or region == "ROB":
                 continue
                 # Temp placeholder.
                 
@@ -79,7 +79,8 @@ class VoxelSDosimetry(BaseDosimetry):
         
         # Create ITK Image Object and embed it into a LongStudy
         # Clear dose outside patient body:
-        dose_map_array *= self.nm_data.masks[ref_time_id]["WholeBody"]
+        #dose_map_array *= self.nm_data.masks[ref_time_id]["WholeBody"]
+        dose_map_array *= self.nm_data.masks[ref_time_id]["WBCT"]
         
         self.dose_map = LongitudinalStudy(
             images={
@@ -101,5 +102,5 @@ class VoxelSDosimetry(BaseDosimetry):
         self.compute_voxel_tia()
         self.apply_voxel_s()
         # Save dose-map to .nii -> use integer version
-        self.dose_map.save_image_to_nii_at(time_id=0, out_path=self.db_dir, name="DoseMap.nii.gz")
+        #self.dose_map.save_image_to_nii_at(time_id=0, out_path=self.db_dir, name="DoseMap.nii.gz")
         return None

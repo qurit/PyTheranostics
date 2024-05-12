@@ -8,9 +8,9 @@ import abc
 
 import numpy
 import pandas
-from doodle.fits.fits import fit_tac
+from doodle.fits.fits import fit_tac, fit_tac_with_fixed_biokinetics
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
-from doodle.plots.plots import plot_tac
+from doodle.plots.plots import plot_tac, plot_tac_fixed_biokinetics
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
 from doodle.MiscTools.Tools import calculate_time_difference
@@ -57,6 +57,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
+        self.apply_biokinetics_from_previous_cycle = config["Apply_biokinetics_from_previous_cycle"] 
         
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
@@ -65,7 +66,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.radionuclide = self.check_nm_data()
 
         # Extract ROIs from user-specified list, and ensure there are no overlaps.
-        self.extract_masks_and_correct_overlaps()
+        #self.extract_masks_and_correct_overlaps()
         
         # DataFrame storing results
         self.results = self.initialize()
@@ -76,7 +77,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def extract_masks_and_correct_overlaps(self) -> None:
         """_summary_
         """
-        
+
         # First check availability of requested rois in existing masks
         for roi_name in self.config["rois"]:
             if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
@@ -88,7 +89,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
                       " configuration input file.\n")
                 continue
-        
         self.nm_data.masks = {time_id: extract_masks(
             time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.nm_data.masks.keys()}
@@ -99,7 +99,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         # Add Remainder of Body info to Config. If no information about Whole-body was provided, use default mono-exp.
         self.config["rois"]["RemainderOfBody"] = self.config["rois"]["WBCT"] if "WBCT" in self.config["rois"] else {"fit_order": 1, 'param_init': (1, 1)}
-        
         return None
     
     def check_mandatory_fields(self) -> None:
@@ -116,9 +115,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
-            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody"
+            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
-                                            
+        
+        
+        
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
@@ -211,39 +212,104 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
         tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
+        
+        if self.apply_biokinetics_from_previous_cycle == 'No':
+            for region, region_data in self.results.iterrows():
+                fit_params, residuals = fit_tac(
+                    time=numpy.array(region_data["Time_hr"]),
+                    activity=numpy.array(region_data["Activity_MBq"]),
+                    decayconst=decay_constant,
+                    exp_order=self.config["rois"][region]["fit_order"],
+                    param_init=self.config["rois"][region]["param_init"]
+                )
 
-        for region, region_data in self.results.iterrows():
-            fit_params, residuals = fit_tac(
-                time=numpy.array(region_data["Time_hr"]),
-                activity=numpy.array(region_data["Activity_MBq"]),
-                decayconst=decay_constant,
-                exp_order=self.config["rois"][region]["fit_order"],
-                param_init=self.config["rois"][region]["param_init"]
-            )
-            
-            plot_tac(
-                time = numpy.array(region_data["Time_hr"]),
-                activity = numpy.array(region_data["Activity_MBq"]),
-                exp_order = self.config["rois"][region]["fit_order"],
-                parameters = fit_params,
-                residuals = residuals,
-                organ = region, 
-                xlabel = 't (hours)', 
-                ylabel = 'A (MBq)')
-            
-            # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
-            tmp_tia_data["Fit_params"].append(fit_params)
+                plot_tac(
+                    time = numpy.array(region_data["Time_hr"]),
+                    activity = numpy.array(region_data["Activity_MBq"]),
+                    exp_order = self.config["rois"][region]["fit_order"],
+                    parameters = fit_params,
+                    residuals = residuals,
+                    organ = region, 
+                    xlabel = 't (hours)', 
+                    ylabel = 'A (MBq)')
 
-            # Calculate Integral
-            tmp_tia_data["TIA_MBq_h"].append(
-                self.numerical_integrate(fit_params[:-1])
-            )
+                # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
+                tmp_tia_data["Fit_params"].append(fit_params)
 
-            # Lambda effective 
-            tmp_tia_data["Lambda_eff"].append(fit_params[0])
+                # Calculate Integral
+                tmp_tia_data["TIA_MBq_h"].append(
+                    self.numerical_integrate(fit_params[:-1])
+                )
 
-            # Residence Time
-            tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
+                # Lambda effective 
+                tmp_tia_data["Lambda_eff"].append(fit_params[1])
+
+                # Residence Time
+                tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
+
+            for key, values in tmp_tia_data.items():
+                self.results.loc[:, key] = values
+                
+        elif self.apply_biokinetics_from_previous_cycle == 'Yes':
+            for region, region_data in self.results.iterrows():
+                
+                fit_params, residuals = fit_tac_with_fixed_biokinetics(
+                    time=numpy.array(region_data["Time_hr"]),
+                    activity=numpy.array(region_data["Activity_MBq"]),
+                    decayconst=decay_constant,
+                    exp_order=self.config["rois"][region]["fit_order"],
+                    param_init=self.config["rois"][region]["param_init"],
+                    fixed_biokinetics = self.config["rois"][region]["fixed_parameters"]
+                )
+
+                plot_tac_fixed_biokinetics(
+                    time = numpy.array(region_data["Time_hr"]),
+                    activity = numpy.array(region_data["Activity_MBq"]),
+                    exp_order = self.config["rois"][region]["fit_order"],
+                    parameters = fit_params,
+                    fixed_biokinetics = self.config["rois"][region]["fixed_parameters"],
+                    residuals = residuals,
+                    organ = region, 
+                    xlabel = 't (hours)', 
+                    ylabel = 'A (MBq)')
+
+                # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
+                tmp_tia_data["Fit_params"].append(fit_params)
+
+                # Calculate Integral
+                if self.config["rois"][region]["fit_order"] == 1:
+                    tmp_tia_data["TIA_MBq_h"].append(
+                    quad(monoexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                )
+                elif self.config["rois"][region]["fit_order"] == 2:
+                    tmp_tia_data["TIA_MBq_h"].append(
+                    quad(biexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                )
+                elif self.config["rois"][region]["fit_order"] == -2:
+                    tmp_tia_data["TIA_MBq_h"].append(
+                    quad(biexp_fun_uptake, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                )
+                elif self.config["rois"][region]["fit_order"] == 3:
+                    fit_param_0_value = fit_params[0]
+                    fit_param_1_value = fit_params[1]
+                    fixed_param_0_value = self.config["rois"][region]["fixed_parameters"][0]
+                    fixed_param_1_value = self.config["rois"][region]["fixed_parameters"][1]
+                    fixed_param_2_value = self.config["rois"][region]["fixed_parameters"][2]
+
+                    # Concatenating arrays
+                    concatenated_array = numpy.concatenate((numpy.array([fit_param_0_value]), 
+                                                          
+                                                         numpy.array([fixed_param_0_value]), 
+                                                         numpy.array([fit_param_1_value]),
+                                                         numpy.array([fixed_param_1_value]), 
+                                                         numpy.array([fixed_param_2_value])))
+
+                    tmp_tia_data["TIA_MBq_h"].append(
+                    quad(triexp_fun, 0, numpy.inf, args=tuple(concatenated_array))
+                )
+                
+                tmp_tia_data["Lambda_eff"].append(self.config["rois"][region]["fixed_parameters"])
+                tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
 
         for key, values in tmp_tia_data.items():
             self.results.loc[:, key] = values
