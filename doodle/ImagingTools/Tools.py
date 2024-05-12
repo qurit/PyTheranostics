@@ -269,7 +269,7 @@ def body_masks(masks: Dict[str, numpy.ndarray], whole_body_mask: numpy.ndarray) 
     Returns:
         Dict[str, numpy.ndarray]: _description_
     """
-    print(" Found Whole Body Mask - Substracting existing regions for remained of the body calculations ...")
+    print(" Found Whole Body Mask - Substracting existing regions for remainder of the body calculations ...")
     
     # Ensure Whole-Body includes all regions:
     remainder = whole_body_mask.astype(numpy.int8)

@@ -15,7 +15,7 @@ class OrganSDosimetry(BaseDosimetry):
     def __init__(self,
                  config: Dict[str, Any],
                  nm_data: LongitudinalStudy, 
-                 ct_data: LongitudinalStudy,
+                 ct_data: Optional[LongitudinalStudy],
                  clinical_data: Optional[pandas.DataFrame] = None
                  ) -> None:
         super().__init__(config, nm_data, ct_data, clinical_data)
@@ -42,9 +42,9 @@ class OrganSDosimetry(BaseDosimetry):
         
     def prepare_data(self) -> None:
         """Creates .cas file that can be exported to Olinda/EXM."""
-        self.results_olinda = self.results[['Volume_CT_mL', 'TIAC_h']].copy()
+        self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
         self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
-        self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIAC_h']]
+        self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIA_h']]
         
         self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_a', 'Kidney_L_a']].sum() # TODO: change vois name for more generic
         self.results_olinda = self.results_olinda.drop(['Kidney_R_a', 'Kidney_L_a'])
@@ -110,7 +110,7 @@ class OrganSDosimetry(BaseDosimetry):
 
             source_organ = template.iloc[indices[0]].str.split('|')[0][0]
             mass_phantom = template.iloc[indices[0]].str.split('|')[0][1]
-            kinetic_data = self.results_olinda.loc[organ]['TIAC_h']
+            kinetic_data = self.results_olinda.loc[organ]['TIA_h']
             mass_data = round(self.results_olinda.loc[organ]['Volume_CT_mL'], 1)
 
             # Update the template DataFrame
@@ -178,12 +178,9 @@ class OrganSDosimetry(BaseDosimetry):
         self.df_ad = df_ad
         
 
-    
     def compute_dose(self):
-        self.compute_tiac()
+        self.compute_tia()
         self.prepare_data()
-        # TODO: finish-up the pipeline up to the Olinda File Export.
-        return None
         
         
         

@@ -200,7 +200,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
-    def compute_tiac(self) -> None:
+    def compute_tia(self) -> None:
         """Computes Time-Integrated Activity over each source-organ.
         Steps: 
 
@@ -211,7 +211,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         if self.radionuclide["half_life_units"] != "hours":
             raise AssertionError("Radionuclide Half-Life in Database should be in hours.")
 
-        tmp_tiac_data = {"Fit_params": [], "TIAC_MBq_h": [], "TIAC_h": [], "Lambda_eff": []}
+        tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
         if self.apply_biokinetics_from_previous_cycle == 'No':
             for region, region_data in self.results.iterrows():
@@ -234,21 +234,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     ylabel = 'A (MBq)')
 
                 # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
-                tmp_tiac_data["Fit_params"].append(fit_params)
+                tmp_tia_data["Fit_params"].append(fit_params)
 
                 # Calculate Integral
-                tmp_tiac_data["TIAC_MBq_h"].append(
+                tmp_tia_data["TIA_MBq_h"].append(
                     self.numerical_integrate(fit_params[:-1])
                 )
 
                 # Lambda effective 
-                tmp_tiac_data["Lambda_eff"].append(fit_params[1])
+                tmp_tia_data["Lambda_eff"].append(fit_params[1])
 
                 # Residence Time
-                #tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (self.nm_data.meta[0]["Injected_Activity_MBq"]))
-                tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
+                tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
 
-            for key, values in tmp_tiac_data.items():
+            for key, values in tmp_tia_data.items():
                 self.results.loc[:, key] = values
                 
         elif self.apply_biokinetics_from_previous_cycle == 'Yes':
@@ -275,19 +274,19 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     ylabel = 'A (MBq)')
 
                 # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
-                tmp_tiac_data["Fit_params"].append(fit_params)
+                tmp_tia_data["Fit_params"].append(fit_params)
 
                 # Calculate Integral
                 if self.config["rois"][region]["fit_order"] == 1:
-                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    tmp_tia_data["TIA_MBq_h"].append(
                     quad(monoexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
                 )
                 elif self.config["rois"][region]["fit_order"] == 2:
-                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    tmp_tia_data["TIA_MBq_h"].append(
                     quad(biexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
                 )
                 elif self.config["rois"][region]["fit_order"] == -2:
-                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    tmp_tia_data["TIA_MBq_h"].append(
                     quad(biexp_fun_uptake, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
                 )
                 elif self.config["rois"][region]["fit_order"] == 3:
@@ -305,16 +304,16 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                                                          numpy.array([fixed_param_1_value]), 
                                                          numpy.array([fixed_param_2_value])))
 
-                    tmp_tiac_data["TIAC_MBq_h"].append(
+                    tmp_tia_data["TIA_MBq_h"].append(
                     quad(triexp_fun, 0, numpy.inf, args=tuple(concatenated_array))
                 )
                 
-                tmp_tiac_data["Lambda_eff"].append(self.config["rois"][region]["fixed_parameters"])
-                tmp_tiac_data["TIAC_h"].append(tmp_tiac_data["TIAC_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
+                tmp_tia_data["Lambda_eff"].append(self.config["rois"][region]["fixed_parameters"])
+                tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
 
-            for key, values in tmp_tiac_data.items():
-                self.results.loc[:, key] = values
-                
+        for key, values in tmp_tia_data.items():
+            self.results.loc[:, key] = values
+
         return None
     
     def numerical_integrate(self, exp_params: List[float]) -> float:
@@ -345,8 +344,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def compute_dose(self) -> None:
         """The abstract method to compute Dose to Organs and voxels. Must be implemented in all daughter dosimetry
-        classes inheriting from BaseDosimetry. Should run `compute_tiac()` first."""
-        self.compute_tiac()
+        classes inheriting from BaseDosimetry. Should run `compute_tia()` first."""
+        self.compute_tia()
         return None
         
     def calculate_bed(self,
