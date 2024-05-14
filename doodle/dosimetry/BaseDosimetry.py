@@ -66,7 +66,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.radionuclide = self.check_nm_data()
 
         # Extract ROIs from user-specified list, and ensure there are no overlaps.
-        #self.extract_masks_and_correct_overlaps()
+        self.extract_masks_and_correct_overlaps()
         
         # DataFrame storing results
         self.results = self.initialize()
@@ -82,7 +82,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         for roi_name in self.config["rois"]:
             if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
                 raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
-            
             
         for roi_name in self.nm_data.masks[0]:
             if roi_name not in self.config["rois"] and roi_name != "BoneMarrow":
@@ -124,13 +123,19 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             print("No Reference Time point was given. Assigning time ID = 0")
             self.config["ReferenceTimePoint"] = 0
         
+        if "WholeBody" not in self.config["rois"]:
+            raise ValueError("Missing 'WholeBody' region parameters.")
+        
+        if "RemainderOfBody" not in self.config["rois"]:
+            raise ValueError("Missing 'RemainderOfBody' region parameters.")
+        
         return None
     
     def initialize(self) -> pandas.DataFrame:
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
-            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
+            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
         
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
@@ -387,8 +392,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
                 bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
             elif kinetic == 'biexp':
-                mean_lambda_washout = (self.results.loc['Kidney_L_m']['Fit_params'][1] + self.results.loc['Kidney_R_m']['Fit_params'][1]) / 2
-                mean_lambda_uptake = (self.results.loc['Kidney_L_m']['Fit_params'][2] + self.results.loc['Kidney_R_m']['Fit_params'][2]) / 2
+                mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
+                mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
                 t_washout = numpy.log(2) /  mean_lambda_washout
                 t_uptake = numpy.log(2) /  mean_lambda_uptake
                 bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 

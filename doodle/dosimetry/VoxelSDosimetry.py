@@ -38,6 +38,9 @@ class VoxelSDosimetry(BaseDosimetry):
             
             if region == "BoneMarrow":
                 raise NotImplementedError("Voxel-based Bone Marrow dosimetry is not supported (yet).")
+            
+            if region == "WholeBody":
+                continue  # We do not want to double count voxels!
                 
             region_mask = self.nm_data.masks[ref_time_id][region]
             masks += region_mask
