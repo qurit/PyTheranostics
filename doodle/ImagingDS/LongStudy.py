@@ -33,11 +33,10 @@ class LongitudinalStudy:
         self.meta = meta
         
         # Mask mapping format:
-        self._valid_masks = ["Kidney_Left", "Kidney_Right", "Liver", "Spleen",
+        self._valid_masks = ["Kidney_Left", "Kidney_Right", "Liver", "Spleen", "Bladder",
                              "SubmandibularGland_Left", "SubmandibularGland_Right", "ParotidGland_Left", "ParotidGland_Right", 
                              "BoneMarrow",
                              "WholeBody",
-                             "RemainderOfBody",
                              ]
 
         return None
@@ -82,6 +81,10 @@ class LongitudinalStudy:
         self.masks[time_id] = {}
         
         for mask_source, mask_target in mask_mapping.items():
+            
+            if mask_source not in masks:
+                raise ValueError(f"{mask_source} is not part of the available masks: {masks.keys()}")
+            
             if mask_target not in self._valid_masks:
                 raise ValueError(f"{mask_target} is not a valid mask name. Please use one of: {self._valid_masks}")
             
