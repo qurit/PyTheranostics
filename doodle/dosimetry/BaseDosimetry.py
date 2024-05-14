@@ -133,8 +133,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
         
-        
-        
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
@@ -219,7 +217,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Computes Time-Integrated Activity over each source-organ.
         Steps: 
 
-            2.c For Bone-Marrow, if image-based, utilize atlas method.
+            2.c For Bone-Marrow, if image-based, utilize atlas method. TODO
             
             """
         decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h
@@ -238,6 +236,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     param_init=self.config["rois"][region]["param_init"]
                 )
 
+                # TODO: Bring plots outside of the main workflow.
                 plot_tac(
                     time = numpy.array(region_data["Time_hr"]),
                     activity = numpy.array(region_data["Activity_MBq"]),
