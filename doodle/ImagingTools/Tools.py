@@ -270,7 +270,7 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
         Dict[str, numpy.ndarray]: Dictionary of compliant masks.
     """
     # Available Mask Names:
-    mask_names = [name for name in mask_dataset[time_id]]
+    mask_names = [name for name in mask_dataset[time_id] if name != "WholeBody"] # Exclude Wholebody.
             
     # Disconnect tumor masks (if there is any overlap among them)
     tumor_labels = [region for region in requested_rois if "Lesion" in region]
@@ -286,22 +286,26 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     non_tumor_masks_aggregate: Dict[str, numpy.ndarray] = {
         region: (
             numpy.clip((mask_dataset[time_id][region]).astype(numpy.int8) - tumor_burden_mask.astype(numpy.int8), 0, 1)
-            ).astype(bool) for region in requested_rois if region not in tumor_labels
+            ).astype(bool) for region in mask_names if region not in tumor_labels
         }
     
     corrected_masks = ensure_masks_disconnect(original_masks=non_tumor_masks_aggregate)
     corrected_masks.update(tumors_masks)
     
+    # Generate Remainder of Body Mask:
+    remainder = numpy.ones_like(tumor_burden_mask) if "WholeBody" not in mask_dataset[time_id].keys() else mask_dataset[time_id]["WholeBody"]
+        
+    for _, mask in corrected_masks.items():
+        remainder -= mask
+        
+    corrected_masks["RemainderOfBody"] = numpy.clip(remainder, 0, 1)
     
-    # Generate Whole Body Mask = RemainderOfBody + All Masks.
-    whole_body = numpy.zeros_like(corrected_masks[mask_names[0]])
-    
+    # Generate Whole Body Mask:
+    whole_body = numpy.zeros_like(remainder)
     for _, mask in corrected_masks.items():
         whole_body += mask
-        
-    whole_body = numpy.clip(whole_body, 0, 1)
     
-    corrected_masks["WholeBody"] = whole_body
-        
+    corrected_masks["WholeBody"] = numpy.clip(whole_body, 0, 1)
+            
     return corrected_masks
                 
