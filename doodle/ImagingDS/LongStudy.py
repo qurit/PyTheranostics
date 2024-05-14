@@ -14,7 +14,8 @@ class LongitudinalStudy:
 
     def __init__(self, 
                  images: Dict[int, SimpleITK.Image],
-                 meta: Dict[int, MetaDataType]
+                 meta: Dict[int, MetaDataType],
+                 modality: str = "NM"
                  ) -> None:
         """
         images: Dictionary of (time-point ID, numpy array) representing CT or quantitative nuclear medicine images. 
@@ -23,9 +24,21 @@ class LongitudinalStudy:
         # TODO Consistency checks: verify that all time points are present in images, masks and meta.
         # TODO Consistency checks: verify that there are no missing masks across time points. 
 
+        if modality not in ["NM", "PT", "CT"]:
+            raise ValueError(f"Modality {modality} is not supported.")
+        
+        self.modality = modality
         self.images = images
-        self.masks:  Dict[int, Dict[str, numpy.ndarray]] = {}
+        self.masks:  Dict[int, Dict[str, numpy.ndarray]] = {}  # {time_id: {mask_name: array}}
         self.meta = meta
+        
+        # Mask mapping format:
+        self._valid_masks = ["Kidney_Left", "Kidney_Right", "Liver", "Spleen",
+                             "SubmandibularGland_Left", "SubmandibularGland_Right", "ParotidGland_Left", "ParotidGland_Right", 
+                             "BoneMarrow",
+                             "WholeBody",
+                             "RemainderOfBody",
+                             ]
 
         return None
     
@@ -37,18 +50,30 @@ class LongitudinalStudy:
 
     def array_of_activity_at(self, time_id: int, region: Optional[str] = None) -> numpy.ndarray:
         """Returns the array in units of activity in Bq, with the posibility of masking out for one specific region."""
+        if self.modality not in ["NM", "PT"]:
+            raise AssertionError(f"Activity can't be calculated from {self.modality} data.")
+            
         array = self.array_at(time_id=time_id)
         mask = self.masks[time_id][region] if region is not None else numpy.ones(shape=array.shape, dtype=numpy.int8)
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
-    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], strict: bool = True) -> None:
+    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Dict[str, str], strict: bool = True) -> None:
         """Add a Dictionary of masks for a given time point."""
         if time_id in self.masks:
             print(f"Warning: Masks for Time ID = {time_id} already exist. Overwriting them...")
 
-        self.masks[time_id] = masks
-
+        if len(mask_mapping) == 0:
+            raise ValueError(f"Mapping not found. Please indicate the mapping between the input masks names and the standard mask names in pyTheranostics: {self._valid_masks}")
+        
+        self.masks[time_id] = {}
+        
+        for mask_source, mask_target in mask_mapping.items():
+            if mask_target not in self._valid_masks:
+                raise ValueError(f"{mask_target} is not a valid mask name. Please use one of: {self._valid_masks}")
+            
+            self.masks[time_id][mask_target] = masks[mask_source]
+        
         if strict:
             self.check_masks_consistency()
 
@@ -61,7 +86,7 @@ class LongitudinalStudy:
     def activity_in(self, region: str, time_id: int) -> float:
         """Returns the activity within a region of interest. The units of the nuclear medicine data
         should be Bq/mL."""
-        if self.meta[time_id]["Radionuclide"] == "N/A":
+        if self.meta[time_id]["Radionuclide"] == "N/A" or self.modality not in ["NM", "PT"]:
             raise AssertionError("Can't compute activity if the image data does not represent the distribution of a radionuclide")
 
         return numpy.sum(self.masks[time_id][region] * self.array_at(time_id=time_id) * self.voxel_volume(time_id=time_id))
