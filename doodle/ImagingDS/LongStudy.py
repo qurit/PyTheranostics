@@ -58,14 +58,27 @@ class LongitudinalStudy:
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
-    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Dict[str, str], strict: bool = True) -> None:
-        """Add a Dictionary of masks for a given time point."""
+    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Optional[Dict[str, str]] = None, strict: bool = True) -> None:
+        """Add Masks to time point.
+
+        Args:
+            time_id (int): Index of time-point ID.
+            masks (Dict[str, numpy.ndarray]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_array}
+            mask_mapping (Optional[Dict[str, str]], optional): Mapping between masks names in input masks dictionary, and standard mask names in pyTheranostics. Defaults to None. If None, takes each name as is.
+            strict (bool, optional): Checks for masks consistency to ensure all masks are present in all time points. Defaults to True.
+
+        Raises:
+            ValueError: If mapping between user input masks and pyTheranostics standard mask names is invalid.
+
+        """
+        
         if time_id in self.masks:
             print(f"Warning: Masks for Time ID = {time_id} already exist. Overwriting them...")
 
-        if len(mask_mapping) == 0:
-            raise ValueError(f"Mapping not found. Please indicate the mapping between the input masks names and the standard mask names in pyTheranostics: {self._valid_masks}")
-        
+        # If mask mapping is not specified, utilize user defined names in masks Dictionary.
+        if mask_mapping is None:
+            mask_mapping = {mask_name: mask_name for mask_name in masks.keys()}        
+    
         self.masks[time_id] = {}
         
         for mask_source, mask_target in mask_mapping.items():
