@@ -24,7 +24,7 @@ class LongitudinalStudy:
         # TODO Consistency checks: verify that all time points are present in images, masks and meta.
         # TODO Consistency checks: verify that there are no missing masks across time points. 
 
-        if modality not in ["NM", "PT", "CT"]:
+        if modality not in ["NM", "PT", "CT", "DOSE"]:
             raise ValueError(f"Modality {modality} is not supported.")
         
         self.modality = modality

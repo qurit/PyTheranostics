@@ -72,7 +72,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.results = self.initialize()
 
         # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
-        self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
+        self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={}, modality="DOSE")  # Initialize to empty study.
     
     def extract_masks_and_correct_overlaps(self) -> None:
         """_summary_
@@ -97,8 +97,23 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.ct_data.masks.keys()}
         
-        # Add Remainder of Body info to Config. If no information about Whole-body was provided, use default mono-exp.
-        self.config["rois"]["RemainderOfBody"] = self.config["rois"]["WBCT"] if "WBCT" in self.config["rois"] else {"fit_order": 1, 'param_init': (1, 1)}
+        # Verify that masks in NM and CT data are consistent (i.e., there is a mask for each region in both domains):
+        self.check_nm_ct_masks()
+        
+        return None
+
+    def check_nm_ct_masks(self) -> None:
+        """ Checks that, for each time point, each region contains masks in both NM and CT datasets.
+        """
+        for time_id, nm_masks in self.nm_data.masks.items():
+            nm_masks_list = list(nm_masks.keys())
+            ct_masks_list = list(self.ct_data.masks[time_id].keys())
+            
+            if sorted(nm_masks_list) != sorted(ct_masks_list):
+                raise AssertionError(f"Found inconsistent masks at Time ID: {time_id}: \n"
+                                     f"NM: {sorted(nm_masks_list)} \n"
+                                     f"CT: {sorted(ct_masks_list)}")
+                
         return None
     
     def check_mandatory_fields(self) -> None:
