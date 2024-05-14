@@ -47,6 +47,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.config = config
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
+        if "Apply_biokinetics_from_previous_cycle" not in config:
+            self.config["Apply_biokinetics_from_previous_cycle"] = "No"  # By default.
+        else:
+            if self.config["Apply_biokinetics_from_previous_cycle"] not in ["Yes", "No"]:
+                raise ValueError(f"Invalid value for {self.config['Apply_biokinetics_from_previous_cycle']}")
+        
         # Store data
         self.patient_id = config["PatientID"] 
         self.cycle = config["Cycle"]
@@ -57,7 +63,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
-        self.apply_biokinetics_from_previous_cycle = config["Apply_biokinetics_from_previous_cycle"] 
+       
         
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
@@ -231,7 +237,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
-        if self.apply_biokinetics_from_previous_cycle == 'No':
+        if self.config["Apply_biokinetics_from_previous_cycle"] == 'No':
             for region, region_data in self.results.iterrows():
                 fit_params, residuals = fit_tac(
                     time=numpy.array(region_data["Time_hr"]),
@@ -269,7 +275,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             for key, values in tmp_tia_data.items():
                 self.results.loc[:, key] = values
                 
-        elif self.apply_biokinetics_from_previous_cycle == 'Yes':
+        else: # Must be Yes by construction.
             for region, region_data in self.results.iterrows():
                 
                 fit_params, residuals = fit_tac_with_fixed_biokinetics(
