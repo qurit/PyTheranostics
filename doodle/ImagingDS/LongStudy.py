@@ -36,6 +36,7 @@ class LongitudinalStudy:
         self._valid_masks = ["Kidney_Left", "Kidney_Right", "Liver", "Spleen", "Bladder",
                              "SubmandibularGland_Left", "SubmandibularGland_Right", "ParotidGland_Left", "ParotidGland_Right", 
                              "BoneMarrow",
+                             "Skeleton",
                              "WholeBody",
                              "RemainderOfBody"
                              ]
