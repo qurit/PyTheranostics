@@ -271,7 +271,7 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     """
 
     # Available Mask Names:
-    exclude = ["WholeBody", "RemainderOfBody"]
+    exclude = ["WholeBody", "RemainderOfBody", "BoneMarrow"]
     mask_names = [name for name in requested_rois if name not in exclude]
             
     # Disconnect tumor masks (if there is any overlap among them)
