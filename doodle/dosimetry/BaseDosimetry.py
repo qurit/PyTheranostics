@@ -348,6 +348,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.compute_tia()
         return None
         
+       
     def calculate_bed(self,
                       kinetic: str
                       ) -> None:
@@ -364,25 +365,43 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         organs = numpy.array(bed_df.index.unique())
         bed = {}
         
+        if self.apply_biokinetics_from_previous_cycle == 'No':
+            for organ in organs:
+                t_repair = self.radiobiology_dic[organ]['t_repair']
+                alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
+                AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+                if kinetic == 'monoexp':
+                    t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
+                    bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+                elif kinetic == 'biexp':
+                    mean_lambda_washout = (self.results.loc['Kidney_L_m']['Fit_params'][1] + self.results.loc['Kidney_R_m']['Fit_params'][1]) / 2
+                    mean_lambda_uptake = (self.results.loc['Kidney_L_m']['Fit_params'][2] + self.results.loc['Kidney_R_m']['Fit_params'][2]) / 2
+                    t_washout = numpy.log(2) /  mean_lambda_washout
+                    t_uptake = numpy.log(2) /  mean_lambda_uptake
+                    bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                                  ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                                  (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
 
-        for organ in organs:
-            t_repair = self.radiobiology_dic[organ]['t_repair']
-            alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-            AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
-            if kinetic == 'monoexp':
-                t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
-                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
-            elif kinetic == 'biexp':
-                mean_lambda_washout = (self.results.loc['Kidney_L_m']['Fit_params'][1] + self.results.loc['Kidney_R_m']['Fit_params'][1]) / 2
-                mean_lambda_uptake = (self.results.loc['Kidney_L_m']['Fit_params'][2] + self.results.loc['Kidney_R_m']['Fit_params'][2]) / 2
-                t_washout = numpy.log(2) /  mean_lambda_washout
-                t_uptake = numpy.log(2) /  mean_lambda_uptake
-                bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
-                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
-                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
+                print(f'{organ}', bed[organ])
+        
+        elif self.apply_biokinetics_from_previous_cycle == 'Yes':    
+            for organ in organs:
+                t_repair = self.radiobiology_dic[organ]['t_repair']
+                alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
+                AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+                if kinetic == 'monoexp':
+                    t_eff = numpy.log(2) / self.config["rois"][organ]["fixed_parameters"][0]
+                    bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+                elif kinetic == 'biexp':
+                    mean_lambda_washout = (self.config["rois"]['Kidney_L_m']["fixed_parameters"][0] + self.config["rois"]['Kidney_R_m']["fixed_parameters"][0]) / 2
+                    mean_lambda_uptake = (self.config["rois"]['Kidney_L_m']["fixed_parameters"][1] + self.config["rois"]['Kidney_R_m']["fixed_parameters"][1]) / 2
+                    t_washout = numpy.log(2) /  mean_lambda_washout
+                    t_uptake = numpy.log(2) /  mean_lambda_uptake
+                    bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                                  ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                                  (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
             
-            print(f'{organ}', bed[organ])
-            
+                print(f'{organ}', bed[organ])
         self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
 
     def save_images_and_masks_at(self, time_id: int) -> None:
