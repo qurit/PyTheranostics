@@ -77,23 +77,23 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # DataFrame storing results
         self.results = self.initialize()
 
+        # Sanity Checks:
+        self.sanity_checks(metric="Volume_CT_mL")
+        self.sanity_checks(metric="Activity_MBq")
+        
         # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
         self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={}, modality="DOSE")  # Initialize to empty study.
     
     def extract_masks_and_correct_overlaps(self) -> None:
         """_summary_
         """
-
-        # First check availability of requested rois in existing masks
-        for roi_name in self.config["rois"]:
-            if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
-                raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
-            
+        # Inform the user if some masks are unused and therefore excluded.
         for roi_name in self.nm_data.masks[0]:
             if roi_name not in self.config["rois"] and roi_name != "BoneMarrow":
                 print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
                       " configuration input file.\n")
                 continue
+            
         self.nm_data.masks = {time_id: extract_masks(
             time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.nm_data.masks.keys()}
@@ -102,6 +102,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.ct_data.masks.keys()}
         
+        # Check availability of requested rois in existing masks
+        for roi_name in self.config["rois"]:
+            if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
+                raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
+            
         # Verify that masks in NM and CT data are consistent (i.e., there is a mask for each region in both domains):
         self.check_nm_ct_masks()
         
@@ -224,6 +229,36 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
+    def sanity_checks(self, metric: str) -> None:
+        """Checks that metric in wholebody is equal to sum of metric in individual regions.
+        Note: currently excluding BoneMarrow.
+
+        Args:
+            metric (str): _description_
+        """
+        
+        if "BoneMarrow" in self.results.index:
+            tmp_results = self.results.drop("BoneMarrow", axis=0)
+        else:
+            tmp_results = self.results.copy()
+        
+        # TODO: add assertions, run it silently.
+        print(" -------------------------------   ")
+        print(f"Running Sanity Checks on: {metric}")
+        metric_data = tmp_results[metric].to_list()
+        times = tmp_results["Time_hr"].to_list()
+        
+        for time_id in range(len(metric_data[-1])):
+            whole_metric = metric_data[-1][time_id]
+            sum_metric = sum([vol[time_id] for vol in metric_data[:-1]])
+            print(f"At T = {times[0][time_id]:2.2f} hours:")
+            print(f" >>> WholeBody {metric}  = {whole_metric: 2.2f}")
+            print(f" >>> Regions {metric} = {sum_metric: 2.2f}")
+            print(f" >>> % Difference      = {(whole_metric - sum_metric) / whole_metric * 100:2.2f}")
+            print(" ")
+            
+        return None
+            
     def compute_tia(self) -> None:
         """Computes Time-Integrated Activity over each source-organ.
         Steps: 
@@ -271,9 +306,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
                 # Residence Time
                 tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
-
-            for key, values in tmp_tia_data.items():
-                self.results.loc[:, key] = values
                 
         else: # Must be Yes by construction.
             for region, region_data in self.results.iterrows():
