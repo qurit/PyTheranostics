@@ -37,6 +37,7 @@ class LongitudinalStudy:
                              "SubmandibularGland_Left", "SubmandibularGland_Right", "ParotidGland_Left", "ParotidGland_Right", 
                              "BoneMarrow",
                              "WholeBody",
+                             "RemainderOfBody"
                              ]
 
         return None
@@ -187,6 +188,9 @@ def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -
         LongitudinalStudy: _description_
     """
     # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
+    mod_supported = ["CT", "Lu177_SPECT"]
+    if modality not in mod_supported:
+        raise NotImplemented(f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}")
 
     images: Dict[int, Image] = {}
     metadata: Dict[int, MetaDataType] = {}
