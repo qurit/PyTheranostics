@@ -47,6 +47,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.config = config
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
+        if "Apply_biokinetics_from_previous_cycle" not in config:
+            self.config["Apply_biokinetics_from_previous_cycle"] = "No"  # By default.
+        else:
+            if self.config["Apply_biokinetics_from_previous_cycle"] not in ["Yes", "No"]:
+                raise ValueError(f"Invalid value for {self.config['Apply_biokinetics_from_previous_cycle']}")
+        
         # Store data
         self.patient_id = config["PatientID"] 
         self.cycle = config["Cycle"]
@@ -57,7 +63,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data = nm_data
         self.ct_data = ct_data
         self.clinical_data = clinical_data
-        self.apply_biokinetics_from_previous_cycle = config["Apply_biokinetics_from_previous_cycle"] 
+       
         
         if self.clinical_data is not None and self.clinical_data["PatientID"].unique()[0] != self.patient_id:
             raise AssertionError(f"Clinical Data does not correspond to patient specified by user.")
@@ -66,29 +72,28 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.radionuclide = self.check_nm_data()
 
         # Extract ROIs from user-specified list, and ensure there are no overlaps.
-        #self.extract_masks_and_correct_overlaps()
+        self.extract_masks_and_correct_overlaps()
         
         # DataFrame storing results
         self.results = self.initialize()
 
+        # Sanity Checks:
+        self.sanity_checks(metric="Volume_CT_mL")
+        self.sanity_checks(metric="Activity_MBq")
+        
         # Dose Maps: use LongitudinalStudy Data Structure to store dose maps and leverage built-in operations.
-        self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={})  # Initialize to empty study.
+        self.dose_map: LongitudinalStudy = LongitudinalStudy(images={}, meta={}, modality="DOSE")  # Initialize to empty study.
     
     def extract_masks_and_correct_overlaps(self) -> None:
         """_summary_
         """
-
-        # First check availability of requested rois in existing masks
-        for roi_name in self.config["rois"]:
-            if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
-                raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
-            
-            
+        # Inform the user if some masks are unused and therefore excluded.
         for roi_name in self.nm_data.masks[0]:
             if roi_name not in self.config["rois"] and roi_name != "BoneMarrow":
                 print(f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
                       " configuration input file.\n")
                 continue
+            
         self.nm_data.masks = {time_id: extract_masks(
             time_id=time_id, mask_dataset=self.nm_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.nm_data.masks.keys()}
@@ -97,8 +102,28 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id=time_id, mask_dataset=self.ct_data.masks, requested_rois=list(self.config["rois"].keys())
             ) for time_id in self.ct_data.masks.keys()}
         
-        # Add Remainder of Body info to Config. If no information about Whole-body was provided, use default mono-exp.
-        self.config["rois"]["RemainderOfBody"] = self.config["rois"]["WBCT"] if "WBCT" in self.config["rois"] else {"fit_order": 1, 'param_init': (1, 1)}
+        # Check availability of requested rois in existing masks
+        for roi_name in self.config["rois"]:
+            if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
+                raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
+            
+        # Verify that masks in NM and CT data are consistent (i.e., there is a mask for each region in both domains):
+        self.check_nm_ct_masks()
+        
+        return None
+
+    def check_nm_ct_masks(self) -> None:
+        """ Checks that, for each time point, each region contains masks in both NM and CT datasets.
+        """
+        for time_id, nm_masks in self.nm_data.masks.items():
+            nm_masks_list = list(nm_masks.keys())
+            ct_masks_list = list(self.ct_data.masks[time_id].keys())
+            
+            if sorted(nm_masks_list) != sorted(ct_masks_list):
+                raise AssertionError(f"Found inconsistent masks at Time ID: {time_id}: \n"
+                                     f"NM: {sorted(nm_masks_list)} \n"
+                                     f"CT: {sorted(ct_masks_list)}")
+                
         return None
     
     def check_mandatory_fields(self) -> None:
@@ -109,16 +134,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             print("No Reference Time point was given. Assigning time ID = 0")
             self.config["ReferenceTimePoint"] = 0
         
+        if "WholeBody" not in self.config["rois"]:
+            raise ValueError("Missing 'WholeBody' region parameters.")
+        
+        if "RemainderOfBody" not in self.config["rois"]:
+            raise ValueError("Missing 'RemainderOfBody' region parameters.")
+        
         return None
     
     def initialize(self) -> pandas.DataFrame:
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
-            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name != "WholeBody" and roi_name in self.config["rois"]
+            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
-        
-        
         
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
@@ -200,11 +229,41 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
+    def sanity_checks(self, metric: str) -> None:
+        """Checks that metric in wholebody is equal to sum of metric in individual regions.
+        Note: currently excluding BoneMarrow.
+
+        Args:
+            metric (str): _description_
+        """
+        
+        if "BoneMarrow" in self.results.index:
+            tmp_results = self.results.drop("BoneMarrow", axis=0)
+        else:
+            tmp_results = self.results.copy()
+        
+        # TODO: add assertions, run it silently.
+        print(" -------------------------------   ")
+        print(f"Running Sanity Checks on: {metric}")
+        metric_data = tmp_results[metric].to_list()
+        times = tmp_results["Time_hr"].to_list()
+        
+        for time_id in range(len(metric_data[-1])):
+            whole_metric = metric_data[-1][time_id]
+            sum_metric = sum([vol[time_id] for vol in metric_data[:-1]])
+            print(f"At T = {times[0][time_id]:2.2f} hours:")
+            print(f" >>> WholeBody {metric}  = {whole_metric: 2.2f}")
+            print(f" >>> Regions {metric} = {sum_metric: 2.2f}")
+            print(f" >>> % Difference      = {(whole_metric - sum_metric) / whole_metric * 100:2.2f}")
+            print(" ")
+            
+        return None
+            
     def compute_tia(self) -> None:
         """Computes Time-Integrated Activity over each source-organ.
         Steps: 
 
-            2.c For Bone-Marrow, if image-based, utilize atlas method.
+            2.c For Bone-Marrow, if image-based, utilize atlas method. TODO
             
             """
         decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h
@@ -213,7 +272,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
-        if self.apply_biokinetics_from_previous_cycle == 'No':
+        if self.config["Apply_biokinetics_from_previous_cycle"] == 'No':
             for region, region_data in self.results.iterrows():
                 fit_params, residuals = fit_tac(
                     time=numpy.array(region_data["Time_hr"]),
@@ -223,6 +282,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     param_init=self.config["rois"][region]["param_init"]
                 )
 
+                # TODO: Bring plots outside of the main workflow.
                 plot_tac(
                     time = numpy.array(region_data["Time_hr"]),
                     activity = numpy.array(region_data["Activity_MBq"]),
@@ -246,11 +306,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
                 # Residence Time
                 tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
-
-            for key, values in tmp_tia_data.items():
-                self.results.loc[:, key] = values
                 
-        elif self.apply_biokinetics_from_previous_cycle == 'Yes':
+        else: # Must be Yes by construction.
             for region, region_data in self.results.iterrows():
                 
                 fit_params, residuals = fit_tac_with_fixed_biokinetics(
@@ -373,8 +430,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
                 bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
             elif kinetic == 'biexp':
-                mean_lambda_washout = (self.results.loc['Kidney_L_m']['Fit_params'][1] + self.results.loc['Kidney_R_m']['Fit_params'][1]) / 2
-                mean_lambda_uptake = (self.results.loc['Kidney_L_m']['Fit_params'][2] + self.results.loc['Kidney_R_m']['Fit_params'][2]) / 2
+                mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
+                mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
                 t_washout = numpy.log(2) /  mean_lambda_washout
                 t_uptake = numpy.log(2) /  mean_lambda_uptake
                 bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 

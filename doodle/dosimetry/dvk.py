@@ -27,8 +27,8 @@ class DoseVoxelKernel:
 
         if ct is not None:
             # TODO: Handle erroneous scale-up of dose outside of body.
-            print("Warning -> Scaling dose by density will yield erroneous dose values in voxels outside whole-body. "
-                  "Please make sure whole-body mask is available.")
+            print("Warning -> Scaling dose by density will yield erroneous dose values in very low density voxels (e.g., air inside the body)."
+                  " Please use at your own risk")
             dose_mGy = self.weight_dose_by_density(dose_map=dose_mGy, ct=ct)
 
         return dose_mGy

@@ -1,12 +1,12 @@
 from doodle.dosimetry.BaseDosimetry import BaseDosimetry
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 
 import datetime
 import numpy
 import pandas
 import re
-from os import path
+from os import path, makedirs
 
 class OrganSDosimetry(BaseDosimetry):
     """Organ S Value Dosimetry Class. Takes Nuclear Medicine Data to perform Organ-level 
@@ -43,35 +43,30 @@ class OrganSDosimetry(BaseDosimetry):
     def prepare_data(self) -> None:
         """Creates .cas file that can be exported to Olinda/EXM."""
         self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
-        self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
-        self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIA_h']]
+        self.results_olinda = self.results_olinda.drop(["WholeBody"])
         
-        self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_a', 'Kidney_L_a']].sum() # TODO: change vois name for more generic
-        self.results_olinda = self.results_olinda.drop(['Kidney_R_a', 'Kidney_L_a'])
+        # Average Volume over time points.
+        self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))  
         
-        self.results_olinda.loc['Kidneys_mass'] = self.results_olinda.loc[['Kidney_R_m', 'Kidney_L_m']].sum() # TODO: change vois name for more generic
-        self.results_olinda = self.results_olinda.drop(['Kidney_R_m', 'Kidney_L_m'])
+        # Combine Kidneys.
+        kidneys = ['Kidney_Left', 'Kidney_Right']
+        self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[kidneys].sum()  
+        self.results_olinda = self.results_olinda.drop(kidneys)
         
-        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['Parotid_L_a', 'Parotid_R_a', 'Submandibular_L_a', 'Submandibular_R_a']].sum()
-        self.results_olinda = self.results_olinda.drop(['Parotid_L_a', 'Parotid_R_a', 'Submandibular_L_a', 'Submandibular_R_a'])
-    
-        self.results_olinda.loc['Salivary Glands_mass'] = self.results_olinda.loc[['Parotid_L_m', 'Parotid_R_m', 'Submandibular_L_m', 'Submandibular_R_m']].sum()
-        self.results_olinda = self.results_olinda.drop(['Parotid_L_m', 'Parotid_R_m', 'Submandibular_L_m', 'Submandibular_R_m'])
+        # Combine Salivary Glands.
+        sal_glands = ['ParotidGland_Left', 'ParotidGland_Right', 'SubmandibularGland_Left', 'SubmandibularGland_Right']
+        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[sal_glands].sum()
+        self.results_olinda = self.results_olinda.drop(sal_glands)
 
-        organs = self.results_olinda.index[self.results_olinda.index != 'WBCT']
-        self.results_olinda.loc['WBCT'] = self.results_olinda.loc['WBCT'] - numpy.sum(self.results_olinda.loc[organs])
-
+        # Rename
         self.results_olinda = self.results_olinda.rename(index={'Bladder': 'Urinary Bladder Contents', 
-                                                  'Skeleton': 'Cortical Bone', 
-                                                  'WBCT': 'Total Body',
-                                                  'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
-        
-        self.results_olinda.loc['Salivary Glands']['Volume_CT_mL'] = self.results_olinda.loc['Salivary Glands_mass']['Volume_CT_mL']
-        self.results_olinda.loc['Kidneys']['Volume_CT_mL'] = self.results_olinda.loc['Kidneys_mass']['Volume_CT_mL']
+                                                                'Skeleton': 'Cortical Bone', 
+                                                                'RemainderOfBody': 'Total Body',
+                                                                'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
+        # BoneMarrow volume.
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
-        self.results_olinda = self.results_olinda.drop(['Salivary Glands_mass'])
-        self.results_olinda = self.results_olinda.drop(['Kidneys_mass'])
-        
+
+        return None
     
     def create_output_file(self, 
                            dirname: str, 
