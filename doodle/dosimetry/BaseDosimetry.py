@@ -416,3 +416,87 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data.save_masks_to_nii_at(time_id=time_id, out_path=self.db_dir, regions=self.config["rois"])
         
         return None
+    
+
+    def update_json_data(file_path):
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+            
+        data["PatientID"] = self.config["PatientID"]
+        data["Gender"] = self.config["Gender"]
+        data["No_of_completed_cycles"] = self.config["Cycle"]
+
+        cycle_key = f"Cycle_{self.config['Cycle']:02d}"
+
+        if cycle_key not in data:
+            data[cycle_key] = [{}]
+
+        cycle = data[cycle_key][0]
+        cycle["CycleNumber"] = self.config["Cycle"]
+        cycle["Operator"] = self.config["Operator"]
+        cycle["DatabaseDir"] = self.config["DatabaseDir"]
+        cycle["InjectionDate"] = self.config["InjectionDate"]
+        cycle["InjectionTime"] = self.config["InjectionTime"]
+        cycle["InjectedActivity"] = self.config["InjectedActivity"]
+        cycle["ApplyBiokineticsFromPreviousCycle"] = self.config.get("ApplyBiokineticsFromPreviousCycle", cycle.get("ApplyBiokineticsFromPreviousCycle", "NA"))
+        cycle["Level"] = self.config["Level"]
+        cycle["Method"] = self.config["Method"]
+        cycle["OutputFormat"] = self.config["OutputFormat"]
+        cycle["ScaleDoseByDensity"] = self.config.get("ScaleDoseByDensity", cycle.get("ScaleDoseByDensity", "NA"))
+        cycle["ReferenceTimePoint"] = self.config["ReferenceTimePoint"]
+        cycle["TimePoints_h"] = self.results['Time_hr'][0]
+
+
+
+        for organ in self.config["rois"].items():
+            cycle["rois"][organ]["volumes_mL"]["different_tps"] = self.results.loc[organ, 'Volume_CT_mL']
+            cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["volumes_mL"]["mean"] = "NA"
+            cycle["rois"][organ]["volumes_mL"]["mean_uncertainty"] = "NA"
+            cycle["rois"][organ]["activity_MBq"]["values"] = "NA"
+            cycle["rois"][organ]["activity_MBq"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["doserate_MBq_per_h"]["values"] = "NA"
+            cycle["rois"][organ]["doserate_MBq_per_h"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
+            cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["density_gml"]["mean"] = "NA"
+            cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
+            cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
+            cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"        
+            cycle["rois"][organ]["mass_g"]["mean"] = "NA"
+            cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
+            cycle["rois"][organ]["fitting_eq"] = self.config["fit_order"]
+            cycle["rois"][organ]["no_of_fit_params"] = "NA"
+            cycle["rois"][organ]["fit_params"] = "NA"
+            cycle["rois"][organ]["fit_params_uncertainty"] = "NA"
+            cycle["rois"][organ]["R_2"] = "NA"
+            cycle["rois"][organ]["AIC"] = "NA"
+            cycle["rois"][organ]["TIA_MBqh"] = "NA"
+            cycle["rois"][organ]["TIA_MBqh_uncertainty"] = "NA"
+            cycle["rois"][organ]["TIA_h"] = "NA"
+            cycle["rois"][organ]["TIA_h_uncertainty"] = "NA"
+            cycle["rois"][organ]["mean_AD_Gy"] = "NA"
+            cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
+            cycle["rois"][organ]["min_AD_Gy"] = "NA"
+            cycle["rois"][organ]["max_AD_Gy"] = "NA"
+            cycle["rois"][organ]["peak_AD_Gy"] = "NA"
+            cycle["rois"][organ]["repair_halflife"] = "NA"
+            cycle["rois"][organ]["alpha_beta"] = "NA"
+            cycle["rois"][organ]["BED_Gy"] = "NA"
+            cycle["rois"][organ]["BED_Gy_uncertainty"] = "NA"        
+
+        with open(file_path, 'w') as file:
+            json.dump(data, file, indent=4)
+
+        
+
+    ##%%
+    #file_path = '/Users/sarakurkowska/Downloads/dosimetry_data_dummy.json'
+    #json_data = load_json_file(file_path)
+    #updated_data = update_json_data(json_data, config)
+    #save_json_file(updated_data, file_path)
+    #print("JSON file updated successfully.")
+
+
+
+
