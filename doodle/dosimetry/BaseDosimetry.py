@@ -47,11 +47,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.config = config
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
-        if "Apply_biokinetics_from_previous_cycle" not in config:
-            self.config["Apply_biokinetics_from_previous_cycle"] = "No"  # By default.
-        else:
-            if self.config["Apply_biokinetics_from_previous_cycle"] not in ["Yes", "No"]:
-                raise ValueError(f"Invalid value for {self.config['Apply_biokinetics_from_previous_cycle']}")
+        #if "Apply_biokinetics_from_previous_cycle" not in config:
+        #    self.config["Apply_biokinetics_from_previous_cycle"] = "No"  # By default.
+        #else:
+        #    if self.config["Apply_biokinetics_from_previous_cycle"] not in ["Yes", "No"]:
+        #        raise ValueError(f"Invalid value for {self.config['Apply_biokinetics_from_previous_cycle']}")
+        #
+        #self.apply_biokinetics_from_previous_cycle = self.config["Apply_biokinetics_from_previous_cycle"]
         
         # Store data
         self.patient_id = config["PatientID"] 
@@ -272,8 +274,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
-        if self.config["Apply_biokinetics_from_previous_cycle"] == 'No':
-            for region, region_data in self.results.iterrows():
+        for region, region_data in self.results.iterrows():
+            
+            if self.config["rois"][region]["apply_biokinetics_from_previous_cycle"] == False:
+
                 fit_params, residuals = fit_tac(
                     time=numpy.array(region_data["Time_hr"]),
                     activity=numpy.array(region_data["Activity_MBq"]),
@@ -281,7 +285,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     exp_order=self.config["rois"][region]["fit_order"],
                     param_init=self.config["rois"][region]["param_init"]
                 )
-
                 # TODO: Bring plots outside of the main workflow.
                 plot_tac(
                     time = numpy.array(region_data["Time_hr"]),
@@ -292,23 +295,19 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     organ = region, 
                     xlabel = 't (hours)', 
                     ylabel = 'A (MBq)')
-
                 # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
                 tmp_tia_data["Fit_params"].append(fit_params)
-
                 # Calculate Integral
                 tmp_tia_data["TIA_MBq_h"].append(
                     self.numerical_integrate(fit_params[:-1])
                 )
-
                 # Lambda effective 
                 tmp_tia_data["Lambda_eff"].append(fit_params[1])
-
                 # Residence Time
                 tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
                 
-        else: # Must be Yes by construction.
-            for region, region_data in self.results.iterrows():
+            if self.config["rois"][region]["apply_biokinetics_from_previous_cycle"] == True:
+
                 
                 fit_params, residuals = fit_tac_with_fixed_biokinetics(
                     time=numpy.array(region_data["Time_hr"]),
@@ -372,7 +371,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.results.loc[:, key] = values
 
         return None
-    
+
     def numerical_integrate(self, exp_params: List[float]) -> float:
         """Perform numerical integration of exponential function"""
         if len(exp_params) < 3:
@@ -422,11 +421,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         organs = numpy.array(bed_df.index.unique())
         bed = {}
         
-        if self.apply_biokinetics_from_previous_cycle == 'No':
-            for organ in organs:
-                t_repair = self.radiobiology_dic[organ]['t_repair']
-                alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-                AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+        for organ in organs:
+            t_repair = self.radiobiology_dic[organ]['t_repair']
+            alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
+            AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+            if self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == False:
                 if kinetic == 'monoexp':
                     t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
                     bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
@@ -438,14 +437,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
                                   ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
                                   (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
-
                 print(f'{organ}', bed[organ])
         
-        elif self.apply_biokinetics_from_previous_cycle == 'Yes':    
-            for organ in organs:
-                t_repair = self.radiobiology_dic[organ]['t_repair']
-                alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-                AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
+            elif self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == True:
                 if kinetic == 'monoexp':
                     t_eff = numpy.log(2) / self.config["rois"][organ]["fixed_parameters"][0]
                     bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
@@ -458,7 +452,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                                   ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
                                   (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
             
-                print(f'{organ}', bed[organ])
+                print(f'{organ}', bed[organ])                          
         self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
 
     def save_images_and_masks_at(self, time_id: int) -> None:
@@ -552,7 +546,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
             cycle["rois"][organ]["fitting_eq"] = self.config["rois"][organ]["fit_order"]
             cycle["rois"][organ]["no_of_fit_params"] = "NA"
-            cycle["rois"][organ]["fit_params"] = self.results.loc[organ, 'Fit_params'][:-1]
+            cycle["rois"][organ]["fit_params"] = list(self.results.loc[organ, 'Fit_params'][:-1])
             cycle["rois"][organ]["fit_params_uncertainty"] = "NA"
             cycle["rois"][organ]["R_2"] = self.results.loc[organ, 'Fit_params'][-1]
             cycle["rois"][organ]["AIC"] = "NA"
