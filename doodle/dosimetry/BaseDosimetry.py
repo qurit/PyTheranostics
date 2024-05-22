@@ -417,8 +417,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
-
-    def update_json_data(file_path):
+    def update_json_data(self, file_path):
         with open(file_path, 'r') as file:
             data = json.load(file)
             
@@ -448,12 +447,41 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
 
 
-        for organ in self.config["rois"].items():
+        for organ in self.config["rois"].keys():
+            
+            if organ not in cycle["rois"]:
+                cycle["rois"][organ] = {
+                    "volumes_mL": {},
+                    "activity_MBq": {},
+                    "doserate_MBq_per_h": {},
+                    "density_gml": {},
+                    "mass_g": {},
+                    "fitting_eq": {},
+                    "no_of_fit_params": {},
+                    "fit_params": {},
+                    "fit_params_uncertainty": {},
+                    "R_2": {},
+                    "AIC": {},
+                    "TIA_MBqh": {},
+                    "TIA_MBqh_uncertainty": {},
+                    "TIA_h": {},
+                    "TIA_h_uncertainty": {},
+                    "mean_AD_Gy": {},
+                    "mean_AD_Gy_uncertainty": {},
+                    "min_AD_Gy": {},
+                    "max_AD_Gy": {},
+                    "peak_AD_Gy": {},
+                    "repair_halflife": {},
+                    "alpha_beta": {},
+                    "BED_Gy": {},
+                    "BED_Gy_uncertainty": {}
+                }
+                
             cycle["rois"][organ]["volumes_mL"]["different_tps"] = self.results.loc[organ, 'Volume_CT_mL']
             cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
-            cycle["rois"][organ]["volumes_mL"]["mean"] = "NA"
+            cycle["rois"][organ]["volumes_mL"]["mean"] = numpy.mean(self.results.loc[organ, 'Volume_CT_mL'])
             cycle["rois"][organ]["volumes_mL"]["mean_uncertainty"] = "NA"
-            cycle["rois"][organ]["activity_MBq"]["values"] = "NA"
+            cycle["rois"][organ]["activity_MBq"]["values"] = self.results.loc[organ, 'Activity_MBq']
             cycle["rois"][organ]["activity_MBq"]["uncertainty"] = "NA"
             cycle["rois"][organ]["doserate_MBq_per_h"]["values"] = "NA"
             cycle["rois"][organ]["doserate_MBq_per_h"]["uncertainty"] = "NA"
@@ -465,15 +493,15 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"        
             cycle["rois"][organ]["mass_g"]["mean"] = "NA"
             cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
-            cycle["rois"][organ]["fitting_eq"] = self.config["fit_order"]
+            cycle["rois"][organ]["fitting_eq"] = self.config["rois"][organ]["fit_order"]
             cycle["rois"][organ]["no_of_fit_params"] = "NA"
-            cycle["rois"][organ]["fit_params"] = "NA"
+            cycle["rois"][organ]["fit_params"] = self.results.loc[organ, 'Fit_params'][:-1]
             cycle["rois"][organ]["fit_params_uncertainty"] = "NA"
-            cycle["rois"][organ]["R_2"] = "NA"
+            cycle["rois"][organ]["R_2"] = self.results.loc[organ, 'Fit_params'][-1]
             cycle["rois"][organ]["AIC"] = "NA"
-            cycle["rois"][organ]["TIA_MBqh"] = "NA"
+            cycle["rois"][organ]["TIA_MBqh"] = self.results.loc[organ, 'TIA_MBq_h'][0]
             cycle["rois"][organ]["TIA_MBqh_uncertainty"] = "NA"
-            cycle["rois"][organ]["TIA_h"] = "NA"
+            cycle["rois"][organ]["TIA_h"] = self.results.loc[organ, 'TIA_h']
             cycle["rois"][organ]["TIA_h_uncertainty"] = "NA"
             cycle["rois"][organ]["mean_AD_Gy"] = "NA"
             cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
@@ -482,21 +510,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             cycle["rois"][organ]["peak_AD_Gy"] = "NA"
             cycle["rois"][organ]["repair_halflife"] = "NA"
             cycle["rois"][organ]["alpha_beta"] = "NA"
-            cycle["rois"][organ]["BED_Gy"] = "NA"
+            #cycle["rois"][organ]["BED_Gy"] = self.df_ad.loc[organ, 'BED[Gy]']
             cycle["rois"][organ]["BED_Gy_uncertainty"] = "NA"        
 
         with open(file_path, 'w') as file:
             json.dump(data, file, indent=4)
-
-        
-
-    ##%%
-    #file_path = '/Users/sarakurkowska/Downloads/dosimetry_data_dummy.json'
-    #json_data = load_json_file(file_path)
-    #updated_data = update_json_data(json_data, config)
-    #save_json_file(updated_data, file_path)
-    #print("JSON file updated successfully.")
-
-
-
-
