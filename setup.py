@@ -20,6 +20,6 @@ setup(name='DOODLE',
         'doodle.shared'],
       include_package_data=True,
       install_requires = [
-          'numpy','matplotlib','pandas==1.5.3','pydicom','openpyxl','rt_utils','scikit-image', 'simpleitk'
+          'numpy','matplotlib','pandas','pydicom','openpyxl','rt_utils','scikit-image', 'simpleitk','sphinx'
       ],
       zip_safe=False)
