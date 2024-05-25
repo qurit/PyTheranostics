@@ -23,16 +23,16 @@ class PhantomToCTBoneReg:
     
     def __init__(self,
                  CT_dcm_dir: Path,
-                 phantom_bone_dcm_dir: Path = Path("../data/bone_phantom")) -> None:
+                 phantom_skeleton_path: Path = Path("../data/phantom/skeleton/Skeleton.nii.gz")) -> None:
         
         self.CT = sitk_load_dcm_series(dcm_dir=CT_dcm_dir)
-        self.Phantom = sitk_load_dcm_series(dcm_dir=phantom_bone_dcm_dir)  # **
+        self.Phantom = SimpleITK.ReadImage(fileName=phantom_skeleton_path)
 
         # Set Origin for Phantom to that of reference CT.
-        self.Phantom.SetOrigin(self.CT.GetOrigin())  # **
+        self.Phantom.SetOrigin(self.CT.GetOrigin())
 
         # Threshold phantom and CT to get bone anatomy.
-        self.Phantom = SimpleITK.Cast(self.Phantom > 0, SimpleITK.sitkFloat32)  # **
+        self.Phantom = SimpleITK.Cast(self.Phantom > 0, SimpleITK.sitkFloat32)
         self.CT = SimpleITK.Cast(self.CT > 100, SimpleITK.sitkFloat32)
 
         # Instance of Rigid and Elastic Registration Algorithms
@@ -166,9 +166,9 @@ class PhantomToCTBoneReg:
         
     def register_mask(self, 
                       fixed_image: SimpleITK.SimpleITK.Image, 
-                      mask_dcm_dir: Path = Path("../data/bone_marrow")
+                      mask_path: Path = Path("../data/phantom/bone_marrow/Marrow.nii.gz")
                  ) -> SimpleITK.SimpleITK.Image:
-        mask_image = sitk_load_dcm_series(dcm_dir=mask_dcm_dir)
+        mask_image = SimpleITK.ReadImage(fileName=mask_path)
         mask_image.SetOrigin(fixed_image.GetOrigin())
         mask_image = SimpleITK.Cast(mask_image, SimpleITK.sitkFloat32)
 
