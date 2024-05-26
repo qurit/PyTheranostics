@@ -28,7 +28,7 @@ jobs:
 
     - name: Build Sphinx documentation
       run: |
-        cd docs
+        cd doodle/docs
         make html
 
     - name: Upload Sphinx documentation
