@@ -20,6 +20,6 @@ setup(name='DOODLE',
         'doodle.shared'],
       include_package_data=True,
       install_requires = [
-          'numpy','matplotlib','pandas','pydicom','openpyxl','rt_utils','scikit-image', 'simpleitk','sphinx','sphinx-autodoc-typehints'
+          'numpy','matplotlib','pandas','pydicom','openpyxl','rt_utils','scikit-image', 'simpleitk','sphinx','sphinx-autodoc-typehints','sphinx_rtd_theme'
       ],
       zip_safe=False)
