@@ -2,3 +2,5 @@
 
 # PyTheranostics
 A software package to accelerate research in personalized theranostics with preclinical and clinical dosimetry
+
+[Documentation](https://docs.pytheranostics.qurit.ca/)
