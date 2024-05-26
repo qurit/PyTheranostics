@@ -1,12 +1,12 @@
 from doodle.dosimetry.BaseDosimetry import BaseDosimetry
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 
 import datetime
 import numpy
 import pandas
 import re
-from os import path
+from os import path, makedirs
 
 class OrganSDosimetry(BaseDosimetry):
     """Organ S Value Dosimetry Class. Takes Nuclear Medicine Data to perform Organ-level 
@@ -42,25 +42,31 @@ class OrganSDosimetry(BaseDosimetry):
         
     def prepare_data(self) -> None:
         """Creates .cas file that can be exported to Olinda/EXM."""
-        self.results_olinda = self.results[['Volume_CT_mL', 'TIAC_h']].copy()
-        self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
-        self.results_olinda = self.results_olinda[['Volume_CT_mL', 'TIAC_h']]
+        self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
+        self.results_olinda = self.results_olinda.drop(["WholeBody"])
         
-        self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[['Kidney_R_m', 'Kidney_L_m']].sum() # TODO: change vois name for more generic
-        self.results_olinda = self.results_olinda.drop(['Kidney_R_m', 'Kidney_L_m'])
+        # Average Volume over time points.
+        self.results_olinda['Volume_CT_mL'] = self.results_olinda['Volume_CT_mL'].apply(lambda x: numpy.mean(x))  
         
-        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR']].sum() # TODO: change vois name for more generic
-        self.results_olinda = self.results_olinda.drop(['ParotidglandL', 'ParotidglandR', 'SubmandibularglandL', 'SubmandibularglandR'])
+        # Combine Kidneys.
+        kidneys = ['Kidney_Left', 'Kidney_Right']
+        self.results_olinda.loc['Kidneys'] = self.results_olinda.loc[kidneys].sum()  
+        self.results_olinda = self.results_olinda.drop(kidneys)
+        
+        # Combine Salivary Glands.
+        sal_glands = ['ParotidGland_Left', 'ParotidGland_Right', 'SubmandibularGland_Left', 'SubmandibularGland_Right']
+        self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[sal_glands].sum()
+        self.results_olinda = self.results_olinda.drop(sal_glands)
 
-        organs = self.results_olinda.index[self.results_olinda.index != 'WBCT']
-        self.results_olinda.loc['WBCT'] = self.results_olinda.loc['WBCT'] - numpy.sum(self.results_olinda.loc[organs])
-
-        self.results_olinda = self.results_olinda.rename(index={'Bladder_Experimental': 'Urinary Bladder Contents', 
-                                                  'Skeleton': 'Cortical Bone', 
-                                                  'WBCT': 'Total Body',
-                                                  'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
-        
+        # Rename
+        self.results_olinda = self.results_olinda.rename(index={'Bladder': 'Urinary Bladder Contents', 
+                                                                'Skeleton': 'Cortical Bone', 
+                                                                'RemainderOfBody': 'Total Body',
+                                                                'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
+        # BoneMarrow volume.
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
+
+        return None
     
     def create_output_file(self, 
                            dirname: str, 
@@ -84,7 +90,7 @@ class OrganSDosimetry(BaseDosimetry):
         elif self.config["Gender"] == "Female":
             template=pandas.read_csv(path.join(TEMPLATE_PATH,'adult_female.cas'))
         else:
-            print('Ensure that you correctly wrote patient gender in config file. We support: Male and Female.')
+            print('Ensure that you correctly wrote patient gender in config file. Olinda supports: Male and Female.')
         
         template.columns=['Data']
         match = re.match(r"([a-zA-Z]+)([0-9]+)", self.config["Radionuclide"])
@@ -99,7 +105,7 @@ class OrganSDosimetry(BaseDosimetry):
 
             source_organ = template.iloc[indices[0]].str.split('|')[0][0]
             mass_phantom = template.iloc[indices[0]].str.split('|')[0][1]
-            kinetic_data = self.results_olinda.loc[organ]['TIAC_h']
+            kinetic_data = self.results_olinda.loc[organ]['TIA_h']
             mass_data = round(self.results_olinda.loc[organ]['Volume_CT_mL'], 1)
 
             # Update the template DataFrame
@@ -152,7 +158,7 @@ class OrganSDosimetry(BaseDosimetry):
                         stripped_line = stripped_line.replace('Effective Dose', 'Effective Dose,,,,')
                     stripped_line = stripped_line.rstrip(',')
                     data.append(stripped_line.split(','))
-        
+                
         if not data:
             print('No relevant data found in the file.')
             return
@@ -168,8 +174,7 @@ class OrganSDosimetry(BaseDosimetry):
         
 
     def compute_dose(self):
-        #self.exlude_lesions_from_healthy_organs() # TODO: add that method in BaseDosimetry
-        self.compute_tiac()
+        self.compute_tia()
         self.prepare_data()
         
         
