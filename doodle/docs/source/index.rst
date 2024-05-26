@@ -27,7 +27,7 @@ Whether you're a beginner or an advanced user, you'll find something useful in o
    :caption: Getting Started
 
    installation
-   quickstart
+   .. quickstart
 
 .. toctree::
    :maxdepth: 2
@@ -40,8 +40,6 @@ Whether you're a beginner or an advanced user, you'll find something useful in o
    :caption: Modules
 
    modules
-
-
 
 .. toctree::
    :maxdepth: 1
