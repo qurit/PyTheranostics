@@ -128,6 +128,7 @@ class DicomModify():
 
 def dicom_slope_intercept(img):
     """This function calculates the slope and intercept for a DICOM image in the way that GE does it.
+        
         GE PET images are stored in DICOM files that are signed int16.  This allows for a maximum value of 32767.  
         The slope is calculated such that the maximum value in the pixel array (before multiplying by slope) is 32767. 
     
@@ -139,10 +140,12 @@ def dicom_slope_intercept(img):
     Returns
     -------
         slope: float
-         the slope to be set in the dicom header
+            The slope to be set in the dicom header
 
         intercept: float
-         the intercept for the dicom header"""
+            The intercept for the dicom header
+            
+    """
 
 
     max_val = np.max(img)
