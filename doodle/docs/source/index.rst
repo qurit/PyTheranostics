@@ -29,7 +29,7 @@ Whether you're a beginner or an advanced user, you'll find something useful in o
    :hidden:
 
    intro/overview
-      intro/installation
+   intro/installation
 
 .. toctree::
    :maxdepth: 2
