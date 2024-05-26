@@ -5,7 +5,7 @@ from doodle.dosimetry.BaseDosimetry import BaseDosimetry
 
 class BaseUncertainty(metaclass=abc.ABCMeta):
     """Base Uncertainty Class. Holds the basic definitions to sample realizations of each component of the
-    dosimetry workflow, based on pre-determined uncertainty.
+    dosimetry workflow.
 
     """
     
@@ -21,12 +21,7 @@ class BaseUncertainty(metaclass=abc.ABCMeta):
     
     
     @abc.abstractmethod
-    def estimate_uncertainty(self, num_realizations: int = 100) -> None:
-        """Abstract base method which that orchestrates the uncertainty estimation. Should run the 'simulation' of
-        a dosimetry workflow, sampling each measured quantity according to its uncertainty.
-
-        Args:
-            num_realizations (int, optional): Number of simulations. Defaults to 100.
-
+    def estimate_uncertainty(self) -> None:
+        """Abstract base method which orchestrates the uncertainty estimation.
         """
         return None

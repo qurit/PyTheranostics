@@ -292,8 +292,6 @@ def body_masks(masks: Dict[str, numpy.ndarray], whole_body_mask: numpy.ndarray) 
     
     return masks
     
-    
-
 def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]], requested_rois: List[str]) -> Dict[str, numpy.ndarray]:
     """Extract masks from NM dataset, according to user-defined list. Enforce that masks are disconnected.
         Constrains: 

@@ -9,8 +9,6 @@ class AnalyticalUncertainty(BaseUncertainty):
         Gear, J.I., Cox, M.G., Gustafsson, J. et al. EANM practical guidance on uncertainty analysis for molecular radiotherapy absorbed dose calculations. 
         Eur J Nucl Med Mol Imaging 45, 2456–2474 (2018). https://doi.org/10.1007/s00259-018-4136-7
 
-    Args:
-        BaseUncertainty (_type_): _description_
     """
     
     def __init__(self, unc_config: Dict[str, Any], dose: BaseDosimetry) -> None:
