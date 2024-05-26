@@ -29,10 +29,7 @@ Whether you're a beginner or an advanced user, you'll find something useful in o
    :hidden:
 
    intro/overview
-
-
-   installation
-   .. quickstart
+      intro/installation
 
 .. toctree::
    :maxdepth: 2
@@ -44,7 +41,7 @@ Whether you're a beginner or an advanced user, you'll find something useful in o
    :maxdepth: 2
    :caption: API
 
-   modules
+   API/modules
 
 .. toctree::
    :maxdepth: 1
@@ -64,8 +61,8 @@ Acknowledgements
 
 We would like to thank the following contributors for their work on this project:
 ..  contributors:: qurit/PyTheranostics
-   :avatars:
-   :exclude: dependabot[bot] 
+:avatars:
+:exclude: dependabot[bot] 
 
 .. footer::
 
