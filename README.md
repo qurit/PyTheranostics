@@ -1,2 +1,2 @@
-# doodle
-3D dOsimetry fOr raDiopharmaceuticaL thErapies
+# PyTheranostics
+A software packate to accelerate research in personalized theranostics with preclinical and clinical dosimetry
