@@ -14,17 +14,22 @@ Welcome to the documentation for Pytheranostics!
 Overview
 --------
 
-We believe that the full potential of theranostics has not yet been achieved. There is still much to be done to improve the accuracy and efficiency of radiopharmaceutical therapies. We see a future where theranostics is personalized and precise, where patients receive the right treatment at the right time. To help us get there, we've developed Pytheranostics. 
+We believe that the full potential of `theranostics`_ has not yet been achieved. There is still much to be done to improve the accuracy and efficiency of radiopharmaceutical therapies. We see a future where theranostics is personalized and precise, where patients receive the right treatment at the right time. To help us get there, we've developed Pytheranostics. 
 
 Pytheranostics is a Python package that provides a comprehensive set of tools for theranostics research. It is designed to be user-friendly, efficient, and flexible, allowing you to perform a wide range of tasks with ease.
 Whether you're a beginner or an advanced user, you'll find something useful in our comprehensive documentation.
+
+.. _theranostics: https://en.wikipedia.org/wiki/Theranostics
 
 .. note::
    For the latest updates, visit our `GitHub repository <https://github.com/qurit/PyTheranostics>`_.
 
 .. toctree::
-   :maxdepth: 2
    :caption: Getting Started
+   :hidden:
+
+   intro/overview
+
 
    installation
    .. quickstart
@@ -37,7 +42,7 @@ Whether you're a beginner or an advanced user, you'll find something useful in o
 
 .. toctree::
    :maxdepth: 2
-   :caption: Modules
+   :caption: API
 
    modules
 
