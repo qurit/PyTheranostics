@@ -4,3 +4,4 @@ nbsphinx
 nbconvert
 pandoc
 sphinx-contributors
+sphinx-copybutton
