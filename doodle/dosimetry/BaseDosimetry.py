@@ -61,7 +61,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.check_patient_in_db() # TODO: Traceability/database?
 
         self.nm_data = nm_data
+        self.nm_data.check_masks_consistency()
+        
         self.ct_data = ct_data
+        self.ct_data.check_masks_consistency()
+        
         self.clinical_data = clinical_data
        
         
@@ -146,8 +150,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         
         tmp_results: Dict[str, List[float]] = {
-            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name in self.config["rois"]
-            }  # BoneMarrow is a special case.
+            roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name in self.config["rois"]
+            } 
         
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
@@ -185,7 +189,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def initialize_bone_marrow(self, temp_results: Dict[str, List[float]]) -> Dict[str, List[float]]:
         """Initialize activity and times for Bone-Marrow blood-based measurements"""
         
-        if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None:
+        if "BoneMarrow" in self.config["rois"] and self.clinical_data is not None and "BoneMarrow" not in self.nm_data.masks[0]:
             
             # Computing blood-based method -> Scale activity concentration in blood 
             # to activity in Bone-Marrow, using ICRP phantom mass and haematocrit.
@@ -237,7 +241,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             metric (str): _description_
         """
         
-        if "BoneMarrow" in self.results.index:
+        if "BoneMarrow" in self.results.index and "BoneMarrow" not in self.nm_data.masks[0].keys():
             tmp_results = self.results.drop("BoneMarrow", axis=0)
         else:
             tmp_results = self.results.copy()

@@ -1,6 +1,5 @@
 import SimpleITK
 from pathlib import Path
-from doodle.dicomtools.dicomtools import sitk_load_dcm_series
 from typing import Optional
 from SimpleITK.SimpleITK import Transform
 from doodle.registration.demons import multiscale_demons
@@ -22,10 +21,11 @@ class PhantomToCTBoneReg:
     """
     
     def __init__(self,
-                 CT_dcm_dir: Path,
-                 phantom_skeleton_path: Path = Path("../data/phantom/skeleton/Skeleton.nii.gz")) -> None:
+                 CT: SimpleITK.Image,
+                 phantom_skeleton_path: Path = Path("../data/phantom/skeleton/Skeleton.nii.gz"),
+                 verbose: bool = False) -> None:
         
-        self.CT = sitk_load_dcm_series(dcm_dir=CT_dcm_dir)
+        self.CT = SimpleITK.Image(CT) # Make a Copy.
         self.Phantom = SimpleITK.ReadImage(fileName=phantom_skeleton_path)
 
         # Set Origin for Phantom to that of reference CT.
@@ -39,6 +39,8 @@ class PhantomToCTBoneReg:
         self.InitialTransform: Optional[Transform] = None
         self.RigidTransform: Optional[Transform] = None
         self.ElasticTransform: Optional[Transform] = None
+        
+        self.verbose = verbose
 
     def initial_alignment(self, 
                           fixed_image: SimpleITK.SimpleITK.Image,
@@ -100,8 +102,9 @@ class PhantomToCTBoneReg:
                           moving_image: SimpleITK.SimpleITK.Image) -> None:
 
         # Define a simple callback which allows us to monitor registration progress.
-        def iteration_callback(filter):
-            print(f"Iteration: {filter.GetElapsedIterations()}, Metric: {filter.GetMetric()}\n")
+        def iteration_callback(filter):  # TODO: Remove verbose ... or make it optional.
+            if self.verbose:
+                print(f"Iteration: {filter.GetElapsedIterations()}, Metric: {filter.GetMetric()}\n")
             
         # Select a Demons filter and configure it.
         demons_filter =  SimpleITK.FastSymmetricForcesDemonsRegistrationFilter()
@@ -119,8 +122,8 @@ class PhantomToCTBoneReg:
             registration_algorithm=demons_filter, 
             fixed_image = fixed_image, 
             moving_image = moving_image, 
-            shrink_factors=[4, 2], 
-            smoothing_sigmas=[8, 4])
+            shrink_factors=[4, 2, 1], 
+            smoothing_sigmas=[8, 4, 2])
         
         return None
 
