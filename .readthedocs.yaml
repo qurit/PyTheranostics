@@ -31,7 +31,5 @@ python:
    install:
    - method: pip
      path: .
-     requirements:
-        - .
-        - -r doodle/docs/requirements.txt
+     requirements: doodle/docs/requirements.txt
 
