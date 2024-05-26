@@ -25,7 +25,7 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
     'sphinx_autodoc_typehints',
     'sphinx_rtd_theme',
-    'sphinx.ext.githubpages',    
+    'sphinx_copybutton',    
     ]
 
 templates_path = ['_templates']
