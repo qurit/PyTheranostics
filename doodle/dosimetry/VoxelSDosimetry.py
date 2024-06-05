@@ -5,7 +5,9 @@ from doodle.dosimetry.BaseDosimetry import BaseDosimetry
 from doodle.ImagingTools.Tools import itk_image_from_array
 from doodle.fits.fits import get_exponential
 import numpy
-from doodle.dosimetry.dvk import DoseVoxelKernel
+import shutil
+import os
+from doodle.dosimetry.DoseVoxelKernel import DoseVoxelKernel
 
 
 class VoxelSDosimetry(BaseDosimetry):
@@ -37,7 +39,8 @@ class VoxelSDosimetry(BaseDosimetry):
         for region, region_data in self.results.iterrows():
             
             if region == "BoneMarrow":
-                raise NotImplementedError("Voxel-based Bone Marrow dosimetry is not supported (yet).")
+                #raise NotImplementedError("Voxel-based Bone Marrow dosimetry is not supported (yet).")
+                continue
             
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
@@ -91,6 +94,70 @@ class VoxelSDosimetry(BaseDosimetry):
         self.dose_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
         
         return None
+    
+    def run_MC(self) -> None:
+        """Run MC.
+        """
+        
+        n_cpu = self.config["#CPU"] 
+        n_primaries = self.config["#primaries"]
+        output_dir = self.config["results_path"]
+        
+        ##### SPLIT SIMULATIONS #####
+        n_primaries_per_mac = int(n_primaries / n_cpu)
+        
+        file_path = os.path.join(os.path.dirname(__file__), "../data/monte_carlo/main_template.mac")
+
+        mac_file = numpy.fromfile(file_path,
+            dtype=numpy.float32
+            )
+          
+        with open(file_path, 'r') as mac_file:
+            filedata = mac_file.read()
+        
+        for i in range(0, n_cpu):
+            new_mac = filedata
+            
+            new_mac = new_mac.replace('distrib-SPLIT.mhd',f'distrib_SPLIT_{i+1}.mhd')
+            new_mac = new_mac.replace('stat-SPLIT.txt',f'stat__SPLIT_{i+1}.txt')    
+            new_mac = new_mac.replace('XXX',str(n_primaries_per_mac))
+            
+            with open(f'{output_dir}/main_normalized_{i+1}.mac','w') as output_mac:
+                output_mac.write(new_mac)
+                
+                
+        ##### CREATE FOLDERS WITH DATA #####
+        os.makedirs(os.path.join(output_dir, "data"), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, "output"), exist_ok=True)
+
+        folder_path = os.path.join(os.path.dirname(__file__), "../data/monte_carlo/data")
+        # Copy files from the source directory to the destination directory
+        for file_name in os.listdir(folder_path):
+            full_file_name = os.path.join(folder_path, file_name)
+            if os.path.isfile(full_file_name):
+                shutil.copy(full_file_name, os.path.join(output_dir, "data"))
+
+        # List the files in the destination directory to confirm the copy operation
+        os.listdir(os.path.join(output_dir, "data"))
+        
+        
+        #####
+
+        total_acc_A = np.sum(np.sum(np.sum(self.tia_map[0])))
+        self.source_normalized = self.TIAp / self.total_acc_A
+        
+        ref_time_id = self.config["ReferenceTimePoint"]
+        self.tia_map.save_image_to_mhd_at(time_id=0, out_path=os.path.join(output_dir, "data"), name="Source_normalized")
+        self.ct_data.save_image_to_mhd_at(time_id=ref_time_id, out_path=os.path.join(output_dir, "data"), name="CT")
+
+        with open(os.path.join(os.path.join(output_dir, "output"), 'TotalAccA.txt'), 'w') as fileID:
+            fileID.write('%.2f' % self.total_acc_A)
+        
+        ##### RUN MC #####
+        
+    
+        
+        return None
             
     def compute_dose(self) -> None:
         """Steps:
@@ -101,8 +168,10 @@ class VoxelSDosimetry(BaseDosimetry):
 
         self.compute_tia()
         self.compute_voxel_tia()
-        self.apply_voxel_s()
-        
+        if self.config["Method"] == "S-Value":
+            self.apply_voxel_s()
+        elif self.config["Method"] == "Monte-Carlo":
+            self.run_MC()
         # Save dose-map to .nii -> use integer version
         self.dose_map.save_image_to_nii_at(time_id=0, out_path=self.db_dir, name="DoseMap.nii.gz")
         

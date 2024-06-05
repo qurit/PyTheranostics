@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional, List
 import SimpleITK
 from SimpleITK import Image
 from pathlib import Path
+import os
 import numpy
 from doodle.ImagingTools.Tools import itk_image_from_array, load_from_dicom_dir
 
@@ -148,6 +149,20 @@ class LongitudinalStudy:
         """
         print(f"Writing Image ({name}) into nifty file.")
         SimpleITK.WriteImage(image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32), fileName=out_path / f"Image_{time_id}{name}.nii.gz")
+        return None
+    
+    
+    def save_image_to_mhd_at(self, time_id: int, out_path: Path, name: str = "") -> None:
+        """Save Image from a particular time-point as a nifty file.
+
+        Args:
+            time_id (int): The time ID representing the time point to be saved. 
+            out_path (Path): The path to the folder where images will be written.
+        """
+        print(f"Writing Image ({name}) into mhd file.")
+        SimpleITK.WriteImage(image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32), fileName=os.path.join(out_path, f"{name}.mhd"))
+
+        #SimpleITK.WriteImage(image=self.images, fileName=f"{name}.mhd")#fileName=os.path.join(out_path, f"{name}.mhd"))
         return None
     
     def save_masks_to_nii_at(self, time_id: int, out_path: Path, regions: List[str]) -> None:
