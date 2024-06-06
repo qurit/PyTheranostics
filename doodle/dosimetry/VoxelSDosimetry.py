@@ -27,8 +27,24 @@ class VoxelSDosimetry(BaseDosimetry):
         self.toMBqs = 3600  # Convert MBqh toMBqs
         
     def compute_voxel_tia(self) -> None:
-        """Takes parameters of the fit for each region, and compute TIA for each voxel
-        belonging to each specified region"""
+        """
+        Computes the Time Integrated Activity (TIA) for each voxel in specified regions.
+
+        This method uses the fit parameters for each region to compute the TIA for 
+        each voxel within those regions. It handles different regions appropriately, 
+        ensuring no double-counting or overlapping of regions.
+        
+        The result of this operation is tia_map that is a longitudinal study
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        AssertionError
+            If overlapping structures are found when adding regions to calculate voxel-TIA.
+        """
 
         ref_time_id = self.config["ReferenceTimePoint"]
         tia_map = numpy.zeros_like(self.nm_data.array_at(time_id=ref_time_id))
@@ -38,9 +54,6 @@ class VoxelSDosimetry(BaseDosimetry):
 
         for region, region_data in self.results.iterrows():
             
-            if region == "BoneMarrow":
-                #raise NotImplementedError("Voxel-based Bone Marrow dosimetry is not supported (yet).")
-                continue
             
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
@@ -95,7 +108,7 @@ class VoxelSDosimetry(BaseDosimetry):
         
         return None
     
-    def run_MC(self) -> None:
+    def run_MC(self) -> None: #### TODO: finish the code!!!!!
         """Run MC.
         """
         
@@ -141,10 +154,10 @@ class VoxelSDosimetry(BaseDosimetry):
         os.listdir(os.path.join(output_dir, "data"))
         
         
-        #####
+        ##### below is still work in progress
 
-        total_acc_A = np.sum(np.sum(np.sum(self.tia_map[0])))
-        self.source_normalized = self.TIAp / self.total_acc_A
+        #total_acc_A = np.sum(np.sum(np.sum(self.tia_map[0])))
+        #self.source_normalized = self.TIAp / self.total_acc_A
         
         ref_time_id = self.config["ReferenceTimePoint"]
         self.tia_map.save_image_to_mhd_at(time_id=0, out_path=os.path.join(output_dir, "data"), name="Source_normalized")
