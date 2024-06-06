@@ -271,7 +271,10 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     """
 
     # Available Mask Names:
-    exclude = ["WholeBody", "RemainderOfBody", "BoneMarrow"]
+    exclude = ["WholeBody", "RemainderOfBody"]
+    if "BoneMarrow" not in mask_dataset[0]:
+        exclude.append("BoneMarrow")
+        
     mask_names = [name for name in requested_rois if name not in exclude]
             
     # Disconnect tumor masks (if there is any overlap among them)
@@ -311,3 +314,20 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
             
     return corrected_masks
                 
+
+def jaccard_index(mask_1: numpy.ndarray, mask_2: numpy.ndarray) -> float:
+    """_summary_
+
+    Args:
+        mask_1 (numpy.ndarray): First binary mask as a numpy array where 1s represent the mask and 0s represent the background.
+        mask_2 (numpy.ndarray): Second binary mask as a numpy array similar to mask_1.
+
+    Returns:
+        Jaccard (float): _description_
+    """
+
+    intersection = numpy.logical_and(mask_1, mask_2)
+    union = numpy.logical_or(mask_1, mask_2)
+    jaccard = numpy.sum(intersection) / numpy.sum(union)
+    
+    return jaccard

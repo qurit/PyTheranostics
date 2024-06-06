@@ -4,7 +4,8 @@ from SimpleITK import Image
 from pathlib import Path
 import numpy
 from doodle.ImagingTools.Tools import itk_image_from_array, load_from_dicom_dir
-
+from doodle.registration.PhantomToCT import PhantomToCTBoneReg
+from doodle.ImagingTools.Tools import jaccard_index
 
 MetaDataType = Dict[int, Dict[str, Any]]
 
@@ -59,28 +60,25 @@ class LongitudinalStudy:
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
-    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Optional[Dict[str, str]] = None, strict: bool = True) -> None:
+    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Optional[Dict[str, str]] = None) -> None:
         """Add Masks to time point.
 
         Args:
             time_id (int): Index of time-point ID.
             masks (Dict[str, numpy.ndarray]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_array}
             mask_mapping (Optional[Dict[str, str]], optional): Mapping between masks names in input masks dictionary, and standard mask names in pyTheranostics. Defaults to None. If None, takes each name as is.
-            strict (bool, optional): Checks for masks consistency to ensure all masks are present in all time points. Defaults to True.
-
+            
         Raises:
             ValueError: If mapping between user input masks and pyTheranostics standard mask names is invalid.
 
         """
         
-        if time_id in self.masks:
-            print(f"Warning: Masks for Time ID = {time_id} already exist. Overwriting them...")
-
         # If mask mapping is not specified, utilize user defined names in masks Dictionary.
         if mask_mapping is None:
             mask_mapping = {mask_name: mask_name for mask_name in masks.keys()}        
-    
-        self.masks[time_id] = {}
+
+        if time_id not in self.masks:
+            self.masks[time_id] = {}
         
         for mask_source, mask_target in mask_mapping.items():
             
@@ -90,11 +88,11 @@ class LongitudinalStudy:
             if mask_target not in self._valid_masks:
                 raise ValueError(f"{mask_target} is not a valid mask name. Please use one of: {self._valid_masks}")
             
+            if mask_target in self.masks[time_id]:
+                print(f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!")
+                
             self.masks[time_id][mask_target] = masks[mask_source]
         
-        if strict:
-            self.check_masks_consistency()
-
         return None
     
     def volume_of(self, region: str, time_id: int) -> float:
@@ -126,6 +124,69 @@ class LongitudinalStudy:
         """
         return numpy.average(self.array_at(time_id=time_id)[self.masks[time_id][region]])
         
+    def add_bone_marrow_mask_from_phantom(self, phantom_skeleton_path: Path,
+                                          phantom_bone_marrow_path: Path,
+                                          num_iterations: int = 3) -> None:
+        """Generate Bone Marrow mask on each time point by registering a generic skeleton
+        derived from an XCAT phantom into the patient's Skeleton CT and subsequently applying
+        this spatial transformation to register the phantom's bone marrow into the patient's 
+        anatomy.
+
+        Args:
+            phantom_skeleton_path (Path): Path to phantom Skeleton .nii file.
+            phantom_bone_marrow_path (Path): Path to phantom Bone Marrow .nii file.
+        """
+        print("Running Personalized Bone Marrow generation from XCAT Phantom. This feature is unstable. Please review the generated BoneMarrow masks.")
+        
+        if self.modality != "CT":
+            raise AssertionError(f"Phantom skeleton can only be registered to CT data. This is modality = {self.modality}")
+        
+        if "Skeleton" not in self.masks[0]:
+            raise AssertionError("Skeleton mask not found. Can't continue.")
+        
+        
+        # Since algorithm is not very stable (sometimes registration fails), we perform multiple iterations (aka repetitions) and keep best
+        # results according to jaccard index.
+        best_index = {time_id: 0 for time_id in self.images.keys()}
+        
+        for i in range(num_iterations):
+            print(f"Registration :: Iteration {i+1}")
+            # Loop through each time point:
+            for time_id, ct in self.images.items():
+                # Register Skeleton
+                print(f" >> Registering Phantom Skeleton to CT at time point {time_id} ...")
+                RegManager = PhantomToCTBoneReg(CT=ct, phantom_skeleton_path=phantom_skeleton_path)
+                _ = RegManager.register(fixed_image=RegManager.CT, moving_image=RegManager.Phantom)
+                
+                # Register Bone Marrow
+                marrow_mask = numpy.transpose(
+                    SimpleITK.GetArrayFromImage(
+                    RegManager.register_mask(fixed_image=RegManager.CT, mask_path=phantom_bone_marrow_path)), 
+                    axes=(1, 2, 0))
+                
+                # Threshold:
+                marrow_mask = (marrow_mask >= 1)
+                
+                # Exclude voxels outside of the patient's skeleton.
+                marrow_mask *= self.masks[time_id]["Skeleton"]
+                
+                # Compute Index:
+                jaccard = jaccard_index(self.masks[time_id]["Skeleton"], marrow_mask)
+                
+                if jaccard > best_index[time_id]:
+                    self.masks[time_id]["BoneMarrow"] = marrow_mask # Threshold.
+                    best_index[time_id] = jaccard
+                
+                # Calculate Index
+                print(f" >>> Jaccard Index between Skeleton and Segmented Bone Marrow: {jaccard: 1.2f}")
+            
+        # Final Results:
+        print(f" >>> Final Jaccard Indices:")
+        for time_id in self.masks.keys():
+            print(f" >>> Time point {time_id}: {best_index[time_id]}")
+            
+        return None    
+
         
     def check_masks_consistency(self) -> None:
         """Check that we have the same masks in all time points"""
@@ -201,4 +262,4 @@ def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -
         images[time_id] = image
         metadata[time_id] = meta
 
-    return LongitudinalStudy(images=images, meta=metadata)
+    return LongitudinalStudy(images=images, meta=metadata, modality=modality if modality == "CT" else "NM")
