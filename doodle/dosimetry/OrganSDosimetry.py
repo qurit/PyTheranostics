@@ -21,27 +21,43 @@ class OrganSDosimetry(BaseDosimetry):
         super().__init__(config, nm_data, ct_data, clinical_data)
         self.check_mandatory_fields_organ()
         
-        """Inputs:
-            config: Configuration parameters for dosimetry calculations, a Dict.
-                    Note: defined VOIs should have the same naming convention as source organs in Olinda.
-                    We included method prepare_df() that combines kidneys and salivary glands into one VOI.
-            nm_data: longitudinal, quantitative, nuclear-medicine imaging data, type LongitudinalStudy.
-                     Note: voxel values should be in units of Bq/mL.
-            ct_data: longitudinal CT imaging data, type LongitudinalStudy,
-                     Note: voxel values should be in HU units.
-            clinical_data: clinical data such as blood sampling, an optional pandas DataFrame. 
-                     Note: blood counting should be in units of Bq/mL.
+        """
+        Parameters
+        ----------
+            config: Dict
+              Configuration parameters for dosimetry calculations
+              We included method prepare_data() that combines kidneys and salivary glands into one VOI.
+            nm_data: LongitudinalStudy
+              longitudinal, quantitative, nuclear-medicine imaging data
+              Note: voxel values should be in units of Bq/mL.
+            ct_data: LongitudinalStudy or None
+              longitudinal CT imaging data
+              Note: voxel values should be in HU units.
+            clinical_data: pandas DataFrame or None
+              an optional clinical data such as blood sampling 
+              Note: blood counting should be in units of Bq/mL.
         """    
         
     def check_mandatory_fields_organ(self) -> None:
-
         if "Organ" not in self.config["Level"]:
             print("Verify the level on which dosimetry should be performed.")
         
         return None
         
     def prepare_data(self) -> None:
-        """Creates .cas file that can be exported to Olinda/EXM."""
+        """
+        Create a DataFrame `results_olinda` for exporting data to external software.
+
+        This method performs the following operations:
+        - Averages organ volumes across different timepoints.
+        - Combines kidneys and salivary glands to ensure compatibility with external software.
+        - Renames VOIs (Volumes of Interest) for recognition by Olinda as source organs.
+        - Hardcodes the red marrow volume based on the ICRP Adult Male.
+
+        Returns
+        -------
+        None
+        """
         self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
         self.results_olinda = self.results_olinda.drop(["WholeBody"])
         
@@ -71,7 +87,17 @@ class OrganSDosimetry(BaseDosimetry):
     def create_output_file(self, 
                            dirname: str, 
                            savefile: bool = False
-                           ) -> None:  
+                           ) -> None:
+        """
+        Based on the parameter in the configuration file, call the method for the specific output format.
+
+        Parameters
+        ----------
+        dirname : str
+            Path for the output file.
+        savefile : bool
+            Save file, by default False.
+        """
         if self.config["OutputFormat"] == "Olinda":  
             self.create_Olinda_file(dirname, savefile)
         else:
@@ -81,7 +107,15 @@ class OrganSDosimetry(BaseDosimetry):
                            dirname: str, 
                            savefile: bool = False
                            ) -> None:
-        """Creates .cas file that can be exported to Olinda/EXM."""
+        """Creates .cas file that can be exported to Olinda/EXM.
+
+        Parameters
+        ----------
+        dirname : str
+            Path for the output file.
+        savefile : bool, optional
+            Save file, by default False.
+        """
         this_dir=path.dirname(__file__)
         TEMPLATE_PATH = path.join(this_dir,"olindaTemplates")
         
@@ -138,7 +172,13 @@ class OrganSDosimetry(BaseDosimetry):
     def read_Olinda_results(self, 
                             olinda_results_path: str
                             ) -> None:
-        """Reads .txt results file from Olinda.""" 
+        """Reads .txt results file from Olinda.
+
+        Parameters
+        ----------
+        olinda_results_path : str
+            Path to the output file from Olinda.
+        """
         if not olinda_results_path.endswith(".txt"):
             print('Please export result from Olinda in .txt file.') ## TODO: Add .csv extension results
             return
@@ -176,6 +216,9 @@ class OrganSDosimetry(BaseDosimetry):
     def compute_dose(self):
         self.compute_tia()
         self.prepare_data()
+        """Perform fitting and prepare the data for futher processing.
+        """
+
         
         
         
