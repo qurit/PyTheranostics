@@ -47,14 +47,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.config = config
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
-        #if "Apply_biokinetics_from_previous_cycle" not in config:
-        #    self.config["Apply_biokinetics_from_previous_cycle"] = "No"  # By default.
-        #else:
-        #    if self.config["Apply_biokinetics_from_previous_cycle"] not in ["Yes", "No"]:
-        #        raise ValueError(f"Invalid value for {self.config['Apply_biokinetics_from_previous_cycle']}")
-        #
-        #self.apply_biokinetics_from_previous_cycle = self.config["Apply_biokinetics_from_previous_cycle"]
-        
         # Store data
         self.patient_id = config["PatientID"] 
         self.cycle = config["Cycle"]
