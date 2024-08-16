@@ -39,7 +39,8 @@ class LongitudinalStudy:
                              "BoneMarrow",
                              "Skeleton",
                              "WholeBody",
-                             "RemainderOfBody"
+                             "RemainderOfBody",
+                             "TotalTumorBurden"
                              ]
 
         return None
@@ -161,8 +162,6 @@ class LongitudinalStudy:
         """
         print(f"Writing Image ({name}) into mhd file.")
         SimpleITK.WriteImage(image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32), fileName=os.path.join(out_path, f"{name}.mhd"))
-
-        #SimpleITK.WriteImage(image=self.images, fileName=f"{name}.mhd")#fileName=os.path.join(out_path, f"{name}.mhd"))
         return None
     
     def save_masks_to_nii_at(self, time_id: int, out_path: Path, regions: List[str]) -> None:
