@@ -65,6 +65,8 @@ class OrganSDosimetry(BaseDosimetry):
                                                                 'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
         # BoneMarrow volume.
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
+        if 'TotalTumorBurden' in self.results_olinda.index:
+            self.results_olinda.drop('TotalTumorBurden', axis=0, inplace=True)
 
         return None
     
