@@ -7,7 +7,7 @@ from doodle.fits.fits import get_exponential
 import numpy
 import shutil
 import os
-from doodle.dosimetry.DoseVoxelKernel import DoseVoxelKernel
+from doodle.dosimetry.dvk import DoseVoxelKernel
 
 
 class VoxelSDosimetry(BaseDosimetry):
