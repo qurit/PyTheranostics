@@ -330,8 +330,18 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     quad(monoexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
                 )
                 elif self.config["rois"][region]["fit_order"] == 2:
+                    fit_param_0_value = fit_params[0]
+                    fit_param_1_value = fit_params[1]
+                    fixed_param_0_value = self.config["rois"][region]["fixed_parameters"][0]
+                    fixed_param_1_value = self.config["rois"][region]["fixed_parameters"][1]
+
+                    # Concatenating arrays
+                    concatenated_array = numpy.concatenate((numpy.array([fit_param_0_value]), 
+                                                         numpy.array([fixed_param_0_value]), 
+                                                         numpy.array([fit_param_1_value]),
+                                                         numpy.array([fixed_param_1_value])))
                     tmp_tia_data["TIA_MBq_h"].append(
-                    quad(biexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                    quad(biexp_fun, 0, numpy.inf, args=tuple(concatenated_array))
                 )
                 elif self.config["rois"][region]["fit_order"] == -2:
                     tmp_tia_data["TIA_MBq_h"].append(
@@ -554,7 +564,28 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             cycle["rois"][organ]["repair_halflife"] = "NA"
             cycle["rois"][organ]["alpha_beta"] = "NA"
             #cycle["rois"][organ]["BED_Gy"] = self.df_ad.loc[organ, 'BED[Gy]']
-            cycle["rois"][organ]["BED_Gy_uncertainty"] = "NA"        
+            cycle["rois"][organ]["BED_Gy_uncertainty"] = "NA"      
+        
+        if self.config["Level"] == "Organ":
+            for organ in self.df_ad.index:
+                if organ in self.df_ad.index:
+                    cycle["Organ-level_AD"][organ] = {
+                        "AD[Gy/GBq]": {},
+                        "AD[Gy/GBq]_uncertianty": {},
+                        "AD[Gy]": {},
+                        "AD[Gy]_uncertianty": {},
+                        "BED[Gy]": {},
+                        "BED[Gy]_uncertianty": {}
+                    }
+                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]"] =self.df_ad.loc[organ, 'AD[Gy/GBq]']
+                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]_uncertainty"] = "NA"
+                cycle["Organ-level_AD"][organ]["AD[Gy]"] = self.df_ad.loc[organ, 'AD[Gy]']
+                cycle["Organ-level_AD"][organ]["AD[Gy]_uncertainty"] = "NA"
+                
+                cycle["Organ-level_AD"][organ]["BED[Gy]"] = self.df_ad.loc[organ, 'BED[Gy]'] if pandas.notna(self.df_ad.loc[organ, 'BED[Gy]']) else "NA"
+
+                cycle["Organ-level_AD"][organ]["BED[Gy]_uncertianty"] = "NA"
+
 
         with open(file_path, 'w') as file:
             json.dump(data, file, indent=4)
