@@ -111,7 +111,7 @@ class VoxelSDosimetry(BaseDosimetry):
     def run_MC(self) -> None: #### TODO: finish the code!!!!!
         """Run MC.
         """
-        
+        raise NotImplementedError('MC is not implemmented yet.')
         n_cpu = self.config["#CPU"] 
         n_primaries = self.config["#primaries"]
         output_dir = self.config["results_path"]
