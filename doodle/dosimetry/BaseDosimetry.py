@@ -47,12 +47,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.config = config
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
         
-        if "Apply_biokinetics_from_previous_cycle" not in config:
-            self.config["Apply_biokinetics_from_previous_cycle"] = "No"  # By default.
-        else:
-            if self.config["Apply_biokinetics_from_previous_cycle"] not in ["Yes", "No"]:
-                raise ValueError(f"Invalid value for {self.config['Apply_biokinetics_from_previous_cycle']}")
-        
         # Store data
         self.patient_id = config["PatientID"] 
         self.cycle = config["Cycle"]
@@ -276,8 +270,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
-        if self.config["Apply_biokinetics_from_previous_cycle"] == 'No':
-            for region, region_data in self.results.iterrows():
+        for region, region_data in self.results.iterrows():
+            
+            if self.config["rois"][region]["apply_biokinetics_from_previous_cycle"] == False:
+
                 fit_params, residuals = fit_tac(
                     time=numpy.array(region_data["Time_hr"]),
                     activity=numpy.array(region_data["Activity_MBq"]),
@@ -285,7 +281,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     exp_order=self.config["rois"][region]["fit_order"],
                     param_init=self.config["rois"][region]["param_init"]
                 )
-
                 # TODO: Bring plots outside of the main workflow.
                 plot_tac(
                     time = numpy.array(region_data["Time_hr"]),
@@ -296,23 +291,19 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     organ = region, 
                     xlabel = 't (hours)', 
                     ylabel = 'A (MBq)')
-
                 # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
                 tmp_tia_data["Fit_params"].append(fit_params)
-
                 # Calculate Integral
                 tmp_tia_data["TIA_MBq_h"].append(
                     self.numerical_integrate(fit_params[:-1])
                 )
-
                 # Lambda effective 
                 tmp_tia_data["Lambda_eff"].append(fit_params[1])
-
                 # Residence Time
                 tmp_tia_data["TIA_h"].append(tmp_tia_data["TIA_MBq_h"][-1][0] / (float(self.config['InjectedActivity'])))
                 
-        else: # Must be Yes by construction.
-            for region, region_data in self.results.iterrows():
+            if self.config["rois"][region]["apply_biokinetics_from_previous_cycle"] == True:
+
                 
                 fit_params, residuals = fit_tac_with_fixed_biokinetics(
                     time=numpy.array(region_data["Time_hr"]),
@@ -343,8 +334,18 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     quad(monoexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
                 )
                 elif self.config["rois"][region]["fit_order"] == 2:
+                    fit_param_0_value = fit_params[0]
+                    fit_param_1_value = fit_params[1]
+                    fixed_param_0_value = self.config["rois"][region]["fixed_parameters"][0]
+                    fixed_param_1_value = self.config["rois"][region]["fixed_parameters"][1]
+
+                    # Concatenating arrays
+                    concatenated_array = numpy.concatenate((numpy.array([fit_param_0_value]), 
+                                                         numpy.array([fixed_param_0_value]), 
+                                                         numpy.array([fit_param_1_value]),
+                                                         numpy.array([fixed_param_1_value])))
                     tmp_tia_data["TIA_MBq_h"].append(
-                    quad(biexp_fun, 0, numpy.inf, args=tuple(numpy.concatenate((fit_params[:-1], (self.config["rois"][region]["fixed_parameters"])))))
+                    quad(biexp_fun, 0, numpy.inf, args=tuple(concatenated_array))
                 )
                 elif self.config["rois"][region]["fit_order"] == -2:
                     tmp_tia_data["TIA_MBq_h"].append(
@@ -376,7 +377,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.results.loc[:, key] = values
 
         return None
-    
+
     def numerical_integrate(self, exp_params: List[float]) -> float:
         """Perform numerical integration of exponential function"""
         if len(exp_params) < 3:
@@ -409,6 +410,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.compute_tia()
         return None
         
+       
     def calculate_bed(self,
                       kinetic: str
                       ) -> None:
@@ -425,25 +427,38 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         organs = numpy.array(bed_df.index.unique())
         bed = {}
         
-
         for organ in organs:
             t_repair = self.radiobiology_dic[organ]['t_repair']
             alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
             AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
-            if kinetic == 'monoexp':
-                t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
-                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
-            elif kinetic == 'biexp':
-                mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
-                mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
-                t_washout = numpy.log(2) /  mean_lambda_washout
-                t_uptake = numpy.log(2) /  mean_lambda_uptake
-                bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
-                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
-                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
+            if self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == False:
+                if kinetic == 'monoexp':
+                    t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
+                    bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+                elif kinetic == 'biexp':
+                    mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
+                    mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
+                    t_washout = numpy.log(2) /  mean_lambda_washout
+                    t_uptake = numpy.log(2) /  mean_lambda_uptake
+                    bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                                  ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                                  (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
+                print(f'{organ}', bed[organ])
+        
+            elif self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == True:
+                if kinetic == 'monoexp':
+                    t_eff = numpy.log(2) / self.config["rois"][organ]["fixed_parameters"][0]
+                    bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+                elif kinetic == 'biexp':
+                    mean_lambda_washout = (self.config["rois"]['Kidney_Left']["fixed_parameters"][0] + self.config["rois"]['Kidney_Right']["fixed_parameters"][0]) / 2
+                    mean_lambda_uptake = (self.config["rois"]['Kidney_Left']["fixed_parameters"][1] + self.config["rois"]['Kidney_Right']["fixed_parameters"][1]) / 2
+                    t_washout = numpy.log(2) /  mean_lambda_washout
+                    t_uptake = numpy.log(2) /  mean_lambda_uptake
+                    bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                                  ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                                  (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
             
-            print(f'{organ}', bed[organ])
-            
+                print(f'{organ}', bed[organ])                          
         self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
 
     def save_images_and_masks_at(self, time_id: int) -> None:
@@ -458,3 +473,123 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.nm_data.save_masks_to_nii_at(time_id=time_id, out_path=self.db_dir, regions=self.config["rois"])
         
         return None
+    
+    def update_json_data(self, file_path):
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+            
+        data["PatientID"] = self.config["PatientID"]
+        data["Gender"] = self.config["Gender"]
+        data["No_of_completed_cycles"] = self.config["Cycle"]
+
+        cycle_key = f"Cycle_{self.config['Cycle']:02d}"
+
+        if cycle_key not in data:
+            data[cycle_key] = [{}]
+
+        cycle = data[cycle_key][0]
+        cycle["CycleNumber"] = self.config["Cycle"]
+        cycle["Operator"] = self.config["Operator"]
+        cycle["DatabaseDir"] = self.config["DatabaseDir"]
+        cycle["InjectionDate"] = self.config["InjectionDate"]
+        cycle["InjectionTime"] = self.config["InjectionTime"]
+        cycle["InjectedActivity"] = self.config["InjectedActivity"]
+        cycle["ApplyBiokineticsFromPreviousCycle"] = self.config.get("ApplyBiokineticsFromPreviousCycle", cycle.get("ApplyBiokineticsFromPreviousCycle", "NA"))
+        cycle["Level"] = self.config["Level"]
+        cycle["Method"] = self.config["Method"]
+        cycle["OutputFormat"] = self.config["OutputFormat"]
+        cycle["ScaleDoseByDensity"] = self.config.get("ScaleDoseByDensity", cycle.get("ScaleDoseByDensity", "NA"))
+        cycle["ReferenceTimePoint"] = self.config["ReferenceTimePoint"]
+        cycle["TimePoints_h"] = self.results['Time_hr'][0]
+
+
+
+        for organ in self.config["rois"].keys():
+            
+            if organ not in cycle["rois"]:
+                cycle["rois"][organ] = {
+                    "volumes_mL": {},
+                    "activity_MBq": {},
+                    "doserate_MBq_per_h": {},
+                    "density_gml": {},
+                    "mass_g": {},
+                    "fitting_eq": {},
+                    "no_of_fit_params": {},
+                    "fit_params": {},
+                    "fit_params_uncertainty": {},
+                    "R_2": {},
+                    "AIC": {},
+                    "TIA_MBqh": {},
+                    "TIA_MBqh_uncertainty": {},
+                    "TIA_h": {},
+                    "TIA_h_uncertainty": {},
+                    "mean_AD_Gy": {},
+                    "mean_AD_Gy_uncertainty": {},
+                    "min_AD_Gy": {},
+                    "max_AD_Gy": {},
+                    "peak_AD_Gy": {},
+                    "repair_halflife": {},
+                    "alpha_beta": {},
+                    "BED_Gy": {},
+                    "BED_Gy_uncertainty": {}
+                }
+                
+            cycle["rois"][organ]["volumes_mL"]["different_tps"] = self.results.loc[organ, 'Volume_CT_mL']
+            cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["volumes_mL"]["mean"] = numpy.mean(self.results.loc[organ, 'Volume_CT_mL'])
+            cycle["rois"][organ]["volumes_mL"]["mean_uncertainty"] = "NA"
+            cycle["rois"][organ]["activity_MBq"]["values"] = self.results.loc[organ, 'Activity_MBq']
+            cycle["rois"][organ]["activity_MBq"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["doserate_MBq_per_h"]["values"] = "NA"
+            cycle["rois"][organ]["doserate_MBq_per_h"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
+            cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["density_gml"]["mean"] = "NA"
+            cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
+            cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
+            cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"        
+            cycle["rois"][organ]["mass_g"]["mean"] = "NA"
+            cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
+            cycle["rois"][organ]["fitting_eq"] = self.config["rois"][organ]["fit_order"]
+            cycle["rois"][organ]["no_of_fit_params"] = "NA"
+            cycle["rois"][organ]["fit_params"] = list(self.results.loc[organ, 'Fit_params'][:-1])
+            cycle["rois"][organ]["fit_params_uncertainty"] = "NA"
+            cycle["rois"][organ]["R_2"] = self.results.loc[organ, 'Fit_params'][-1]
+            cycle["rois"][organ]["AIC"] = "NA"
+            cycle["rois"][organ]["TIA_MBqh"] = self.results.loc[organ, 'TIA_MBq_h'][0]
+            cycle["rois"][organ]["TIA_MBqh_uncertainty"] = "NA"
+            cycle["rois"][organ]["TIA_h"] = self.results.loc[organ, 'TIA_h']
+            cycle["rois"][organ]["TIA_h_uncertainty"] = "NA"
+            cycle["rois"][organ]["mean_AD_Gy"] = "NA"
+            cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
+            cycle["rois"][organ]["min_AD_Gy"] = "NA"
+            cycle["rois"][organ]["max_AD_Gy"] = "NA"
+            cycle["rois"][organ]["peak_AD_Gy"] = "NA"
+            cycle["rois"][organ]["repair_halflife"] = "NA"
+            cycle["rois"][organ]["alpha_beta"] = "NA"
+            #cycle["rois"][organ]["BED_Gy"] = self.df_ad.loc[organ, 'BED[Gy]']
+            cycle["rois"][organ]["BED_Gy_uncertainty"] = "NA"      
+        
+        if self.config["Level"] == "Organ":
+            for organ in self.df_ad.index:
+                if organ in self.df_ad.index:
+                    cycle["Organ-level_AD"][organ] = {
+                        "AD[Gy/GBq]": {},
+                        "AD[Gy/GBq]_uncertianty": {},
+                        "AD[Gy]": {},
+                        "AD[Gy]_uncertianty": {},
+                        "BED[Gy]": {},
+                        "BED[Gy]_uncertianty": {}
+                    }
+                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]"] =self.df_ad.loc[organ, 'AD[Gy/GBq]']
+                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]_uncertainty"] = "NA"
+                cycle["Organ-level_AD"][organ]["AD[Gy]"] = self.df_ad.loc[organ, 'AD[Gy]']
+                cycle["Organ-level_AD"][organ]["AD[Gy]_uncertainty"] = "NA"
+                
+                cycle["Organ-level_AD"][organ]["BED[Gy]"] = self.df_ad.loc[organ, 'BED[Gy]'] if pandas.notna(self.df_ad.loc[organ, 'BED[Gy]']) else "NA"
+
+                cycle["Organ-level_AD"][organ]["BED[Gy]_uncertianty"] = "NA"
+
+
+        with open(file_path, 'w') as file:
+            json.dump(data, file, indent=4)
