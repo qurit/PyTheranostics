@@ -54,7 +54,6 @@ class VoxelSDosimetry(BaseDosimetry):
 
         for region, region_data in self.results.iterrows():
             
-            
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
                 
