@@ -93,6 +93,8 @@ class GammaCamera(PlanarQC):
             # find the time difference in days
             if self.isotope_dic['half_life_units'] == 'days':
                 delta_t = (acq_time - ref_time) / np.timedelta64(1, 'D')
+            elif self.isotope_dic['half_life_units'] == 'hours':
+                delta_t = (acq_time - ref_time) / np.timedelta64(1, 'D')
             else:
                 print('check units of decay correction')
 
