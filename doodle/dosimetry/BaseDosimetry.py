@@ -429,7 +429,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
             if self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == False:
                 if kinetic == 'monoexp':
-                    t_eff = numpy.log(2) / self.results.loc[organ]['Fit_params'][1]
+                    t_eff = numpy.log(2) / ((self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1])/2)
                     bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
                 elif kinetic == 'biexp':
                     mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
@@ -443,7 +443,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
             elif self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == True:
                 if kinetic == 'monoexp':
-                    t_eff = numpy.log(2) / self.config["rois"][organ]["fixed_parameters"][0]
+                    t_eff = numpy.log(2) /(( self.config["rois"]["Kidney_Left"]["fixed_parameters"][0] +  self.config["rois"]["Kidney_Right"]["fixed_parameters"][0] )/2)
                     bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
                 elif kinetic == 'biexp':
                     mean_lambda_washout = (self.config["rois"]['Kidney_Left']["fixed_parameters"][0] + self.config["rois"]['Kidney_Right']["fixed_parameters"][0]) / 2
