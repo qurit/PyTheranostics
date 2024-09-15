@@ -67,12 +67,12 @@ class VoxelSDosimetry(BaseDosimetry):
             act_map_at_ref = self.nm_data.array_of_activity_at(time_id=ref_time_id, region=region) * self.toMBq  # MBq
             region_tia = region_data["TIA_MBq_h"][0]
 
-            region_fit_params = region_data["Fit_params"]  # fit params and R-square.
+            region_fit_params = region_data["Fit_params"]  # fit params
             exp_order = self.config["rois"][region]["fit_order"]
             region_fit, _, _ = get_exponential(order=exp_order, param_init=None, decayconst=1.0)  # Decay-constant not used here.
             
             ref_time = region_data["Time_hr"][self.config["ReferenceTimePoint"]]  # In hours, post injection.
-            f_to = region_fit(ref_time, *tuple(region_fit_params[:-1]))
+            f_to = region_fit(ref_time, *tuple(region_fit_params))
 
             tia_map += region_mask * region_tia * act_map_at_ref / f_to  # MBq_h
 
