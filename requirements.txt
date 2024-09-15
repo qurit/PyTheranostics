@@ -6,3 +6,4 @@ openpyxl
 rt_utils
 scikit-image 
 simpleitk
+lmfit
