@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
-import numpy as np
+import numpy
 from doodle.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
 from typing import Tuple
+import lmfit
 
 def ewin_montage(img,ewin):
     '''
@@ -31,161 +32,81 @@ def ewin_montage(img,ewin):
 
     plt.tight_layout()
 
+def plot_tac_residuals(result: lmfit.model.ModelResult, region: str) -> None:
+    """Plot Time activity curve and residuals.
 
-
-def plot_tac(
-        time: np.ndarray, 
-        activity: np.ndarray, 
-        exp_order: int,
-        parameters: np.ndarray, 
-        residuals: np.ndarray, 
-        organ: str, 
-        xlabel: str = 't (hours)', 
-        ylabel:str = 'A (MBq)',
-        skip_points=0,
-        sigmas=None,
-        **kwargs) -> None:
+    Parameters
+    ----------
+    result : lmfit.model.ModelResult
+        The fitted lmfit model results.
+    region : str
+        The region (e.g., organ, tumor) where fit happened.
+    """
     
-    """Generic Time Activity Curve plotting function. Supports:
-        - exp_order = 1 -> Mono-exponential
-        - exp_order = 2 -> Bi-exponential
-        - exp_order = -2 -> Bi-exponential with uptake constrain.
-        - exp_order = 3 -> Tri-exponential"""
-        
-    if abs(exp_order) < 1 or abs(exp_order) > 3:
-        raise ValueError("Not supported. Please use order 1, 2 or 3.")
-      
-    if exp_order == 1:
-        fit_function = monoexp_fun
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}}$'
-    elif exp_order == 2:
-        fit_function = biexp_fun
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 1)} e^{{-{round(parameters[3], 2)} t}}$'
-    elif exp_order == -2:
-        fit_function = biexp_fun_uptake
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(parameters[2], 2)} t}}$'
-    elif exp_order == 3:
-        fit_function = triexp_fun
-        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(parameters[1], 2)} t}} + {round(parameters[2], 2)} e^{{-{round(parameters[3], 2)} t}} - {round(parameters[0] + parameters[2], 1)} e^{{-{round(parameters[4], 2)} t}}$"
+    # Create a figure with 3 subplots
+    fig, axs = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
 
-    tt = np.linspace(0, time.max() * 2, 1000)
-    yy = fit_function(tt, *parameters[:-1])
+    # Extract fitted parameters and format them
+    params = result.params.valuesdict()
+    formatted_params = {key: f"{value:.3f}" for key, value in params.items()}
+
+    # Construct the mathematical expression for the title
+    num_exponentials = len(params) // 2  # Each exponential has two parameters
+    terms = []
+    for _, term in enumerate(["A", "B", "C"][:num_exponentials]):
+        A1 = formatted_params.get(f"{term}1", "0")
+        A2 = formatted_params.get(f"{term}2", "0")
+        terms.append(f"${A1}e^{{-{A2} t}}$")
+    function_expression = " + ".join(terms)
+    title_text = "$A(t) = $" + f"{function_expression}"
+
+    # Retrieve x_data and y_data from the fit result
+    x_data = result.userkws['x']
+    y_data = result.data
+
+    # Generate x-values for plotting the fitted model starting from x=0
+    x_fit = numpy.linspace(0, x_data.max(), 500)
+    y_fit = result.eval(x=x_fit)
+
+    # First subplot: Linear scale plot
+    ax1 = axs[0]
+    # Plot data points
+    ax1.plot(x_data, y_data, 'o', markersize=5)
+    # Plot fitted model
+    ax1.plot(x_fit, y_fit, color='red')
+    ax1.set_xlim(left=0)  # Start x-axis from zero
+    ax1.set_title(region)
+    ax1.set_xlabel("Time [hr]")
+    ax1.set_ylabel(f"Activity [MBq]")
+    # Add R-squared and AIC as text
+    ax1.text(0.7, 0.9, f'$R^2={result.rsquared:.3f}$', transform=ax1.transAxes)
+    ax1.text(0.7, 0.85, f'AIC={result.aic:.3f}', transform=ax1.transAxes)
+    # Remove legend if present
+    legend = ax1.get_legend()
+    if legend:
+        legend.remove()
     
-    fig, axes = plt.subplots(1, 3, figsize=(10, 4))
+    # Second subplot: Semilog plot
+    ax2 = axs[1]
+    # Plot data points
+    ax2.plot(x_data, y_data, 'o', markersize=5)
+    # Plot fitted model
+    ax2.plot(x_fit, y_fit, color='red')
+    ax2.set_xlim(left=0)  # Start x-axis from zero
+    ax2.set_yscale("log")
+    ax2.set_title(title_text)
+    ax2.set_xlabel("Time [hr]")
+    ax2.set_ylabel("Activity [MBq]")
+    # Remove legend if present
+    legend = ax2.get_legend()
+    if legend:
+        legend.remove()
 
-    if sigmas is not None and any(sigma is not None for sigma in sigmas):
-        axes[0].errorbar(time, activity, yerr=sigmas, fmt='o', color='#1f77b4', markeredgecolor='black')
-    else:
-        axes[0].plot(time, activity, 'o', color='#1f77b4', markeredgecolor='black')
+    # Third subplot: Residuals plot
+    ax3 = axs[2]
+    result.plot_residuals(ax=ax3, data_kws={"markersize": 5})
+    ax3.set_title("Residuals")
+    ax3.set_xlabel("Time [hr]")
+    ax3.set_ylabel("Residuals")
 
-    if skip_points:
-        axes[0].plot(tt[tt >= time[skip_points]], yy[tt >= time[skip_points]])
-        axes[1].semilogy(tt[tt >= time[skip_points]], yy[tt >= time[skip_points]])
-    else:
-        axes[0].plot(tt, yy)
-        axes[1].semilogy(tt, yy)
-
-    axes[0].set_title(f'{organ}')
-    axes[0].set_xlabel(xlabel)
-    axes[0].set_ylabel(ylabel)
-    axes[0].text(0.6, 0.85, f'$R^2={parameters[-1]:.4f}$', transform=axes[0].transAxes)
-    axes[0].set_xlim(-10, axes[0].get_xlim()[1])  
-    axes[0].set_ylim(0.00001, axes[0].get_ylim()[1]) 
-    
-    axes[1].semilogy(time[skip_points:], activity[skip_points:], 'o', color='#1f77b4', markeredgecolor='black')
-    axes[1].set_xlabel(xlabel)
-    axes[1].set_ylabel(ylabel)
-    axes[1].set_title(f'{label}')
-
-    axes[2].plot(time[skip_points:], residuals, 'o', color='#1f77b4', markeredgecolor='black')
-    axes[2].set_title('Residuals')
-    axes[2].set_xlabel(xlabel)
-    axes[2].set_ylabel(ylabel)
-    
-
-    plt.tight_layout()
-
-    if 'save_path' in kwargs:
-        plt.savefig(f"{kwargs['save_path']}/{organ}_{fit_function.__name__}_fit.png", dpi=300)
-
-    return None
-
-
-
-def plot_tac_fixed_biokinetics(
-        time: np.ndarray, 
-        activity: np.ndarray, 
-        exp_order: int,
-        parameters: np.ndarray,
-        fixed_biokinetics: np.ndarray, 
-        residuals: np.ndarray, 
-        organ: str, 
-        xlabel: str = 't (hours)', 
-        ylabel:str = 'A (MBq)',
-        skip_points=0,
-        sigmas=None,
-        **kwargs) -> None:
-    
-    """Generic Time Activity Curve plotting function. Supports:
-        - exp_order = 1 -> Mono-exponential
-        - exp_order = 2 -> Bi-exponential
-        - exp_order = -2 -> Bi-exponential with uptake constrain.
-        - exp_order = 3 -> Tri-exponential"""
-        
-    if abs(exp_order) < 1 or abs(exp_order) > 3:
-        raise ValueError("Not supported. Please use order 1, 2 or 3.")
-      
-    if exp_order == 1:
-        fit_function = (lambda x, a: monoexp_fun(x, a, fixed_biokinetics[0]))
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}}$'
-    elif exp_order == 2:
-        fit_function = (lambda x, a, c: biexp_fun(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1]))
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}} + {round(parameters[1], 1)} e^{{-{round(fixed_biokinetics[1], 2)} t}}$'
-    elif exp_order == -2:
-        fit_function = (lambda x, a: biexp_fun_uptake(x, a, fixed_biokinetics[0], fixed_biokinetics[1]))
-        label=f'$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}} - {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[1], 2)} t}}$'
-    elif exp_order == 3:
-        fit_function = (lambda x, a, c: triexp_fun(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2]))
-        label=f"$A(t) = {round(parameters[0], 1)} e^{{-{round(fixed_biokinetics[0], 2)} t}} + {round(parameters[1], 2)} e^{{-{round(fixed_biokinetics[1], 2)} t}} - {round(parameters[0] + parameters[1], 1)} e^{{-{round(fixed_biokinetics[2], 2)} t}}$"
-
-    tt = np.linspace(0, time.max() * 2, 1000)
-    yy = fit_function(tt, *parameters[:-1])
-    
-    fig, axes = plt.subplots(1, 3, figsize=(10, 4))
-
-    if sigmas is not None and any(sigma is not None for sigma in sigmas):
-        axes[0].errorbar(time, activity, yerr=sigmas, fmt='o', color='#1f77b4', markeredgecolor='black')
-    else:
-        axes[0].plot(time, activity, 'o', color='#1f77b4', markeredgecolor='black')
-
-    if skip_points:
-        axes[0].plot(tt[tt >= time[skip_points]], yy[tt >= time[skip_points]])
-        axes[1].semilogy(tt[tt >= time[skip_points]], yy[tt >= time[skip_points]])
-    else:
-        axes[0].plot(tt, yy)
-        axes[1].semilogy(tt, yy)
-
-    axes[0].set_title(f'{organ}')
-    axes[0].set_xlabel(xlabel)
-    axes[0].set_ylabel(ylabel)
-    axes[0].text(0.6, 0.85, f'$R^2={parameters[-1]:.4f}$', transform=axes[0].transAxes)
-    axes[0].set_xlim(-10, axes[0].get_xlim()[1])  
-    axes[0].set_ylim(0.00001, axes[0].get_ylim()[1]) 
-    
-    axes[1].semilogy(time[skip_points:], activity[skip_points:], 'o', color='#1f77b4', markeredgecolor='black')
-    axes[1].set_xlabel(xlabel)
-    axes[1].set_ylabel(ylabel)
-    axes[1].set_title(f'{label}')
-
-    axes[2].plot(time[skip_points:], residuals, 'o', color='#1f77b4', markeredgecolor='black')
-    axes[2].set_title('Residuals')
-    axes[2].set_xlabel(xlabel)
-    axes[2].set_ylabel(ylabel)
-    
-
-    plt.tight_layout()
-
-    if 'save_path' in kwargs:
-        plt.savefig(f"{kwargs['save_path']}/{organ}_{fit_function.__name__}_fit.png", dpi=300)
-
-    return None
+    plt.show()
