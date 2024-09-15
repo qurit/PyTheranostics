@@ -56,7 +56,9 @@ class VoxelSDosimetry(BaseDosimetry):
             
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
-                
+            
+            print(f"Computing Voxel-S dose for {region} ...")
+            
             region_mask = self.nm_data.masks[ref_time_id][region]
             masks += region_mask
             if numpy.max(masks) > 1:
