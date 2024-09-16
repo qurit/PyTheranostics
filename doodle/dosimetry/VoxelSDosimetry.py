@@ -65,7 +65,7 @@ class VoxelSDosimetry(BaseDosimetry):
                 raise AssertionError(f"Overlapping structures found when {region} was added to calculate voxel-TIA")
 
             act_map_at_ref = self.nm_data.array_of_activity_at(time_id=ref_time_id, region=region) * self.toMBq  # MBq
-            region_tia = region_data["TIA_MBq_h"][0]
+            region_tia = region_data["TIA_MBq_h"]
 
             region_fit_params = region_data["Fit_params"]  # fit params
             exp_order = self.config["rois"][region]["fit_order"]
@@ -105,6 +105,7 @@ class VoxelSDosimetry(BaseDosimetry):
                 0: itk_image_from_array(array=numpy.transpose(dose_map_array, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])},
             meta={0: self.nm_data.meta[ref_time_id]}
             )
+        
         self.dose_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
         
         return None
@@ -182,7 +183,7 @@ class VoxelSDosimetry(BaseDosimetry):
 
         self.compute_tia()
         self.compute_voxel_tia()
-        if self.config["Method"] == "S-Value":
+        if self.config["Method"] == "Voxel-S-value":
             self.apply_voxel_s()
         elif self.config["Method"] == "Monte-Carlo":
             self.run_MC()
