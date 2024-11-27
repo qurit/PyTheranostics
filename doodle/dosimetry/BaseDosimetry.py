@@ -143,7 +143,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             roi_name: [] for roi_name in self.nm_data.masks[0].keys() if roi_name != "BoneMarrow" and roi_name in self.config["rois"]
             }  # BoneMarrow is a special case.
         
-        cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq"]
+        cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq", "Density_HU"]
         time_ids = [time_id for time_id in self.nm_data.masks.keys()]
 
         # Normalize Acquisition Times, relative to time of injection
@@ -169,6 +169,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 [self.nm_data.activity_in(region=roi_name, time_id=time_id) * self.toMBq
                    for time_id in time_ids]
                    )
+            # Density (from CT, in HU)
+            tmp_results[roi_name].append(
+                [self.ct_data.density_of(region=roi_name, time_id=time_id)
+                  for time_id in time_ids]
+                )
 
         return pandas.DataFrame.from_dict(
             self.initialize_bone_marrow(tmp_results), 
