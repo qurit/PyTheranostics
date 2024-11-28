@@ -1,6 +1,7 @@
 from doodle.dosimetry.BaseDosimetry import BaseDosimetry
 from typing import Any, Dict, Optional
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
+from scipy.interpolate import PchipInterpolator
 
 import datetime
 import numpy
@@ -39,7 +40,36 @@ class OrganSDosimetry(BaseDosimetry):
             print("Verify the level on which dosimetry should be performed.")
         
         return None
+    
+    def composition_and_density_from_HU(self, density):
+        """Determines the composition and density based on HU values."""
+        if density <= 100:
+            return "100%/0%", 1.03
+        elif density <= 250:
+            return "75%/25%", 1.255
+        elif density <= 500:
+            return "50%/50%", 1.48
+        elif density <= 750:
+            return "25%/75%", 1.7
+        else:
+            return "0%/100%", 1.92
+
+    def s_value_from_mass(self, mass, composition):
+        """Returns the interpolated Total S Value (mGy MBq^-1 h^-1) for a given tumor mass (g) and composition."""
         
+        # Select the appropriate tumor mass and s_value arrays based on composition
+        mass_data = self.mass_and_s_values[composition]["tumor_mass"]
+        s_value_data = self.mass_and_s_values[composition]["total_s_value"]
+        
+        # Perform PCHIP interpolation
+        pchip_interpolator = PchipInterpolator(mass_data, s_value_data)
+        
+        # Interpolate and return the result in mGy MBq^-1 h^-1
+        return pchip_interpolator(mass) * 3.6 * 10**12
+    
+
+
+      
     def prepare_data(self) -> None:
         """Creates .cas file that can be exported to Olinda/EXM."""
         self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
@@ -67,9 +97,38 @@ class OrganSDosimetry(BaseDosimetry):
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
         if 'TotalTumorBurden' in self.results_olinda.index:
             self.results_olinda.drop('TotalTumorBurden', axis=0, inplace=True)
+            
+        #if 'Yes' in self.config['LesionDosimetry']:
+            # Drop rows with indices containing 'Lesion'
+        self.results_olinda = self.results_olinda[~self.results_olinda.index.str.contains("Lesion")]
+        
+        self.results_lesions = self.results[self.results.index.str.contains("Lesion")]
+        self.results_lesions['Volume_CT_mL'] = self.results_lesions['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
+        self.results_lesions['Density_HU'] = self.results_lesions['Density_HU'].apply(lambda x: numpy.mean(x))  
+        self.results_lesions[["Composition", "Density_g_per_mL"]] = self.results_lesions["Density_HU"].apply(
+            lambda x: pandas.Series(self.composition_and_density_from_HU(x))
+        )
+        self.results_lesions["Mass_g"] = self.results_lesions["Density_g_per_mL"] * self.results_lesions["Volume_CT_mL"] 
+        
+        self.results_lesions["Total_S_Value"] = self.results_lesions.apply(
+           lambda row: self.s_value_from_mass(row['Mass_g'], row['Composition']), axis=1)
+        
+        self.results_lesions["AD_Gy"] = self.results_lesions["TIA_h"] * self.results_lesions["Total_S_Value"] * float(self.config['InjectedActivity']) / 1000
 
+
+        total_weight = self.results_lesions['Mass_g'].sum()  # Total mass of all lesions
+        weighted_sum = (self.results_lesions['Mass_g'] * self.results_lesions['AD_Gy']).sum()  # Weighted sum of S-Values
+        weighted_mean_AD = weighted_sum / total_weight if total_weight > 0 else 0  # Avoid division by zero
+        total_volume = self.results_lesions['Volume_CT_mL'].sum()
+        total_tiac = self.results_lesions['TIA_h'].sum()
+    
+        print(f'TTB: mass: {total_weight}, volume: {total_volume}, TIAC: {total_tiac}, AD: {weighted_mean_AD}')
+    
         return None
     
+
+
+
     def create_output_file(self, 
                            dirname: str, 
                            savefile: bool = False
