@@ -68,8 +68,53 @@ class OrganSDosimetry(BaseDosimetry):
         return pchip_interpolator(mass) * 3.6 * 10**12
     
 
-
+    def apply_sphere_method(self, df):
+        """ Computes AD using the sphere method.
+        Parameters:
+            df (pandas.DataFrame): Input DataFrame with required columns.
+        Returns:
+            pandas.DataFrame: Updated DataFrame with computed metrics.
+        """
+        
+        # Compute mean volume and density
+        df['Volume_CT_mL'] = df['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
+        df['Density_HU'] = df['Density_HU'].apply(lambda x: numpy.mean(x))
+        
+        # Compute composition and density from HU
+        df[["Composition", "Density_g_per_mL"]] = df["Density_HU"].apply(
+            lambda x: pandas.Series(self.composition_and_density_from_HU(x))
+        )
+        
+        # Calculate mass
+        df["Mass_g"] = df["Density_g_per_mL"] * df["Volume_CT_mL"]
+        
+        # Calculate total S-value
+        df["Total_S_Value"] = df.apply(
+            lambda row: self.s_value_from_mass(row['Mass_g'], row['Composition']), axis=1
+        )
+        
+        # Calculate absorbed dose in Gy
+        injected_activity = float(self.config['InjectedActivity'])
+        df["AD_Gy"] = (
+            df["TIA_h"] * 
+            df["Total_S_Value"] * 
+            injected_activity / 1000
+        )
+        return df
       
+    def calculate_ttb(self):
+        metrics = {
+            'Mass_g': self.results_lesions['Mass_g'].sum(),
+            'Volume_CT_mL': self.results_lesions['Volume_CT_mL'].sum(),
+            'TIA_h': self.results_lesions['TIA_h'].sum(),
+            'AD_Gy': ((self.results_lesions['Mass_g'] * self.results_lesions['AD_Gy']).sum()) / (self.results_lesions['Mass_g'].sum() if self.results_lesions['Mass_g'].sum() > 0 else 0  )
+        }
+
+        TTB = pandas.DataFrame(metrics, index=['TTB'])
+        self.results_lesions = pandas.concat([self.results_lesions, TTB], axis=0)
+        return self.results_lesions
+
+    
     def prepare_data(self) -> None:
         """Creates .cas file that can be exported to Olinda/EXM."""
         self.results_olinda = self.results[['Volume_CT_mL', 'TIA_h']].copy()
@@ -85,6 +130,13 @@ class OrganSDosimetry(BaseDosimetry):
         
         # Combine Salivary Glands.
         sal_glands = ['ParotidGland_Left', 'ParotidGland_Right', 'SubmandibularGland_Left', 'SubmandibularGland_Right']
+        
+        if 'Yes' in self.config['SalivaryGlandsSeparately']:
+            self.results_salivaryglands = self.results[self.results.index.str.contains("Gland")]
+            self.results_salivaryglands = self.apply_sphere_method(self.results_salivaryglands)
+        else:
+            pass
+            
         self.results_olinda.loc['Salivary Glands'] = self.results_olinda.loc[sal_glands].sum()
         self.results_olinda = self.results_olinda.drop(sal_glands)
 
@@ -98,37 +150,15 @@ class OrganSDosimetry(BaseDosimetry):
         if 'TotalTumorBurden' in self.results_olinda.index:
             self.results_olinda.drop('TotalTumorBurden', axis=0, inplace=True)
             
-        #if 'Yes' in self.config['LesionDosimetry']:
-            # Drop rows with indices containing 'Lesion'
-        self.results_olinda = self.results_olinda[~self.results_olinda.index.str.contains("Lesion")]
-        
-        self.results_lesions = self.results[self.results.index.str.contains("Lesion")]
-        self.results_lesions['Volume_CT_mL'] = self.results_lesions['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
-        self.results_lesions['Density_HU'] = self.results_lesions['Density_HU'].apply(lambda x: numpy.mean(x))  
-        self.results_lesions[["Composition", "Density_g_per_mL"]] = self.results_lesions["Density_HU"].apply(
-            lambda x: pandas.Series(self.composition_and_density_from_HU(x))
-        )
-        self.results_lesions["Mass_g"] = self.results_lesions["Density_g_per_mL"] * self.results_lesions["Volume_CT_mL"] 
-        
-        self.results_lesions["Total_S_Value"] = self.results_lesions.apply(
-           lambda row: self.s_value_from_mass(row['Mass_g'], row['Composition']), axis=1)
-        
-        self.results_lesions["AD_Gy"] = self.results_lesions["TIA_h"] * self.results_lesions["Total_S_Value"] * float(self.config['InjectedActivity']) / 1000
+        if 'Yes' in self.config['LesionDosimetry']:
+            self.results_olinda = self.results_olinda[~self.results_olinda.index.str.contains("Lesion")]
 
+            self.results_lesions = self.results[self.results.index.str.contains("Lesion")]
+            self.results_lesions = self.apply_sphere_method(self.results_lesions)
+            self.results_lesions = self.calculate_ttb()
 
-        total_weight = self.results_lesions['Mass_g'].sum()  # Total mass of all lesions
-        weighted_sum = (self.results_lesions['Mass_g'] * self.results_lesions['AD_Gy']).sum()  # Weighted sum of S-Values
-        weighted_mean_AD = weighted_sum / total_weight if total_weight > 0 else 0  # Avoid division by zero
-        total_volume = self.results_lesions['Volume_CT_mL'].sum()
-        total_tiac = self.results_lesions['TIA_h'].sum()
-    
-        print(f'TTB: mass: {total_weight}, volume: {total_volume}, TIAC: {total_tiac}, AD: {weighted_mean_AD}')
-    
         return None
     
-
-
-
     def create_output_file(self, 
                            dirname: str, 
                            savefile: bool = False
