@@ -531,6 +531,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ] = {
                     "volumes_mL": {},
                     "activity_MBq": {},
+                    "timepoints_h": {},
                     "doserate_MBq_per_h": {},
                     "density_HU": {},
                     "density_gml": {},
@@ -565,6 +566,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             cycle["rois"][organ]["volumes_mL"]["mean_uncertainty"] = "NA"
             cycle["rois"][organ]["activity_MBq"]["values"] = self.results.loc[organ, 'Activity_MBq']
             cycle["rois"][organ]["activity_MBq"]["uncertainty"] = "NA"
+            cycle["rois"][organ]["timepoints_h"]["values"] = self.results.loc[organ, 'Time_hr']
             cycle["rois"][organ]["doserate_MBq_per_h"]["values"] = "NA"
             cycle["rois"][organ]["doserate_MBq_per_h"]["uncertainty"] = "NA"
             try:
@@ -620,7 +622,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ]["total_s_value_uncertainty"] = "NA"
                 cycle["rois"][organ]["mean_AD_Gy"] = self.results_lesions.loc[organ, 'AD_Gy']  
                 cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
-
+                
+            if 'BoneMarrow' in organ:
+                cycle["rois"][organ]["volumes_mL"]["different_tps"] = 1170
+                cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
+                cycle["rois"][organ]["volumes_mL"]["mean"] = 1170
             
                 
                 
