@@ -41,7 +41,9 @@ class OrganSDosimetry(BaseDosimetry):
         
         return None
     
-    def composition_and_density_from_HU(self, density):
+    def composition_and_density_from_HU(self, 
+                                        density: float
+                                        ) -> Tuple[str, float]:
         """Determines the composition and density based on HU values."""
         if density <= 100:
             return "100%/0%", 1.03
@@ -54,7 +56,10 @@ class OrganSDosimetry(BaseDosimetry):
         else:
             return "0%/100%", 1.92
 
-    def s_value_from_mass(self, mass, composition):
+    def s_value_from_mass(self, 
+                          mass: float, 
+                          composition: str
+                          ) -> float:
         """Returns the interpolated Total S Value (mGy MBq^-1 h^-1) for a given tumor mass (g) and composition."""
         
         # Select the appropriate tumor mass and s_value arrays based on composition
@@ -68,7 +73,9 @@ class OrganSDosimetry(BaseDosimetry):
         return pchip_interpolator(mass) * 3.6 * 10**12
     
 
-    def apply_sphere_method(self, df):
+    def apply_sphere_method(self, 
+                            df: pd.DataFrame
+                            ) -> pd.DataFrame:
         """ Computes AD using the sphere method.
         Parameters:
             df (pandas.DataFrame): Input DataFrame with required columns.
@@ -95,10 +102,11 @@ class OrganSDosimetry(BaseDosimetry):
         
         # Calculate absorbed dose in Gy
         injected_activity = float(self.config['InjectedActivity'])
-        df["AD_Gy"] = (
-            df["TIA_h"] * 
-            df["Total_S_Value"] * 
-            injected_activity / 1000
+        df["AD_Gy"] = ( # Gy
+            df["TIA_h"] * # h
+            df["Total_S_Value"] * # mGy MBq^-1 h^-1
+            injected_activity / # MBq
+            1000
         )
         return df
       
