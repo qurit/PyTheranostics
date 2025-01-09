@@ -2,7 +2,7 @@ from doodle.dosimetry.BaseDosimetry import BaseDosimetry
 from typing import Any, Dict, Optional
 from doodle.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.interpolate import PchipInterpolator
-
+from typing import Tuple
 import datetime
 import numpy
 import pandas
@@ -74,8 +74,8 @@ class OrganSDosimetry(BaseDosimetry):
     
 
     def apply_sphere_method(self, 
-                            df: pd.DataFrame
-                            ) -> pd.DataFrame:
+                            df: pandas.DataFrame
+                            ) -> pandas.DataFrame:
         """ Computes AD using the sphere method.
         Parameters:
             df (pandas.DataFrame): Input DataFrame with required columns.
