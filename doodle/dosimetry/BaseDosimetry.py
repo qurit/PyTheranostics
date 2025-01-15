@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from os import path
 import abc
+from fpdf import FPDF
 
 import numpy
 import pandas
@@ -672,3 +673,128 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         with open(file_path, 'w') as file:
             json.dump(data, file, indent=4)
+            
+            
+    def generate_pdf_report(self, pdf_file_name, radiopharmaceutical, personel1, personel2_title, personel2, personel1_title,  personel3, personel3_title, department):
+        """Generate a PDF report from the data."""
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+
+        # Title
+        pdf.set_font("Arial", style="B", size=16)
+        pdf.cell(200, 10, txt="Dosimetry Report", ln=True, align="C")
+        pdf.ln(10)
+
+        # Table layout
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, txt="Subject Information", ln=True)
+        pdf.ln(5)
+
+        pdf.set_font("Arial", size=12)
+        pdf.cell(60, 10, txt="Subject ID", border=1)
+        pdf.cell(130, 10, txt=self.config["PatientID"], border=1, ln=True)
+
+        pdf.cell(60, 10, txt="Sex", border=1)
+        pdf.cell(130, 10, txt=self.config["Gender"], border=1, ln=True)
+
+        pdf.ln(10)
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, txt="Therapy Information", ln=True)
+        pdf.ln(5)
+
+        pdf.set_font("Arial", size=12)
+        pdf.cell(60, 10, txt="Radiopharmaceutical", border=1)
+        pdf.cell(130, 10, txt=radiopharmaceutical, border=1, ln=True)
+
+        pdf.cell(60, 10, txt="Mode of administration", border=1)
+        pdf.cell(130, 10, txt="I.V.", border=1, ln=True)
+
+        pdf.cell(60, 10, txt="Administered Activity", border=1)
+        pdf.cell(130, 10, txt=self.config["InjectedActivity"], border=1, ln=True)
+
+        pdf.cell(60, 10, txt="Time and Date of injection", border=1)
+        pdf.cell(130, 10, txt=f"{self.config['InjectionDate']} {self.config['InjectionTime']}", border=1, ln=True)
+
+        pdf.cell(60, 10, txt="Treatment cycle", border=1)
+        pdf.cell(130, 10, txt=f'{self.config["Cycle"]}', border=1, ln=True)
+        
+        pdf.ln(10)
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, txt="Segmentation Examples", ln=True)
+        pdf.ln(5)
+        
+        
+        pdf.ln(10)
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, txt="Time-activity curves, fit functions, and fit parameters", ln=True)
+        pdf.ln(5)
+        
+        pdf.ln(10)
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, txt="Absorbed dose results for the organs at risk", ln=True)
+        pdf.ln(5)
+        
+        pdf.set_font("Arial", size=12)
+        text = (
+            "The following table shows the results of the time-integrated activity coefficient (TIAC) "
+            "(i.e. the time-integrated activity normalized by the injected activity), the absorbed dose (AD) "
+            "normalized by the injected activity, the mean AD to each organ of interest, and the biological effective dose (BED). "
+            "The AD values were calculated using OLINDA v.2.2.3. For the bone marrow AD calculation, it was assumed that the red marrow "
+            "to blood activity concentration ratio was 1. This is a conservative approach that is assuming that the radiopharmaceutical "
+            "is rapidly distributing in the plasma and the extracellular space of the bone marrow with the same concentration as measured "
+            "from the blood samples."
+        )
+        pdf.multi_cell(0, 10, txt=text)  # Automatically wraps text and left-aligns it
+        
+        pdf.set_font("Arial", style="B", size=10)
+        pdf.cell(40, 10, "Organ", border=1, align="C")
+        pdf.cell(30, 10, "TIAC [h]", border=1, align="C")
+        pdf.cell(40, 10, "AD [Gy/GBq]", border=1, align="C")
+        pdf.cell(40, 10, "AD [Gy]", border=1, align="C")
+        pdf.cell(40, 10, "BED [Gy]", border=1, align="C")
+        pdf.ln()
+        
+        pdf.set_font("Arial", size=10)
+        pdf.cell(40, 10, "Kidneys", border=1)
+        pdf.cell(30, 10, str(self.results.loc["Kidney_Left", 'TIA_h'] + self.results.loc["Kidney_Right", 'TIA_h'] ), border=1, align="C")
+        pdf.cell(40, 10, str(self.df_ad.loc["Kidneys", 'AD[Gy/GBq]']), border=1, align="C")
+        #pdf.cell(40, 10, str(self.df_ad.loc["Kidneys", 'AD[Gy/GBq]'] * self.config["InjectedActivity"]), border=1, align="C")
+        pdf.cell(40, 10, str(self.df_ad.loc["Kidneys", 'AD[Gy/GBq]']), border=1, align="C")
+        pdf.ln()
+        
+        pdf.ln(10)
+        pdf.set_font("Arial", style="B", size=12)
+        pdf.cell(0, 10, txt="Molecular Imaging and Therapy Team", ln=True)
+        pdf.ln(5)
+
+        pdf.set_font("Arial", size=12)
+        pdf.cell(0, 10, txt="The absorbed doses were calculated by:", ln=True)
+        pdf.ln(5)
+
+        # Team members' information
+        pdf.set_font("Arial", size=12)
+        pdf.cell(90, 10, txt="__________________________", ln=False, align="L")
+        pdf.cell(90, 10, txt="__________________________", ln=True, align="L")
+
+        pdf.cell(90, 10, txt=personel1, ln=False, align="L")
+        pdf.cell(90, 10, txt=personel2, ln=True, align="L")
+
+        pdf.cell(90, 10, txt=personel1_title, ln=False, align="L")
+        pdf.cell(90, 10, txt=personel2_title, ln=True, align="L")
+
+        pdf.cell(90, 10, txt=department, ln=False, align="L")
+        pdf.cell(90, 10, txt=department, ln=True, align="L")
+
+        pdf.ln(10)
+        pdf.cell(0, 10, txt="The results were reviewed and approved by:", ln=True)
+        pdf.ln(5)
+
+        pdf.cell(0, 10, txt="__________________________", ln=True)
+        pdf.cell(0, 10, txt=personel3, ln=True)
+        pdf.cell(0, 10, txt=personel3_title, ln=True)
+        pdf.cell(0, 10, txt=department, ln=True)
+        # Save the PDF
+        pdf.output(pdf_file_name)
+        print(f"PDF report generated: {pdf_file_name}")
