@@ -106,7 +106,6 @@ class LongitudinalStudy:
         should be Bq/mL."""
         if self.meta[time_id]["Radionuclide"] == "N/A" or self.modality not in ["NM", "PT"]:
             raise AssertionError("Can't compute activity if the image data does not represent the distribution of a radionuclide")
-
         return numpy.sum(self.masks[time_id][region] * self.array_at(time_id=time_id) * self.voxel_volume(time_id=time_id))
 
     def voxel_volume(self, time_id: int) -> float:
