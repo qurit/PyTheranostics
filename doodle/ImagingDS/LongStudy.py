@@ -43,7 +43,8 @@ class LongitudinalStudy:
                              "RemainderOfBody",
                              "TotalTumorBurden"
                              ]
-
+        lesion_masks = [f"Lesion_{i}" for i in range(1, 1000000)]  
+        self._valid_masks.extend(lesion_masks)
         return None
     
     def array_at(self, time_id: int) -> numpy.ndarray:
@@ -107,6 +108,10 @@ class LongitudinalStudy:
         if self.meta[time_id]["Radionuclide"] == "N/A" or self.modality not in ["NM", "PT"]:
             raise AssertionError("Can't compute activity if the image data does not represent the distribution of a radionuclide")
         return numpy.sum(self.masks[time_id][region] * self.array_at(time_id=time_id) * self.voxel_volume(time_id=time_id))
+
+    def density_of(self, region: str, time_id: int) -> float:
+        """Returns the mean density of region of interest, in HU"""
+        return numpy.mean(self.array_at(time_id=time_id)[self.masks[time_id][region] > 0])
 
     def voxel_volume(self, time_id: int) -> float:
         """Returns the volume of a voxel in mL"""
