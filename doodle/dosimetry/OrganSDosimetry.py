@@ -82,6 +82,7 @@ class OrganSDosimetry(BaseDosimetry):
         Returns:
             pandas.DataFrame: Updated DataFrame with computed metrics.
         """
+        df = df.copy()
         
         # Compute mean volume and density
         df['Volume_CT_mL'] = df['Volume_CT_mL'].apply(lambda x: numpy.mean(x))
@@ -155,14 +156,13 @@ class OrganSDosimetry(BaseDosimetry):
                                                                 'BoneMarrow': 'Red Marrow'}) # TODO Cortical Bone vs Trabercular Bone
         # BoneMarrow volume.
         self.results_olinda.loc['Red Marrow']['Volume_CT_mL'] = 1170 # TODO volume hardcoded, think about alternatives
+        
         if 'TotalTumorBurden' in self.results_olinda.index:
             self.results_olinda.drop('TotalTumorBurden', axis=0, inplace=True)
             
         if 'Yes' in self.config['LesionDosimetry']:
             self.results_olinda = self.results_olinda[~self.results_olinda.index.str.contains("Lesion")]
-
-            self.results_lesions = self.results[self.results.index.str.contains("Lesion")]
-            self.results_lesions = self.apply_sphere_method(self.results_lesions)
+            self.results_lesions = self.apply_sphere_method(self.results[self.results.index.str.contains("Lesion")])
             self.results_lesions = self.calculate_ttb()
 
         return None

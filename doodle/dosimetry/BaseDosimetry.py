@@ -77,7 +77,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         # DataFrame storing results
         self.results = self.initialize()
-
+        self.results_lesions = pandas.DataFrame()
+        
         # Sanity Checks:
         self.sanity_checks(metric="Volume_CT_mL")
         self.sanity_checks(metric="Activity_MBq")
@@ -301,7 +302,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         tmp_tia_data = {"Fit_params": [], "R_squared_AIC": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
         for region, region_data in self.results.iterrows():
-            
+
             fit_results, _ = exponential_fit_lmfit(
                 x_data=numpy.array(region_data["Time_hr"]),
                 y_data=numpy.array(region_data["Activity_MBq"]), 
