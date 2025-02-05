@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from os import path
 import abc
 from fpdf import FPDF
+import matplotlib.pyplot as plt
 
 import numpy
 import pandas
@@ -274,6 +275,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         tmp_tia_data = {"Fit_params": [], "TIA_MBq_h": [], "TIA_h": [], "Lambda_eff": []}
         
+        self.saved_plots = []
+        
         for region, region_data in self.results.iterrows():
             
             if self.config["rois"][region]["apply_biokinetics_from_previous_cycle"] == False:
@@ -286,6 +289,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     param_init=self.config["rois"][region]["param_init"]
                 )
                 # TODO: Bring plots outside of the main workflow.
+                fig, ax = plt.subplots()
                 plot_tac(
                     time = numpy.array(region_data["Time_hr"]),
                     activity = numpy.array(region_data["Activity_MBq"]),
@@ -295,6 +299,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     organ = region, 
                     xlabel = 't (hours)', 
                     ylabel = 'A (MBq)')
+                
+                if any(keyword in region for keyword in ["Kidney", "Gland", "Marrow"]):
+                    self.saved_plots.append(fig)  # Save the figure object to the list
+        
+                # Close the figure to free memory for other plots
+                plt.close(fig)
+        
                 # Fitting Parameters ## TODO: Implement functions from Glatting paper so that unknown parameter is only biological half-life
                 tmp_tia_data["Fit_params"].append(fit_params)
                 # Calculate Integral
@@ -730,7 +741,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         pdf.set_font("Arial", style="B", size=12)
         pdf.cell(0, 10, txt="Time-activity curves, fit functions, and fit parameters", ln=True)
         pdf.ln(5)
-        
+        print(self.saved_plots)
         pdf.ln(10)
         pdf.set_font("Arial", style="B", size=12)
         pdf.cell(0, 10, txt="Absorbed dose results for the organs at risk", ln=True)
