@@ -1,6 +1,7 @@
 from datetime import datetime
 import numpy
 from scipy.ndimage import median_filter
+from typing import Dict, Tuple
 
 def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
     """Convert a CT array, in HU into a density map in g/cc
@@ -68,3 +69,127 @@ def calculate_time_difference(date_str1: str, date_str2: str,
     hours_diff = time_diff.total_seconds() / 3600
     
     return hours_diff
+
+
+
+# New functions to extract parameters from JSON. 
+def extract_exponential_params_from_json(
+    json_data: dict, cycle: str, region: str
+) -> Tuple[Dict[str, float], bool, Dict[str, float]]:
+    """Extract parameters of fit for a defined region and cycle from a JSON dictionary of a patient.
+
+    Parameters
+    ----------
+    json_data : dict
+        The patient's JSON dictionary.
+    cycle : str
+        The cycle ID
+    region : str
+        The region of interest
+
+    Returns
+    -------
+    Tuple[Dict[str, float], bool, Dict[str, float]]
+        A Tuple consisting of the exponential parameters from previous fit, 
+        a boolean representing whether or not initial uptake was accounted for in previous fit, 
+        and all the parameters of the fit.
+    """
+    with_uptake = False
+    
+    # Determine order:
+    parameters = json_data[cycle][0]["rois"][region]["fit_params"]
+    
+    # Handle Legacy:
+    if len(parameters) in [3, 5]:
+        return extract_exponential_params_from_json_legacy(json_data, cycle, region)
+    
+    fit_order = len(parameters) // 2
+    
+    exponential_idxs = [1, 3, 5]
+    param_name_base = ["A", "B", "C"]
+
+    fixed_parameters: Dict[str, float] = {}
+    all_parameters: Dict[str, float] = {}
+    
+    for order in range(fit_order):
+        fixed_parameters[f"{param_name_base[order]}2"] = parameters[exponential_idxs[order]]
+        
+        all_parameters[f"{param_name_base[order]}1"] = parameters[exponential_idxs[order] - 1]
+        all_parameters[f"{param_name_base[order]}2"] = parameters[exponential_idxs[order]]
+        
+    if fit_order == 2 and parameters[0] == - parameters[2]:
+        with_uptake = True
+
+    if fit_order == 3 and parameters[4] == - (parameters[0] + parameters[2]):
+        with_uptake = True
+
+    return fixed_parameters, with_uptake, all_parameters
+
+
+def extract_exponential_params_from_json_legacy(
+    json_data: dict, cycle: str, region: str
+) -> Tuple[Dict[str, float], bool, Dict[str, float]]:
+    """Legacy function to extract parameters of fit for a defined region and cycle from a JSON dictionary of a patient. 
+    It supports the previous version of patient JSON where not all parameters of fit where stored.
+
+    Parameters
+    ----------
+    json_data : dict
+        The patient's JSON dictionary.
+    cycle : str
+        The cycle ID
+    region : str
+        The region of interest
+
+    Returns
+    -------
+    Tuple[Dict[str, float], bool, Dict[str, float]]
+        A Tuple consisting of the exponential parameters from previous fit, 
+        a boolean representing whether or not initial uptake was accounted for in previous fit, 
+        and all the parameters of the fit.
+
+    Raises
+    ------
+    AssertionError
+        When the parameter configuration is incompatible with new format.
+    """
+    # Read Parameters:
+    parameters = json_data[cycle][0]["rois"][region]["fit_params"]
+
+    if len(parameters) not in [3, 5]:
+        raise AssertionError("Legacy parameter extraction from JSON not compatible with this JSON file.")
+    
+    if len(parameters) == 3:
+        # Order = 2, with uptake:
+        return ({"A2": parameters[1], "B2": parameters[2]}, 
+        True, 
+        {"A1": parameters[0], "A2": parameters[1], "B1": -parameters[0], "B2": parameters[2]})
+
+    else:
+        # Order = 3, with uptake:
+        return ({"A2": parameters[1], "B2": parameters[3], "C2": parameters[4]},
+        True,
+        {"A1": parameters[0], "A2": parameters[1], "B1": parameters[2], "B2": parameters[3], "C1": -(parameters[0]+parameters[2]), "C2": parameters[4]})
+
+
+def initialize_biokinetics_from_prior_cycle(config: dict, prior_treatment_data: dict, cycle: str) -> dict:
+
+    for roi, roi_info in config["rois"].items():
+
+        if "biokinectics_from_previous_cycle" in roi_info and roi_info["biokinectics_from_previous_cycle"]:
+
+            # Get previous cycle parameters: 
+            fixed_param, with_uptake, all_params = extract_exponential_params_from_json(json_data=prior_treatment_data, cycle=cycle, region=roi)
+            
+            config["rois"][roi] = {
+                "fixed_parameters": fixed_param,
+                "fit_order": len(all_params) // 2,
+                "param_init": all_params,
+                "with_uptake": with_uptake
+            }
+            
+            print(f"{roi} will utilize the following parameters from the previous cycle {cycle}:")
+            print(fixed_param)
+            print("")
+
+    return config
