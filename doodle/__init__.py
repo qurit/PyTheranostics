@@ -30,7 +30,7 @@ from doodle.shared.corrections import (
 
 from doodle.plots.plots import (
     ewin_montage,
-    plot_tac
+    plot_tac_residuals
 )
 
 from doodle.segmentation.tools import (

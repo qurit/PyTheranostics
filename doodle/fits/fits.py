@@ -1,9 +1,139 @@
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, Dict
 
 import numpy
 from doodle.fits.functions import biexp_fun, monoexp_fun, triexp_fun, biexp_fun_uptake
 from scipy.optimize import curve_fit
+import lmfit
+from lmfit import Model
 
+
+def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray, 
+                          num_exponentials: int = 1, 
+                          fixed_params: Optional[Dict[str, float]] = None,
+                          bounds: Optional[Dict[str, Tuple[float, float]]] = None,
+                          params_init: Optional[Dict[str, float]] = None,
+                          with_uptake: bool = False
+                          ) -> Tuple[lmfit.model.ModelResult, Callable]:
+    """
+    Fit data to a sum of exponentials with flexible parameter fixing using lmfit.
+
+    Parameters
+    ----------
+    x_data : array-like
+        Independent variable data points.
+    y_data : array-like
+        Dependent variable data points.
+    num_exponentials : int
+        Number of exponential terms (1, 2, or 3).
+    fixed_params : dict, optional
+        Parameters to fix with their values.
+        Keys are parameter names ('A1', 'A2', 'B1', etc.), and values are the fixed values.
+    bounds : dict, optional
+        Boundaries of parameter estimates.
+        Keys are parameter names ('A1', 'A2', 'B1', etc.), and values are tuples representing the (min, max) values.
+    params_init : dict, optional
+        Initial values for parameter estimates.
+        Keys are parameter names ('A1', 'A2', 'B1', etc.), and values are the initial parameter estimates.
+    with_uptake : bool
+        Apply constraints for an uptake phase.
+        
+    Returns
+    -------
+    result : lmfit.model.ModelResult
+        Object containing the fit results.
+    fitted_model : callable
+        The fitted model function that can be used for predictions.
+    """
+
+    if num_exponentials not in [1, 2, 3]:
+        raise ValueError("num_exponentials must be 1, 2, or 3.")
+
+    if fixed_params is None:
+        fixed_params = {}
+        
+    # Define the model function
+    def model_func(x, **params):
+        y = numpy.zeros_like(x)
+        terms = ['A', 'B', 'C'][:num_exponentials]
+        for term in terms:
+            A1 = params.get(f'{term}1', 0)
+            A2 = params.get(f'{term}2', 0)
+            y += A1 * numpy.exp(-A2 * x)
+        return y
+
+    # Create a Model using lmfit
+    model = Model(model_func, independent_vars=['x'])
+
+    # Create parameters with initial guesses
+    params = lmfit.Parameters()
+    terms = ['A', 'B', 'C'][:num_exponentials]
+
+    for term in terms:
+        # Amplitude parameter
+        amp_name = f'{term}1'
+        # Check if parameter will have an expression
+        will_have_expr = False
+        if num_exponentials == 2 and with_uptake and amp_name == 'B1':
+            will_have_expr = True
+        if num_exponentials == 3 and with_uptake and amp_name == 'C1':
+            will_have_expr = True
+
+        if amp_name in fixed_params:
+            params.add(amp_name, value=fixed_params[amp_name], vary=False)
+        elif will_have_expr:
+            # Add parameter that will have an expression
+            params.add(amp_name, value=0, vary=False)
+        else:
+            min_b = -numpy.inf  # Allow negative amplitudes
+            max_b = numpy.inf
+            init_param = (max(y_data) - min(y_data)) / num_exponentials
+
+            if bounds is not None and amp_name in bounds:
+                min_b, max_b = bounds[amp_name]
+            if params_init is not None and amp_name in params_init:
+                init_param = params_init[amp_name]
+
+            params.add(amp_name, value=init_param, min=min_b, max=max_b)
+
+        # Exponent parameter
+        exp_name = f'{term}2'
+        if exp_name in fixed_params:
+            params.add(exp_name, value=fixed_params[exp_name], vary=False)
+        else:
+            min_b = 0  # Exponents should be positive for decay
+            max_b = numpy.inf
+            init_param = 1.0
+
+            if bounds is not None and exp_name in bounds:
+                min_b, max_b = bounds[exp_name]
+            if params_init is not None and exp_name in params_init:
+                init_param = params_init[exp_name]
+
+            params.add(exp_name, value=init_param, min=min_b, max=max_b)
+
+    # Apply constraints if specified
+    if num_exponentials == 2 and with_uptake:
+        if 'B1' in params and 'A1' in params:
+            print("Adding constraint for uptake: B1 = -A1")
+            params['B1'].set(expr='-A1')
+        else:
+            raise ValueError("Parameters 'A1' and 'B1' must be present to apply the constraint 'B1 = -A1'.")
+
+    if num_exponentials == 3 and with_uptake:
+        if 'C1' in params and 'A1' in params and 'B1' in params:
+            print("Adding constraint for uptake: C1 = -(A1 + B1)")
+            params['C1'].set(expr='-(A1 + B1)')
+        else:
+            raise ValueError("Parameters 'A1', 'B1', and 'C1' must be present to apply the constraint 'C1 = -(A1 + B1)'.")
+
+    # Perform the fit
+    result = model.fit(y_data, params, x=x_data)
+
+    # Define the fitted model function
+    def fitted_model(x):
+        return model_func(x, **result.params.valuesdict())
+
+    return result, fitted_model
 
 def calculate_r_squared(
         time: numpy.ndarray,
@@ -54,111 +184,3 @@ def get_exponential(
         NotImplementedError("Function not implemented.")
 
     return func, default_initial[order] if param_init is None else param_init, bounds[order]
-
-def fit_tac(
-        time: numpy.ndarray, 
-        activity: numpy.ndarray, 
-        decayconst: float = 1000000,
-        exp_order: int = 1,
-        weights: Optional[numpy.ndarray] = None,
-        param_init: Optional[Tuple[float, ...]] = None,
-        through_origin: bool = False,
-        maxev: int = 100000
-                ) -> Tuple[numpy.ndarray, numpy.ndarray]:
-    """Generic Time Activity Curve fitting function. Supports:
-        - exp_order = 1 -> Mono-exponential
-        - exp_order = 2 -> Bi-exponential
-        - exp_order = -2 -> Bi-exponential with uptake constrain.
-        - exp_order = 3 -> Tri-exponential"""
-
-    if abs(exp_order) < 1 or abs(exp_order) > 3:
-        raise ValueError("Not supported. Please use order 1, 2 or 3.")
-    
-    # Get function
-    exp_function, initial_params, bounds = get_exponential(order=exp_order, 
-                                                           param_init=param_init, 
-                                                           decayconst=decayconst)
-
-    # Checks
-    if time.shape != activity.shape:
-        raise AssertionError("Time and Activity arrays have different shapes.")
-
-    if weights is not None and weights and weights.shape != time.shape:
-        raise AssertionError("Time and Weights arrays have different shapes.")
-
-    if time.shape[0] < 2 * abs(exp_order):
-        raise AssertionError(f"Only {time.shape[0]} data points available. Not enough points to perform fit.")
-
-        
-    popt, _ = curve_fit(exp_function, time, activity, sigma=weights,
-                        p0=initial_params,
-                        bounds=bounds, maxfev=maxev)
-
-    r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=exp_function)
-
-    popt = numpy.append(popt, r_squared)
-
-    return popt, residuals
-
-
-def fit_tac_with_fixed_biokinetics(
-        time: numpy.ndarray, 
-        activity: numpy.ndarray, 
-        decayconst: float = 1000000,
-        exp_order: int = 1,
-        weights: Optional[numpy.ndarray] = None,
-        param_init: Optional[Tuple[float, ...]] = None,
-        through_origin: bool = False,
-        fixed_biokinetics: Optional[numpy.ndarray] = None,
-        maxev: int = 100000
-                ) -> Tuple[numpy.ndarray, numpy.ndarray]:
-    """Generic Time Activity Curve fitting function. Supports:
-        - exp_order = 1 -> Mono-exponential
-        - exp_order = 2 -> Bi-exponential
-        - exp_order = -2 -> Bi-exponential with uptake constrain.
-        - exp_order = 3 -> Tri-exponential"""
-
-    if abs(exp_order) < 1 or abs(exp_order) > 3:
-        raise ValueError("Not supported. Please use order 1, 2 or 3.")
-    
-    # Get function
-    exp_function, initial_params, bounds = get_exponential(order=exp_order, 
-                                                           param_init=param_init, 
-                                                           decayconst=decayconst)
-
-    # Checks
-    if time.shape != activity.shape:
-        raise AssertionError("Time and Activity arrays have different shapes.")
-
-    if weights is not None and weights and weights.shape != time.shape:
-        raise AssertionError("Time and Weights arrays have different shapes.")
-
-
-    if exp_function == monoexp_fun:
-        popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_biokinetics[0]), 
-                            time, activity, sigma=weights,
-                            p0=param_init,
-                            bounds=(0, numpy.inf), maxfev=maxev)
-        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a: exp_function(x, a, fixed_biokinetics[0])))
-    elif exp_function == biexp_fun:
-        popt, _ = curve_fit(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1]), 
-                            time, activity, sigma=weights,
-                            p0=param_init,
-                            bounds=(0, numpy.inf), maxfev=maxev)
-        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1])))
-    elif exp_function == biexp_fun_uptake:
-        popt, _ = curve_fit(lambda x, a: exp_function(x, a, fixed_biokinetics[0], fixed_biokinetics[1]), 
-                            time, activity, sigma=weights,
-                            p0=param_init,
-                            bounds=(0, numpy.inf), maxfev=maxev)
-        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a: exp_function(x, a, fixed_biokinetics[0], fixed_biokinetics[1])))
-    elif exp_function == triexp_fun:
-        popt, _ = curve_fit(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2]), 
-                            time, activity, sigma=weights,
-                            p0=param_init, maxfev=maxev)
-        r_squared, residuals = calculate_r_squared(time=time, activity=activity, popt=popt, func=(lambda x, a, c: exp_function(x, a, fixed_biokinetics[0], c, fixed_biokinetics[1], fixed_biokinetics[2])))
-
-    
-    popt = numpy.append(popt, r_squared)
-
-    return popt, residuals
