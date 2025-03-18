@@ -2,7 +2,7 @@ import json
 import math
 import abc
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Tuple
 from os import path
 import abc
 
@@ -303,6 +303,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         for region, region_data in self.results.iterrows():
 
+            
             fit_results, _ = exponential_fit_lmfit(
                 x_data=numpy.array(region_data["Time_hr"]),
                 y_data=numpy.array(region_data["Activity_MBq"]), 
@@ -343,6 +344,83 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         return None
 
+    def smart_fit_selection(self, region_data: pandas.Series, region: str) -> lmfit.model.ModelResult:
+        """If enabled in self.config, iterates through different valid fits and select best fit based on Akaike Information Criterion/Bayesian Information Criterion
+        and R^2.
+
+        Parameters
+        ----------
+        region_data : pandas.Series
+            _description_
+        region : str
+            _description_
+
+        Returns
+        -------
+        Tuple[lmfit.model.ModelResult, Callable]
+            _description_
+        """
+        
+        # If fit_order is defined by user:
+        if "fit_order" in self.config["rois"][region]:
+            fit_results, _ = exponential_fit_lmfit(
+                x_data=numpy.array(region_data["Time_hr"]),
+                y_data=numpy.array(region_data["Activity_MBq"]), 
+                fixed_params=self.config["rois"][region]["fixed_parameters"],
+                num_exponentials=self.config["rois"][region]["fit_order"],
+                bounds=self.config["rois"][region]["bounds"],
+                params_init=self.config["rois"][region]["param_init"],
+                with_uptake=self.config["rois"][region]["with_uptake"]
+                )
+            
+            return fit_results
+        
+        print(f"WARNING: 'fit_order' for {region} was not specified, finding the best from Akaike and Bayesian Information Criteria...")
+        
+        # Determine maximum fit order based on avialable data.
+        n_samples = numpy.array(region_data["Time_hr"]).shape[0]
+        activity_init = region_data["Activity_MBq"][0]
+        
+        max_order = n_samples // 2
+
+        all_fits: List[lmfit.model.ModelResult] = [] 
+        
+        for order in range(1, max_order + 1):
+            for with_uptake in [True, False]:
+                
+                if order == 1 and with_uptake:
+                    continue
+                
+                fit_results, _ = exponential_fit_lmfit(
+                    x_data=numpy.array(region_data["Time_hr"]),
+                    y_data=numpy.array(region_data["Activity_MBq"]), 
+                    fixed_params=None,
+                    num_exponentials=order,
+                    bounds=self.config["rois"][region]["bounds"],
+                    params_init={"A1": activity_init},
+                    with_uptake=with_uptake
+                    )
+                
+                all_fits.append(fit_results)
+
+        # Apply Criterion
+        aic_results = [(idx, fit.aic) for idx, fit in enumerate(all_fits)]
+        aic_results = sorted(aic_results, key=lambda x: x[1]) # Sort
+        
+        # If only one model fit, that is the winner.
+        if len(aic_results) == 1:
+            return all_fits[0]
+        
+        # If there are two more models, we check the top two models and compare their AIC. If the difference
+        # in AIC is less than 2, we pick the model with the lowest number of parameters.
+        
+        best_model_idx = 0
+        
+        if aic_results[1][1] - aic_results[0][1] <= 2 and all_fits[aic_results[0][0]].nparam > all_fits[aic_results[1][0]].nparam:
+            best_model_idx = aic_results[1][0]
+
+        return all_fits[best_model_idx]
+            
     def numerical_integrate(self, exp_params: List[float]) -> float:
         """Perform numerical integration of exponential function"""
         if len(exp_params) < 3:
