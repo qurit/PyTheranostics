@@ -304,15 +304,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         for region, region_data in self.results.iterrows():
 
             
-            fit_results, _ = exponential_fit_lmfit(
-                x_data=numpy.array(region_data["Time_hr"]),
-                y_data=numpy.array(region_data["Activity_MBq"]), 
-                fixed_params=self.config["rois"][region]["fixed_parameters"],
-                num_exponentials=self.config["rois"][region]["fit_order"],
-                bounds=self.config["rois"][region]["bounds"],
-                params_init=self.config["rois"][region]["param_init"],
-                with_uptake=self.config["rois"][region]["with_uptake"]
-                )
+            fit_results = self.smart_fit_selection(region_data=region_data, region=region)
 
             plot_tac_residuals(result=fit_results, region=region)
             
@@ -345,24 +337,24 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return None
 
     def smart_fit_selection(self, region_data: pandas.Series, region: str) -> lmfit.model.ModelResult:
-        """If enabled in self.config, iterates through different valid fits and select best fit based on Akaike Information Criterion/Bayesian Information Criterion
-        and R^2.
-
+        """If enabled in self.config, iterates through different valid fits orders and select best fit based on Akaike Information Criterion.
+        If a fit order is specified by the user, then the method will just perform fit following user's selected order and configuration.
+        
         Parameters
         ----------
         region_data : pandas.Series
-            _description_
+            Series containing Time and Activity.
         region : str
-            _description_
+            Region of Interest
 
         Returns
         -------
-        Tuple[lmfit.model.ModelResult, Callable]
-            _description_
+        lmfit.model.ModelResult
+            The best fit model based on Akaike Information Criterion.
         """
         
         # If fit_order is defined by user:
-        if "fit_order" in self.config["rois"][region]:
+        if self.config["rois"][region]["fit_order"] != None:
             fit_results, _ = exponential_fit_lmfit(
                 x_data=numpy.array(region_data["Time_hr"]),
                 y_data=numpy.array(region_data["Activity_MBq"]), 
@@ -375,15 +367,16 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             
             return fit_results
         
-        print(f"WARNING: 'fit_order' for {region} was not specified, finding the best from Akaike and Bayesian Information Criteria...")
+        print(f"WARNING: 'fit_order' for {region} was not specified, finding the best fit from Akaike Information Criteria...")
         
         # Determine maximum fit order based on avialable data.
         n_samples = numpy.array(region_data["Time_hr"]).shape[0]
         activity_init = region_data["Activity_MBq"][0]
         
-        max_order = n_samples // 2
+        max_order = min(n_samples // 2, 3)  # Don't use more than tri-exponential.
 
         all_fits: List[lmfit.model.ModelResult] = [] 
+        fit_config: List[Tuple[bool, int]] = []
         
         for order in range(1, max_order + 1):
             for with_uptake in [True, False]:
@@ -402,6 +395,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     )
                 
                 all_fits.append(fit_results)
+                fit_config.append((with_uptake, order))
 
         # Apply Criterion
         aic_results = [(idx, fit.aic) for idx, fit in enumerate(all_fits)]
@@ -409,6 +403,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         # If only one model fit, that is the winner.
         if len(aic_results) == 1:
+            self.config["rois"][region]["with_uptake"] = fit_config[0][0]
+            self.config["rois"][region]["fit_order"] = fit_config[0][1]
             return all_fits[0]
         
         # If there are two more models, we check the top two models and compare their AIC. If the difference
@@ -416,9 +412,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         best_model_idx = 0
         
-        if aic_results[1][1] - aic_results[0][1] <= 2 and all_fits[aic_results[0][0]].nparam > all_fits[aic_results[1][0]].nparam:
+        if aic_results[1][1] - aic_results[0][1] <= 2 and all_fits[aic_results[0][0]].nvarys > all_fits[aic_results[1][0]].nvarys:
             best_model_idx = aic_results[1][0]
 
+        
+        self.config["rois"][region]["with_uptake"] = fit_config[best_model_idx][0]
+        self.config["rois"][region]["fit_order"] = fit_config[best_model_idx][1]
+        
         return all_fits[best_model_idx]
             
     def numerical_integrate(self, exp_params: List[float]) -> float:
