@@ -46,7 +46,7 @@ def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray,
     """
 
     if num_exponentials not in [1, 2, 3]:
-        raise ValueError("num_exponentials must be 1, 2, or 3.")
+        raise ValueError(f"num_exponentials must be 1, 2, or 3., found {num_exponentials}")
 
     if fixed_params is None:
         fixed_params = {}
