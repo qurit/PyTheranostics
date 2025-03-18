@@ -401,6 +401,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         aic_results = [(idx, fit.aic) for idx, fit in enumerate(all_fits)]
         aic_results = sorted(aic_results, key=lambda x: x[1]) # Sort
         
+        print("DEBUG: AIC Results", aic_results)
+        
         # If only one model fit, that is the winner.
         if len(aic_results) == 1:
             self.config["rois"][region]["with_uptake"] = fit_config[0][0]
@@ -410,11 +412,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # If there are two more models, we check the top two models and compare their AIC. If the difference
         # in AIC is less than 2, we pick the model with the lowest number of parameters.
         
-        best_model_idx = 0
+        best_model_idx = aic_results[0][0]
         
         if aic_results[1][1] - aic_results[0][1] <= 2 and all_fits[aic_results[0][0]].nvarys > all_fits[aic_results[1][0]].nvarys:
             best_model_idx = aic_results[1][0]
 
+        
         
         self.config["rois"][region]["with_uptake"] = fit_config[best_model_idx][0]
         self.config["rois"][region]["fit_order"] = fit_config[best_model_idx][1]
