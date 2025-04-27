@@ -148,7 +148,7 @@ def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tupl
     return itk_image_from_array(array=image_array, ref_image=image)
 
 def load_from_dicom_dir(
-    dir: str, modality: str
+    dir: str, modality: str, calibration_factor: Optional[float] = None
     ) -> Tuple[Image, MetaDataType]:
     """Load CT or SPECT data from DICOM files in the specified folder.
     Returns the Image object and some relevant metadata. 
@@ -156,7 +156,7 @@ def load_from_dicom_dir(
     Args:
         dir (str): _description_
         modality (str): _description_
-
+        calibration_factor (str, optional):
     Returns:
         Tuple[Image, MetaDataType]: _description_
     """
@@ -165,7 +165,18 @@ def load_from_dicom_dir(
 
     # If Q-SPECT, need to re-scale Data as SimpleITK does not do it:
     if modality != "CT":
-        image = apply_qspect_dcm_scaling(image=image, dir=dir)
+        
+        if calibration_factor is None:
+            scale_factor = None
+        else:
+            scale_factor = (calibration_factor, 0)
+            
+            try:
+                # QSPECT - Uses scale_factor provided by user, or attempts to get it from DICOM (if QSPECT)
+                image = apply_qspect_dcm_scaling(image=image, dir=dir, scale_factor=scale_factor)
+                
+            except:
+                print("No calibration factor provided, Data might not be in BQ/ML ...")
 
     # Load Meta Data using pydicom.
     meta = load_metadata(dir=dir, modality=modality)
