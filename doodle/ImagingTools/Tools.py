@@ -58,8 +58,13 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
         radionuclide = modality.split("_")[0]
         
         # This only applies to Q-SPECT TODO: replace for something more generic.
-        injected_activity = dicom_slices[0].RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
-
+        try:
+            injected_activity = dicom_slices[0].RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
+            
+        except AttributeError:
+            print("Injected activity not found in DICOM header. Using default: 7400 MBq")
+            injected_activity = 7400
+            
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
