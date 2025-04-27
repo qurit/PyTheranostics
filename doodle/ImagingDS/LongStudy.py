@@ -256,14 +256,15 @@ class LongitudinalStudy:
     
     
 # TODO: Find the proper placement. Currently here to avoid circular imports. Consider making it part of the init class.
-def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -> LongitudinalStudy:
+def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT",
+                                  calibration_factor: Optional[float] = None) -> LongitudinalStudy:
     """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
     corresponds to the order of the time points.
 
     Args:
         dicom_dirs (List[str]): _description_
         modality (str, optional): _description_. Defaults to "CT".
-
+        calibration_factor (float, optional): Converts reconstructed SPECT image in units of Bq / mL. Defatuls to 1.
     Returns:
         LongitudinalStudy: _description_
     """
@@ -276,7 +277,7 @@ def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -
     metadata: Dict[int, MetaDataType] = {}
 
     for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(dir=dir, modality=modality)
+        image, meta = load_from_dicom_dir(dir=dir, modality=modality, calibration_factor=calibration_factor)
         images[time_id] = image
         metadata[time_id] = meta
 

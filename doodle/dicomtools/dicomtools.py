@@ -16,7 +16,7 @@ from doodle.shared.radioactive_decay import get_activity_at_injection
 class DicomModify():
 
     def __init__(self,fname,CF):
-        self.ds=pydicom.read_file(fname)
+        self.ds=pydicom.dcmread(fname)
         self.CF=CF
         self.fname = fname
 
