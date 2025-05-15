@@ -133,5 +133,5 @@ dmypy.json
 # Other
 Notebooks
 xcatPhantom
-doodle/local
-doodle/.vscode
+pytheranostics/local
+pytheranostics/.vscode
