@@ -1,4 +1,4 @@
-include doodle/kernels/*.hdr
-include doodle/kernels/*.img
-include doodle/kernels/*.dcm
-include doodle/isotope_data/*.json
+include pytheranostics/kernels/*.hdr
+include pytheranostics/kernels/*.img
+include pytheranostics/kernels/*.dcm
+include pytheranostics/isotope_data/*.json
