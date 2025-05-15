@@ -153,6 +153,7 @@ The following guidelines will help developers of PyTheranostics work quickly and
 
 9. **Merge the PR:**  
     - Once approved, click the `merge` button. The PR and associated issue will be closed automatically.
+    - Once merged, it is safe to delete the branch, it can easily be re-opened from the pull request page.
 
 ---
 
