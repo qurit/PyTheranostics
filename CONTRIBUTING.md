@@ -4,7 +4,7 @@ The following guidelines will help developers of PyTheranostics work quickly and
 
 ## Running the code
 
-### 1. Download and Install the Code and Requirements
+### 1. Download and Install the Code
 
 - Install Python version 3.8 or higher.
 - Install Git.
@@ -13,21 +13,38 @@ The following guidelines will help developers of PyTheranostics work quickly and
   ```bash
   git clone https://github.com/qurit/PyTheranostics.git
   ```
+
+### 2. Setup Local Python Environment
+
 - Navigate to the root `PyTheranostics` directory.
   ```bash
   cd PyTheranostics
   ```
+- Create a virtual environment to isolate dependencies:
+    ```bash
+    python -m venv .venv
+    ```
+- Activate the virtual environment:
+    - On **Windows**:
+        ```bash
+        source .venv/Scripts/activate
+        ```
+    - On **macOS/Linux**:
+        ```bash
+        source .venv/bin/activate
+        ```
+- Your shell prompt should now show `(.venv)` indicating the environment is active.
 - Install the packages.
   ```bash
   pip install --upgrade pip
-  install -r requirements.txt
+  pip install -r requirements.txt
   ```
 
-### 2. Run an Example Dosimetry Calculation
+### 3. Run an Example Dosimetry Calculation
 
 // todo
 
-### 3. Run Tests
+### 4. Run Tests
 
 // todo
 
@@ -55,6 +72,11 @@ The following guidelines will help developers of PyTheranostics work quickly and
   git switch -c 42-calculate-voxel-density   # -c specifies a new branch
   ```
 - Make your changes, maintaining a consistent code style.
+- Commit your changes, at least one commit per "idea" (e.g. don't combine big formatting changes with a functional change).  Always write a descriptive commit message.
+  ```bash
+  git add .  # replace the . with file names if you want to only commit specific files
+  git commit -m "added voxel density calculation."
+  ```
 - Write or update tests as needed.  //todo
 - Ensure all tests pass locally.  //todo
 - At least once per day, push your changes to maintain backups.
@@ -70,7 +92,8 @@ The following guidelines will help developers of PyTheranostics work quickly and
 
 - Merge the latest dev changes into your code.
   ```bash
-  git merge origin/dev
+  git fetch origin      # download any changes
+  git merge origin/dev  # merge them into your current branch
   ```
 - Check that the merge did not break anything.
 - Push your branch.
