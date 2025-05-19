@@ -19,10 +19,39 @@ from pytheranostics.ImagingTools.Tools import extract_masks
 import lmfit
 
 class BaseDosimetry(metaclass=abc.ABCMeta):
+    """Base class for performing organ-level patient-specific dosimetry.
 
-    """Base Dosimetry Class. Takes Nuclear Medicine Data and CT Data to perform Organ-level 
-    patient-specific dosimetry by computing organ time-integrated activity curves and
-    leveraging organ level S-values"""
+    This class provides the foundation for computing organ time-integrated activity curves
+    and leveraging organ-level S-values for dosimetry calculations. It handles both Nuclear
+    Medicine and CT data to perform comprehensive dosimetry analysis.
+
+    Parameters
+    ----------
+    nm_data : LongitudinalStudy
+        Nuclear Medicine data containing time series of images and masks.
+    ct_data : LongitudinalStudy
+        CT data containing anatomical information and masks.
+    config : dict
+        Configuration dictionary containing dosimetry parameters and settings.
+
+    Attributes
+    ----------
+    nm_data : LongitudinalStudy
+        Nuclear Medicine data instance.
+    ct_data : LongitudinalStudy
+        CT data instance.
+    config : dict
+        Configuration parameters.
+    results : pandas.DataFrame
+        DataFrame containing dosimetry results.
+    db_dir : Path
+        Directory for storing dosimetry results.
+
+    Notes
+    -----
+    This is an abstract base class that should be subclassed to implement specific
+    dosimetry calculation methods.
+    """
 
     def __init__(self,
                  config: Dict[str, Any],
@@ -359,19 +388,30 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return quad(exp_func, 0, numpy.inf, args=tuple(exp_params))
     
     def analytical_integrate(self, result: lmfit.model.ModelResult) -> float:
-        """
-        Compute the analytical integral from 0 to infinity of the fitted exponential function.
+        """Compute the analytical integral of a fitted exponential function.
+
+        This method calculates the analytical integral from 0 to infinity of a
+        fitted exponential function. It handles mono-, bi-, and tri-exponential
+        functions by summing the integrals of individual exponential terms.
 
         Parameters
         ----------
         result : lmfit.model.ModelResult
             The result object from fitting an exponential function using lmfit.
+            Should contain parameters for the exponential terms (A1, A2, B1, B2, etc.).
 
         Returns
         -------
-        integral : float
+        float
             The computed integral value.
 
+        Notes
+        -----
+        - For each exponential term, the integral is computed as A1/A2 where:
+          - A1 is the amplitude parameter
+          - A2 is the decay constant
+        - Terms with non-positive decay constants are ignored
+        - The function handles missing parameters gracefully
         """
         # Extract the parameter values from the result
         params = result.params.valuesdict()

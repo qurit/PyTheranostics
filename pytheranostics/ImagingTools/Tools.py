@@ -177,18 +177,39 @@ def load_and_resample_RT(
     rt_struct_dir: str,
     target_shape: Tuple[int, int, int]
     ) -> Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]:
-    """Load and resample RT data from DICOM files in the specified folder.
+    """Load and resample RT structure data from DICOM files.
 
-    Args:
-        ref_dicom_dir (str): _description_
-        rt_struct_dir (str): _description_
-        target_shape (Tuple[int, int, int]): _description_
+    This function loads RT structure data from DICOM files and resamples it to match
+    a target shape. It handles both the original and resampled masks.
 
-    Raises:
-        FileNotFoundError: _description_
+    Parameters
+    ----------
+    ref_dicom_dir : str
+        Path to the reference DICOM directory containing the image series.
+    rt_struct_dir : str
+        Path to the RT structure DICOM file directory.
+    target_shape : Tuple[int, int, int]
+        Target shape for resampling in (slices, rows, columns) format.
 
-    Returns:
-        Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]: _description_
+    Returns
+    -------
+    roi_masks : Dict[str, numpy.ndarray]
+        Dictionary containing original ROI masks.
+    roi_masks_resampled : Dict[str, numpy.ndarray]
+        Dictionary containing resampled ROI masks.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the reference DICOM directory does not exist.
+
+    Notes
+    -----
+    The function performs the following steps:
+    1. Loads RT structure data from DICOM files
+    2. Cleans ROI names by removing spaces and special characters
+    3. Resamples masks to match the target shape
+    4. Returns both original and resampled masks
     """
     
     # TODO: separate RTtoMask loading from re-sampling. 

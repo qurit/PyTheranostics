@@ -14,35 +14,50 @@ def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray,
                           params_init: Optional[Dict[str, float]] = None,
                           with_uptake: bool = False
                           ) -> Tuple[lmfit.model.ModelResult, Callable]:
-    """
-    Fit data to a sum of exponentials with flexible parameter fixing using lmfit.
+    """Fit data to a sum of exponentials with flexible parameter fixing using lmfit.
+
+    This function fits time-activity data to a sum of exponential functions using
+    the lmfit package. It supports mono-, bi-, and tri-exponential fits with
+    optional parameter fixing and constraints.
 
     Parameters
     ----------
-    x_data : array-like
-        Independent variable data points.
-    y_data : array-like
-        Dependent variable data points.
-    num_exponentials : int
-        Number of exponential terms (1, 2, or 3).
+    x_data : numpy.ndarray
+        Independent variable data points (typically time points).
+    y_data : numpy.ndarray
+        Dependent variable data points (typically activity values).
+    num_exponentials : int, optional
+        Number of exponential terms (1, 2, or 3), by default 1.
     fixed_params : dict, optional
-        Parameters to fix with their values.
-        Keys are parameter names ('A1', 'A2', 'B1', etc.), and values are the fixed values.
+        Dictionary of parameters to fix with their values.
+        Keys are parameter names ('A1', 'A2', 'B1', etc.), by default None.
     bounds : dict, optional
-        Boundaries of parameter estimates.
-        Keys are parameter names ('A1', 'A2', 'B1', etc.), and values are tuples representing the (min, max) values.
+        Dictionary of parameter boundaries.
+        Keys are parameter names, values are (min, max) tuples, by default None.
     params_init : dict, optional
-        Initial values for parameter estimates.
-        Keys are parameter names ('A1', 'A2', 'B1', etc.), and values are the initial parameter estimates.
-    with_uptake : bool
-        Apply constraints for an uptake phase.
-        
+        Dictionary of initial parameter values.
+        Keys are parameter names, by default None.
+    with_uptake : bool, optional
+        Whether to apply uptake phase constraints, by default False.
+
     Returns
     -------
     result : lmfit.model.ModelResult
-        Object containing the fit results.
+        Object containing the fit results and statistics.
     fitted_model : callable
         The fitted model function that can be used for predictions.
+
+    Raises
+    ------
+    ValueError
+        If num_exponentials is not 1, 2, or 3.
+        If required parameters are missing for uptake constraints.
+
+    Notes
+    -----
+    For uptake phase constraints:
+    - For bi-exponential: B1 = -A1
+    - For tri-exponential: C1 = -(A1 + B1)
     """
 
     if num_exponentials not in [1, 2, 3]:
