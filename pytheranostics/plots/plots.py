@@ -4,13 +4,30 @@ from pytheranostics.fits.functions import monoexp_fun, biexp_fun, triexp_fun, bi
 from typing import Tuple
 import lmfit
 
-def ewin_montage(img,ewin):
-    '''
-    img: image data
+def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
+    """Create a montage of energy window images.
 
-    ewin: energy window dictionary
+    This function creates a 2x6 subplot montage showing energy window images
+    from two detectors. The top row shows images from Detector 1, and the
+    bottom row shows corresponding images from Detector 2.
 
-    '''
+    Parameters
+    ----------
+    img : numpy.ndarray
+        Image data array containing energy window images.
+        Shape should be (2*N, height, width) where N is the number of energy windows.
+    ewin : dict
+        Dictionary containing energy window information.
+        Keys should be window identifiers, and values should be dictionaries
+        containing at least a 'center' key with the energy value in keV.
+
+    Notes
+    -----
+    - The function creates a figure with size (22, 6).
+    - Each energy window is displayed in a separate subplot.
+    - Colorbars are added to each subplot.
+    - The layout is automatically adjusted using tight_layout().
+    """
 
     plt.figure(figsize=(22,6))
     for ind,i in enumerate(range(0,int(img.shape[0]),2)):
