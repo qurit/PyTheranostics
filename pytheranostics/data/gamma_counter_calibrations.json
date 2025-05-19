@@ -1,0 +1,15 @@
+{
+    "Hidex":{
+        "Lu-177":{
+            "cal_factor":0.000438,
+            "cal_factor_units":"kBq/cpm"
+        }
+
+    },
+    "Wizard":{
+        "Lu-177":{
+            "cal_factor":0.000446,
+            "cal_factor_units":"kBq/cpm"
+        }
+    }
+}
