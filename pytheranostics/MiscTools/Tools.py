@@ -44,16 +44,29 @@ def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
 def calculate_time_difference(date_str1: str, date_str2: str, 
                               date_format: str = "%Y%m%d %H%M%S") -> float:
     """Calculate the time difference in hours between two dates.
-    
-       The dates should be provided in the "YYYYMMDD HHMMSS" format.
 
-    Args:
-        date_str1 (str): _description_
-        date_str2 (str): _description_
-        date_format (str, optional): _description_. Defaults to "%Y%m%d %H%M%S".
+    This function computes the time difference between two dates provided as strings.
+    The dates should be in the format specified by date_format.
 
-    Returns:
-        float: _description_
+    Parameters
+    ----------
+    date_str1 : str
+        First date string.
+    date_str2 : str
+        Second date string.
+    date_format : str, optional
+        Format string for parsing the dates, by default "%Y%m%d %H%M%S".
+
+    Returns
+    -------
+    float
+        Time difference in hours.
+
+    Notes
+    -----
+    - The function removes any fractional seconds from the input strings.
+    - The time difference is calculated as (date_str1 - date_str2).
+    - The result is returned in hours as a float value.
     """
         
     # Clean up:
