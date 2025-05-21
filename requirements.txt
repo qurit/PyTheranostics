@@ -1,9 +1,10 @@
+hatchling>=1.18.0
 numpy
 matplotlib
 pandas
 pydicom
 openpyxl
-rt_utils
-scikit-image 
+rt-utils
+scikit-image
 simpleitk
 lmfit
