@@ -94,7 +94,7 @@ class GammaCamera(PlanarQC):
             if self.isotope_dic['half_life_units'] == 'days':
                 delta_t = (acq_time - ref_time) / np.timedelta64(1, 'D')
             elif self.isotope_dic['half_life_units'] == 'hours':
-                delta_t = (acq_time - ref_time) / np.timedelta64(1, 'D')
+                delta_t = (acq_time - ref_time) / np.timedelta64(1, 'h')
             else:
                 print('check units of decay correction')
 
@@ -173,7 +173,7 @@ class GammaCamera(PlanarQC):
         print("Calibration Results. Sensitivity in cps/MBq. Calibration factor in MBq/cps")
         pprint.pprint(self.cal_dic)
 
-    def calculate_uncertainty(self, site_id, camera_model):
+    def calculate_uncertainty(self, site_id, camera_model, uncertainty_activity=0.03359):
         u_prim_list = []
         for detector in ['Detector1', 'Detector2']:
             u_pw = math.sqrt(self.win_check['photopeak']['counts'][detector])
@@ -183,10 +183,8 @@ class GammaCamera(PlanarQC):
 
         final_u_counts = 1/2 * math.sqrt(u_prim_list[0]**2 + u_prim_list[1]**2) + np.std(u_prim_list)
         counts = (self.Cp['Detector1'] + self.Cp['Detector2']) / 2
-        u_activity = self.A_decayed * 0.03747
+        u_activity = self.A_decayed * uncertainty_activity
         u_time = 0.001
-        
-        
         
         uncertainty_cf = self.cal_dic[site_id][camera_model]['calibration_factor']['Average'] * math.sqrt((final_u_counts/counts)**2 + (u_activity/ self.A_decayed)**2 + (u_time/self.ds.ActualFrameDuration/1000 )**2)
         uncertainty_sensitivity = self.cal_dic[site_id][camera_model]['sensitivity']['Average'] * math.sqrt((final_u_counts/counts)**2 + (u_activity/ self.A_decayed)**2 + (u_time/self.ds.ActualFrameDuration/1000 )**2)
