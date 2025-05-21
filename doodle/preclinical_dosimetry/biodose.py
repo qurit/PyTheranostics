@@ -9,8 +9,15 @@ from scipy import integrate
 
 
 import matplotlib.pylab as plt
-from doodle.fits.fits import monoexp_fun, biexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake, fit_biexp, fit_triexp
-from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
+#from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
+from doodle.fits.fits import exponential_fit_lmfit, calculate_r_squared, get_exponential, monoexp_fun, biexp_fun, biexp_fun_uptake, triexp_fun
+from typing import Any, Callable, Optional, Tuple, Dict
+
+from scipy import integrate
+from scipy.optimize import curve_fit
+import lmfit
+from lmfit import Model
+
 
 
 this_dir=path.dirname(__file__)
@@ -89,97 +96,158 @@ class BioDose():
         
 
         
-
-    def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,1), biguess=(1,10,0.5,0.05), uptakeguess=(1,1,-1,1), ignore_weights=False,append_zero=True,skip_points=0):
-        ''' This method fits the curves and stores the results in self.fit_results.  The results can be seen in self.area organized in a pandas dataframe.'''
-
+    def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,1), biguess=(1,10,0.5,0.05), 
+               uptakeguess=(1,1,-1,1), ignore_weights=False, append_zero=True, skip_points=0):
+        ''' 
+        This method fits the curves using lmfit and stores the results in self.fit_results.  
+        The results can be seen in self.area organized in a pandas dataframe.
+        '''
         decayconst = log(2)/self.half_life
+    
         if organlist is None:
-            self.area = pd.DataFrame(index=organlist, columns=['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 'Perctage_diff - bi vs tri uptake washout'])
-            self.fit_results = {}
             organlist = self.biodi.index
-            
+
+        # Initialize results DataFrame
+        columns = ['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 
+                   'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 
+                   'Perctage_diff - bi vs tri uptake washout']
+        self.area = pd.DataFrame(index=organlist, columns=columns)
+        self.fit_results = {}
+
         dfs = []
         for org in organlist:
             bio_data = self.biodi.loc[org]['%ID/g']
             activity = np.asarray(bio_data)
-            t = np.asarray((self.t))
+            t = np.asarray(self.t)
             sigmas = self.biodi.loc[org]['sigma']
             sigmas = np.asarray(sigmas)
             xlabel = 't (h)'
             ylabel = '%ID/g'
-            
-            if uptake == False:
-                popt1,tt1,yy1,residuals1 = fit_monoexp(t, activity,decayconst=decayconst,skip_points=skip_points, monoguess=monoguess,   maxev=maxev, limit_bounds=False, sigmas = sigmas) 
-                monoexp_fit_plots(t, activity, tt1, yy1, org,  popt1[2], residuals1, xlabel, ylabel, skip_points, sigmas)
-                popt2,tt2,yy2,residuals2 = fit_biexp(t, activity, maxev=maxev, biguess=biguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)
-                biexp_fit_plots(t, activity, tt2, yy2, org, popt2[4], residuals2, xlabel, ylabel, skip_points, sigmas)
+
+            # Prepare initial parameters and bounds
+            param_init = {
+                1: monoguess,
+                2: biguess,
+                -2: uptakeguess,
+                3: None  # Will use default if not provided
+            }
+
+            if not uptake:
+                # Mono-exponential fit
+                result_mono, fitted_mono = exponential_fit_lmfit(
+                    t[skip_points:], activity[skip_points:],
+                    num_exponentials=1,
+                    params_init={'A1': monoguess[0], 'A2': monoguess[1]},
+                    bounds={'A1': (0, None), 'A2': (decayconst, None)}
+                )
+
+                # Bi-exponential fit
+                result_bi, fitted_bi = exponential_fit_lmfit(
+                    t[skip_points:], activity[skip_points:],
+                    num_exponentials=2,
+                    params_init={'A1': biguess[0], 'A2': biguess[1], 
+                                 'B1': biguess[2], 'B2': biguess[3]},
+                    bounds={'A1': (0, None), 'A2': (decayconst, None),
+                            'B1': (0, None), 'B2': (decayconst, None)}
+                )
+
+                # Store results
+                mono_params = result_mono.params.valuesdict()
+                bi_params = result_bi.params.valuesdict()
+
                 organ_data = {
                     'Organ': [org],
-                    'mono_exp:%ID/g': [popt1[0]], 
-                    'mono_exp:lambda_effective_1/h': [popt1[1]],  
-                    'bi_exp:1_%ID/g': [popt2[0]], 
-                    'bi_exp:lambda_effective1_1/h': [popt2[1]], 
-                    'bi_exp:lambda_effective2_1/h': [popt2[3]], 
-                    'bi_exp:2_%ID/g': [popt2[2]]
+                    'mono_exp:%ID/g': [mono_params['A1']], 
+                    'mono_exp:lambda_effective_1/h': [mono_params['A2']],  
+                    'bi_exp:1_%ID/g': [bi_params['A1']], 
+                    'bi_exp:lambda_effective1_1/h': [bi_params['A2']], 
+                    'bi_exp:lambda_effective2_1/h': [bi_params['B2']], 
+                    'bi_exp:2_%ID/g': [bi_params['B1']]
                 }
-                # Creating a temporary DataFrame for the current organ
                 organ_df = pd.DataFrame(organ_data, index=[org])
                 dfs.append(organ_df)
 
-                # Appending the temporary DataFrame to the main DataFrame
-                #self.fitting_parameters = self.fitting_parameters.append(organ_df, ignore_index=True)
-
+                # Calculate areas
                 if skip_points == 0:
-                    area1 = integrate.quad(monoexp_fun, 0, np.inf, args=(popt1[0], popt1[1]))
-                    area2 = integrate.quad(biexp_fun, 0, np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
-                elif skip_points == 1:
-                    # calculate triangle on the left, made by first point and (0,0) with height the height of the first point
-                    triangle_area = t[0] * bio_data.iloc[0] / 2  # base is time of first point, height is height of first point
-                    trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2  # base1 is height of first point, base2 is height of second point, height is difference in times
-
-                    monoexp_area = integrate.quad(monoexp_fun, t[skip_points], np.inf, args=(popt1[0], popt1[1]))
-                    biexp_area = integrate.quad(biexp_fun, t[skip_points], np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
-
-                    area1 = triangle_area + trapezoid_area + monoexp_area
-                    area2 = triangle_area + trapezoid_area + biexp_area
-                elif skip_points >= 2:
-                    # calculate triangle on the left, made by first point and (0,0) with height the height of the first point
-                    triangle_area = t[0] * bio_data.iloc[0] / 2  # base is time of first point, height is height of first point
-                    trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2  # base1 is height of first point, base2 is height of second point, height is difference in times
-                    trapezoid_area2 = (bio_data.iloc[1] + bio_data.iloc[2]) * (t[2] - t[1]) / 2 
-                    monoexp_area = integrate.quad(monoexp_fun, t[skip_points], np.inf, args=(popt1[0], popt1[1]))
-                    biexp_area = integrate.quad(biexp_fun, t[skip_points], np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
-
-                    area1 = triangle_area + trapezoid_area + trapezoid_area2 + monoexp_area
-                    area2 = triangle_area + trapezoid_area + trapezoid_area2 + biexp_area                    
-                    
-                elif skip_points >= 3:    
-                    print('Error: Value must be equal to 0 or 1.') 
-                
-                self.fit_results[org]=[popt1,area1,popt2,area2]
-
-                if np.isnan(area1).all():
-                    self.area.loc[org,'Bi-Exponential']=area2[0]
+                    area_mono = integrate.quad(
+                        lambda x: monoexp_fun(x, mono_params['A1'], mono_params['A2']), 
+                        0, np.inf
+                    )
+                    area_bi = integrate.quad(
+                        lambda x: biexp_fun(x, bi_params['A1'], bi_params['A2'], 
+                                          bi_params['B1'], bi_params['B2']), 
+                        0, np.inf
+                    )
                 else:
-                    self.area.loc[org,'Mono-Exponential']=area1[0]
-                    self.area.loc[org,'Bi-Exponential']=area2[0]
-                    self.area.loc[org,'Perctage_diff - mono vs bi washout']= abs(area1[0] - area2[0]) / area1[0] * 100     
-                    #self.area.loc[org]=[area1[0],area2[0]]
+                    # Handle skipped points by adding trapezoidal areas
+                    # (Same logic as before, but using new parameters)
+                    triangle_area = t[0] * bio_data.iloc[0] / 2
+                    trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2
+
+                    monoexp_area = integrate.quad(
+                        lambda x: monoexp_fun(x, mono_params['A1'], mono_params['A2']), 
+                        t[skip_points], np.inf
+                    )
+                    biexp_area = integrate.quad(
+                        lambda x: biexp_fun(x, bi_params['A1'], bi_params['A2'], 
+                                          bi_params['B1'], bi_params['B2']), 
+                        t[skip_points], np.inf
+                    )
+
+                    if skip_points == 1:
+                        area_mono = triangle_area + trapezoid_area + monoexp_area[0]
+                        area_bi = triangle_area + trapezoid_area + biexp_area[0]
+                    elif skip_points >= 2:
+                        trapezoid_area2 = (bio_data.iloc[1] + bio_data.iloc[2]) * (t[2] - t[1]) / 2
+                        area_mono = triangle_area + trapezoid_area + trapezoid_area2 + monoexp_area[0]
+                        area_bi = triangle_area + trapezoid_area + trapezoid_area2 + biexp_area[0]
+
+                self.fit_results[org] = [
+                    (mono_params['A1'], mono_params['A2']), 
+                    area_mono,
+                    (bi_params['A1'], bi_params['A2'], bi_params['B1'], bi_params['B2']), 
+                    area_bi
+                ]
+
+                if not np.isnan(area_mono[0]):
+                    self.area.loc[org, 'Mono-Exponential'] = area_mono[0]
+                    self.area.loc[org, 'Bi-Exponential'] = area_bi[0]
+                    self.area.loc[org, 'Perctage_diff - mono vs bi washout'] = (
+                        abs(area_mono[0] - area_bi[0]) / area_mono[0] * 100
+                    )
 
             else:
-                popt3,tt3,yy3,residuals3 = fit_biexp_uptake(t, activity, maxev=maxev, uptakeguess=uptakeguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)                
-                biexp_fit_plots(t, activity, tt3, yy3, org, popt3[4], residuals3, xlabel, ylabel, skip_points, sigmas)
-                area3 = integrate.quad(biexp_fun, 0, np.inf, args=(popt3[0], popt3[1], popt3[2], popt3[3]))
+                # Uptake model
+                result_uptake, fitted_uptake = exponential_fit_lmfit(
+                    t[skip_points:], activity[skip_points:],
+                    num_exponentials=2,
+                    with_uptake=True,
+                    params_init={'A1': uptakeguess[0], 'A2': uptakeguess[1], 
+                               'B1': uptakeguess[2], 'B2': uptakeguess[3]},
+                    bounds={'A1': (0, None), 'A2': (decayconst, None),
+                            'B1': (None, None), 'B2': (decayconst, None)}
+                )
 
-                self.area.loc[org,'Bi-Exponential_uptake'] = area3[0]
-                #self.area.loc[org,'Tri-Exponential'] = area4[0]
-                #self.area.loc[org,'Perctage_diff - bi vs tri uptake washout'] = abs(area3[0] - area4[0]) / area3[0] * 100                
-        
+                uptake_params = result_uptake.params.valuesdict()
+                area_uptake = integrate.quad(
+                    lambda x: biexp_fun_uptake(x, uptake_params['A1'], uptake_params['A2'], 
+                                              uptake_params['B1'], uptake_params['B2']), 
+                    0, np.inf
+                )
+
+                self.area.loc[org, 'Bi-Exponential_uptake'] = area_uptake[0]
+                self.fit_results[org] = [
+                    None, None,
+                    (uptake_params['A1'], uptake_params['A2'], uptake_params['B1'], uptake_params['B2']), 
+                    area_uptake
+                ]
+
         try:
-            self.fitting_parameters = pd.concat(dfs, ignore_index=True)   
-        except:
-            print("")
+            self.fitting_parameters = pd.concat(dfs, ignore_index=True)
+        except Exception as e:
+            print(f"Error creating fitting parameters DataFrame: {e}")
+        
+        
 
 #    def get_fit_accepted_dict(self):
 #        self.fit_accepted = {}  # Initialize an empty dictionary
