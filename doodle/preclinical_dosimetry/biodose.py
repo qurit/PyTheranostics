@@ -123,7 +123,6 @@ class BioDose():
             t = np.asarray(self.t)
             sigmas = self.biodi.loc[org]['sigma']
             sigmas = np.asarray(sigmas)
-            xlabel = 't (h)'
             ylabel = '%ID/g'
 
             # Prepare initial parameters and bounds
@@ -143,7 +142,7 @@ class BioDose():
                     params_init={'A1': monoguess[0], 'A2': monoguess[1]},
                     bounds={'A1': (0, None), 'A2': (decayconst, None)}
                 )
-                plot_tac_residuals(result=result_mono, region=org)
+                plot_tac_residuals(result=result_mono, region=org, y_label=ylabel)
 
                 # Bi-exponential fit
                 result_bi, fitted_bi = exponential_fit_lmfit(
@@ -155,8 +154,7 @@ class BioDose():
                     bounds={'A1': (0, None), 'A2': (decayconst, None),
                             'B1': (0, None), 'B2': (decayconst, None)}
                 )
-                plot_tac_residuals(result=result_bi, region=org)
-                print(result_bi.weights)
+                plot_tac_residuals(result=result_bi, region=org, y_label=ylabel)
                 # Store results
                 mono_params = result_mono.params.valuesdict()
                 bi_params = result_bi.params.valuesdict()
@@ -233,7 +231,7 @@ class BioDose():
                     bounds={'A1': (0, None), 'A2': (decayconst, None),
                             'B1': (None, None), 'B2': (decayconst, None)}
                 )
-
+                plot_tac_residuals(result=result_uptake, region=org, y_label=ylabel)
                 uptake_params = result_uptake.params.valuesdict()
                 area_uptake = integrate.quad(
                     lambda x: biexp_fun_uptake(x, uptake_params['A1'], uptake_params['A2'], 
