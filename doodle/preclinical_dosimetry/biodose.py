@@ -98,7 +98,7 @@ class BioDose():
         
 
         
-    def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,1), biguess=(1,10,0.5,0.05), 
+    def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,0.1),  
                uptakeguess=(1,1,-1,1), ignore_weights=False, append_zero=True, skip_points=0):
         ''' 
         This method fits the curves using lmfit and stores the results in self.fit_results.  
@@ -121,17 +121,8 @@ class BioDose():
             bio_data = self.biodi.loc[org]['%ID/g']
             activity = np.asarray(bio_data)
             t = np.asarray(self.t)
-            sigmas = self.biodi.loc[org]['sigma']
-            sigmas = np.asarray(sigmas)
+            sigmas = np.asarray(self.biodi.loc[org]['sigma'])
             ylabel = '%ID/g'
-
-            # Prepare initial parameters and bounds
-            #param_init = {
-            #    1: monoguess,
-            #    2: biguess,
-            #    -2: uptakeguess,
-            #    3: None  # Will use default if not provided
-            #}
 
             if not uptake:
                 # Mono-exponential fit
@@ -141,16 +132,16 @@ class BioDose():
                     sigma=sigmas[skip_points:],
                     params_init={'A1': monoguess[0], 'A2': monoguess[1]},
                     bounds={'A1': (0, None), 'A2': (decayconst, None)}
-                )
+                )         
                 plot_tac_residuals(result=result_mono, region=org, y_label=ylabel)
-
+                
                 # Bi-exponential fit
                 result_bi, fitted_bi = exponential_fit_lmfit(
                     t[skip_points:], activity[skip_points:],
                     num_exponentials=2,
                     sigma=sigmas[skip_points:],
-                    params_init={'A1': biguess[0], 'A2': biguess[1], 
-                                 'B1': biguess[2], 'B2': biguess[3]},
+                    params_init={'A1': result_mono.params['A1'].value * 0.6, 'A2': result_mono.params['A2'].value * 0.8, 
+                                 'B1': result_mono.params['A1'].value * 0.4, 'B2': result_mono.params['A2'].value * 1.2},
                     bounds={'A1': (0, None), 'A2': (decayconst, None),
                             'B1': (0, None), 'B2': (decayconst, None)}
                 )
