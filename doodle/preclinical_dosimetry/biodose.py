@@ -96,6 +96,42 @@ class BioDose():
         self.biodi['sigma'] = np.round(biodi['sigma']*decay_factor,5)
         print('Decayed biodistribution stored in self.biodi')
         
+    def initialize_results_df(self):
+        '''
+        This method initializes the results dataframe with the organ list and columns for the different fits.
+        '''
+        columns = ['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 
+                   'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 
+                   'Perctage_diff - bi vs tri uptake washout']
+        if not hasattr(self, 'area') or self.area is None:
+            self.area = pd.DataFrame(index=self.biodi.index, columns=columns)
+        if not hasattr(self, 'fit_results') or self.fit_results is None:
+            self.fit_results = {}
+
+
+    def update_fit_results(self, org, mono_params=None, bi_params=None, uptake_params=None,
+                           area_mono=None, area_bi=None, area_uptake=None):
+        '''
+        This method updates the fit results for a given organ.
+        '''
+        if mono_params and area_mono:
+            self.area.loc[org, 'Mono-Exponential'] = area_mono[0]
+        if bi_params and area_bi:
+            self.area.loc[org, 'Bi-Exponential'] = area_bi[0]
+            if area_mono and area_mono[0] != 0:
+                self.area.loc[org, 'Perctage_diff - mono vs bi washout'] = (
+                    abs(area_mono[0] - area_bi[0]) / area_mono[0] * 100
+                )
+        if uptake_params and area_uptake:
+            self.area.loc[org, 'Bi-Exponential_uptake'] = area_uptake[0]
+
+        self.fit_results[org] = [
+            (mono_params['A1'], mono_params['A2']) if mono_params else None,
+            area_mono,
+            (bi_params['A1'], bi_params['A2'], bi_params['B1'], bi_params['B2']) if bi_params else
+            (uptake_params['A1'], uptake_params['A2'], uptake_params['B1'], uptake_params['B2']) if uptake_params else None,
+            area_bi if bi_params else area_uptake
+        ]
 
         
     def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,0.1),  
@@ -110,11 +146,7 @@ class BioDose():
             organlist = self.biodi.index
 
         # Initialize results DataFrame
-        columns = ['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 
-                   'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 
-                   'Perctage_diff - bi vs tri uptake washout']
-        self.area = pd.DataFrame(index=organlist, columns=columns)
-        self.fit_results = {}
+        self.initialize_results_df()
 
         dfs = []
         for org in organlist:
@@ -196,19 +228,8 @@ class BioDose():
                         area_mono = triangle_area + trapezoid_area + trapezoid_area2 + monoexp_area[0]
                         area_bi = triangle_area + trapezoid_area + trapezoid_area2 + biexp_area[0]
 
-                self.fit_results[org] = [
-                    (mono_params['A1'], mono_params['A2']), 
-                    area_mono,
-                    (bi_params['A1'], bi_params['A2'], bi_params['B1'], bi_params['B2']), 
-                    area_bi
-                ]
-
-                if not np.isnan(area_mono[0]):
-                    self.area.loc[org, 'Mono-Exponential'] = area_mono[0]
-                    self.area.loc[org, 'Bi-Exponential'] = area_bi[0]
-                    self.area.loc[org, 'Perctage_diff - mono vs bi washout'] = (
-                        abs(area_mono[0] - area_bi[0]) / area_mono[0] * 100
-                    )
+                self.update_fit_results(org, mono_params=mono_params, bi_params=bi_params,
+                                    area_mono=area_mono, area_bi=area_bi)
 
             else:
                 # Uptake model
@@ -229,12 +250,8 @@ class BioDose():
                                             uptake_params['B2']), 
                     0, np.inf
                 )
-                self.area.loc[org, 'Bi-Exponential_uptake'] = area_uptake[0]
-                self.fit_results[org] = [
-                    None, None,
-                    (uptake_params['A1'], uptake_params['A2'], uptake_params['B1'], uptake_params['B2']), 
-                    area_uptake
-                ]
+
+                self.update_fit_results(org, uptake_params=uptake_params, area_uptake=area_uptake)
 
         try:
             self.fitting_parameters = pd.concat(dfs, ignore_index=True)
