@@ -114,14 +114,19 @@ class BioDose():
         '''
         This method updates the fit results for a given organ.
         '''
+        area_mono_val = area_mono[0] if isinstance(area_mono, (tuple, list)) else area_mono
+        area_bi_val = area_bi[0] if isinstance(area_bi, (tuple, list)) else area_bi
+        
         if mono_params and area_mono:
-            self.area.loc[org, 'Mono-Exponential'] = area_mono[0]
+            self.area.loc[org, 'Mono-Exponential'] = area_mono_val
+        
         if bi_params and area_bi:
-            self.area.loc[org, 'Bi-Exponential'] = area_bi[0]
-            if area_mono and area_mono[0] != 0:
+            self.area.loc[org, 'Bi-Exponential'] = area_bi_val
+            if area_mono and area_mono_val != 0:
                 self.area.loc[org, 'Perctage_diff - mono vs bi washout'] = (
-                    abs(area_mono[0] - area_bi[0]) / area_mono[0] * 100
+                    abs(area_mono_val - area_bi_val) / area_mono_val * 100
                 )
+
         if uptake_params and area_uptake:
             self.area.loc[org, 'Bi-Exponential_uptake'] = area_uptake[0]
 
@@ -135,7 +140,7 @@ class BioDose():
 
         
     def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,0.1),  
-               uptakeguess=(1,1,-1,1), ignore_weights=False, append_zero=True, skip_points=0):
+               uptakeguess=(1,1,-1,1), ignore_weights=False, append_zero=True, tps_to_skip_fit=0):
         ''' 
         This method fits the curves using lmfit and stores the results in self.fit_results.  
         The results can be seen in self.area organized in a pandas dataframe.
@@ -159,9 +164,9 @@ class BioDose():
             if not uptake:
                 # Mono-exponential fit
                 result_mono, fitted_mono = exponential_fit_lmfit(
-                    t[skip_points:], activity[skip_points:],
+                    t[tps_to_skip_fit:], activity[tps_to_skip_fit:],
                     num_exponentials=1,
-                    sigma=sigmas[skip_points:],
+                    sigma=sigmas[tps_to_skip_fit:],
                     params_init={'A1': monoguess[0], 'A2': monoguess[1]},
                     bounds={'A1': (0, None), 'A2': (decayconst, None)}
                 )         
@@ -169,9 +174,9 @@ class BioDose():
                 
                 # Bi-exponential fit
                 result_bi, fitted_bi = exponential_fit_lmfit(
-                    t[skip_points:], activity[skip_points:],
+                    t[tps_to_skip_fit:], activity[tps_to_skip_fit:],
                     num_exponentials=2,
-                    sigma=sigmas[skip_points:],
+                    sigma=sigmas[tps_to_skip_fit:],
                     params_init={'A1': result_mono.params['A1'].value * 0.6, 'A2': result_mono.params['A2'].value * 0.8, 
                                  'B1': result_mono.params['A1'].value * 0.4, 'B2': result_mono.params['A2'].value * 1.2},
                     bounds={'A1': (0, None), 'A2': (decayconst, None),
@@ -195,7 +200,7 @@ class BioDose():
                 dfs.append(organ_df)
 
                 # Calculate areas
-                if skip_points == 0:
+                if tps_to_skip_fit == 0:
                     area_mono = integrate.quad(
                         lambda x: monoexp_fun(x, mono_params['A1'], mono_params['A2']), 
                         0, np.inf
@@ -212,18 +217,18 @@ class BioDose():
 
                     monoexp_area = integrate.quad(
                         lambda x: monoexp_fun(x, mono_params['A1'], mono_params['A2']), 
-                        t[skip_points], np.inf
+                        t[tps_to_skip_fit], np.inf
                     )
                     biexp_area = integrate.quad(
                         lambda x: biexp_fun(x, bi_params['A1'], bi_params['A2'], 
                                           bi_params['B1'], bi_params['B2']), 
-                        t[skip_points], np.inf
+                        t[tps_to_skip_fit], np.inf
                     )
 
-                    if skip_points == 1:
+                    if tps_to_skip_fit == 1:
                         area_mono = triangle_area + trapezoid_area + monoexp_area[0]
                         area_bi = triangle_area + trapezoid_area + biexp_area[0]
-                    elif skip_points >= 2:
+                    elif tps_to_skip_fit >= 2:
                         trapezoid_area2 = (bio_data.iloc[1] + bio_data.iloc[2]) * (t[2] - t[1]) / 2
                         area_mono = triangle_area + trapezoid_area + trapezoid_area2 + monoexp_area[0]
                         area_bi = triangle_area + trapezoid_area + trapezoid_area2 + biexp_area[0]
@@ -234,9 +239,9 @@ class BioDose():
             else:
                 # Uptake model
                 result_uptake, fitted_uptake = exponential_fit_lmfit(
-                    t[skip_points:], activity[skip_points:],
+                    t[tps_to_skip_fit:], activity[tps_to_skip_fit:],
                     num_exponentials=2,
-                    sigma=sigmas[skip_points:],
+                    sigma=sigmas[tps_to_skip_fit:],
                     with_uptake=True,
                     params_init={'A1': uptakeguess[0], 'A2': uptakeguess[1], 
                                'B1': uptakeguess[2], 'B2': uptakeguess[3]},
