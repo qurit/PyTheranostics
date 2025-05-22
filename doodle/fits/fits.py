@@ -9,6 +9,7 @@ from lmfit import Model
 
 def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray, 
                           num_exponentials: int = 1, 
+                          sigma: Optional[numpy.ndarray] = None,
                           fixed_params: Optional[Dict[str, float]] = None,
                           bounds: Optional[Dict[str, Tuple[float, float]]] = None,
                           params_init: Optional[Dict[str, float]] = None,
@@ -23,6 +24,8 @@ def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray,
         Independent variable data points.
     y_data : array-like
         Dependent variable data points.
+    sigma : array-like, optional
+        Standard deviation of the data points for weighted fitting.
     num_exponentials : int
         Number of exponential terms (1, 2, or 3).
     fixed_params : dict, optional
@@ -127,7 +130,7 @@ def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray,
             raise ValueError("Parameters 'A1', 'B1', and 'C1' must be present to apply the constraint 'C1 = -(A1 + B1)'.")
 
     # Perform the fit
-    result = model.fit(y_data, params, x=x_data)
+    result = model.fit(y_data, params, x=x_data, weights=sigma)
 
     # Define the fitted model function
     def fitted_model(x):

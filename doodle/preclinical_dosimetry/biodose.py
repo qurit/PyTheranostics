@@ -12,7 +12,7 @@ import matplotlib.pylab as plt
 #from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
 from doodle.fits.fits import exponential_fit_lmfit, calculate_r_squared, get_exponential, monoexp_fun, biexp_fun, biexp_fun_uptake, triexp_fun
 from typing import Any, Callable, Optional, Tuple, Dict
-
+from doodle.plots.plots import plot_tac_residuals
 from scipy import integrate
 from scipy.optimize import curve_fit
 import lmfit
@@ -58,6 +58,8 @@ class BioDose():
         '''
         print('Reading biodistribution information from the file: {}'.format(biodi_file))
         biodi = pd.read_csv(biodi_file)
+        
+        # Generalize the biodi organ names
         biodi['Organ'] = biodi['Organ'].str.title()
         biodi['Organ'] = biodi['Organ'].replace('Adrenal Glands','Adrenals')
         biodi['Organ'] = biodi['Organ'].replace('Adrenal','Adrenals')
@@ -125,32 +127,36 @@ class BioDose():
             ylabel = '%ID/g'
 
             # Prepare initial parameters and bounds
-            param_init = {
-                1: monoguess,
-                2: biguess,
-                -2: uptakeguess,
-                3: None  # Will use default if not provided
-            }
+            #param_init = {
+            #    1: monoguess,
+            #    2: biguess,
+            #    -2: uptakeguess,
+            #    3: None  # Will use default if not provided
+            #}
 
             if not uptake:
                 # Mono-exponential fit
                 result_mono, fitted_mono = exponential_fit_lmfit(
                     t[skip_points:], activity[skip_points:],
                     num_exponentials=1,
+                    sigma=sigmas[skip_points:],
                     params_init={'A1': monoguess[0], 'A2': monoguess[1]},
                     bounds={'A1': (0, None), 'A2': (decayconst, None)}
                 )
+                plot_tac_residuals(result=result_mono, region=org)
 
                 # Bi-exponential fit
                 result_bi, fitted_bi = exponential_fit_lmfit(
                     t[skip_points:], activity[skip_points:],
                     num_exponentials=2,
+                    sigma=sigmas[skip_points:],
                     params_init={'A1': biguess[0], 'A2': biguess[1], 
                                  'B1': biguess[2], 'B2': biguess[3]},
                     bounds={'A1': (0, None), 'A2': (decayconst, None),
                             'B1': (0, None), 'B2': (decayconst, None)}
                 )
-
+                plot_tac_residuals(result=result_bi, region=org)
+                print(result_bi.weights)
                 # Store results
                 mono_params = result_mono.params.valuesdict()
                 bi_params = result_bi.params.valuesdict()
@@ -180,7 +186,6 @@ class BioDose():
                     )
                 else:
                     # Handle skipped points by adding trapezoidal areas
-                    # (Same logic as before, but using new parameters)
                     triangle_area = t[0] * bio_data.iloc[0] / 2
                     trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2
 
@@ -221,6 +226,7 @@ class BioDose():
                 result_uptake, fitted_uptake = exponential_fit_lmfit(
                     t[skip_points:], activity[skip_points:],
                     num_exponentials=2,
+                    sigma=sigmas[skip_points:],
                     with_uptake=True,
                     params_init={'A1': uptakeguess[0], 'A2': uptakeguess[1], 
                                'B1': uptakeguess[2], 'B2': uptakeguess[3]},
