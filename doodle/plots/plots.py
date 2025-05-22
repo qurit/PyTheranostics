@@ -71,7 +71,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult,
     weights = result.weights
 
     # Generate x-values for plotting the fitted model starting from x=0
-    x_fit = numpy.linspace(0, x_data.max(), 500)
+    x_fit = numpy.linspace(0, x_data[-1] * 2, 500)
     y_fit = result.eval(x=x_fit)
 
     # First subplot: Linear scale plot
@@ -81,6 +81,8 @@ def plot_tac_residuals(result: lmfit.model.ModelResult,
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color='red')
     ax1.set_xlim(left=0)  # Start x-axis from zero
+    ax1.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
+    ax1.set_ylim(bottom=0)  # Start y-axis from zero
     ax1.set_title(region)
     ax1.set_xlabel(x_label)
     ax1.set_ylabel(y_label)
@@ -99,6 +101,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult,
     # Plot fitted model
     ax2.plot(x_fit, y_fit, color='red')
     ax2.set_xlim(left=0)  # Start x-axis from zero
+    ax2.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
     ax2.set_yscale("log")
     ax2.set_title(title_text)
     ax2.set_xlabel(x_label)
