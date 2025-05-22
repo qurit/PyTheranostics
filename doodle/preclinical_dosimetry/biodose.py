@@ -226,10 +226,9 @@ class BioDose():
                 uptake_params = result_uptake.params.valuesdict()
                 area_uptake = integrate.quad(
                     lambda x: biexp_fun_uptake(x, uptake_params['A1'], uptake_params['A2'], 
-                                              uptake_params['B1'], uptake_params['B2']), 
+                                            uptake_params['B2']), 
                     0, np.inf
                 )
-
                 self.area.loc[org, 'Bi-Exponential_uptake'] = area_uptake[0]
                 self.fit_results[org] = [
                     None, None,
