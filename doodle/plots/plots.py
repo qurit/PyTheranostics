@@ -63,6 +63,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str) -> None:
     # Retrieve x_data and y_data from the fit result
     x_data = result.userkws['x']
     y_data = result.data
+    weights = result.weights
 
     # Generate x-values for plotting the fitted model starting from x=0
     x_fit = numpy.linspace(0, x_data.max(), 500)
@@ -71,7 +72,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str) -> None:
     # First subplot: Linear scale plot
     ax1 = axs[0]
     # Plot data points
-    ax1.plot(x_data, y_data, 'o', markersize=5)
+    ax1.errorbar(x_data, y_data, yerr=weights, fmt='o', markersize=5)
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color='red')
     ax1.set_xlim(left=0)  # Start x-axis from zero
