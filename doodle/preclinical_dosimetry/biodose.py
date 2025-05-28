@@ -734,22 +734,19 @@ class BioDose():
         k_b_male = (73000 / wb_m) ** 0.25
         k_b_female = (60000 / wb_m) ** 0.25
 
-        #TIAC_h_bi_male = ((Cm_organ_t0_1 * k_b_male) / ((lambda_effective1)) )+( (Cm_organ_t0_2 * k_b_male) / ((lambda_effective2)))
         TIAC_h_bi_male = ((Cm_organ_t0_1 ) / (((k_b_male)**(-1)*lambda_biological1 + lambda_physical)) ) + ( (Cm_organ_t0_2 ) / ((k_b_male)**(-1)*(lambda_biological2) + lambda_physical))
         
-        
-        #TIAC_h_bi_female = ((Cm_organ_t0_1 * k_b_female) / ((lambda_effective1)) )+( (Cm_organ_t0_2 * k_b_female) / ((lambda_effective2)))
         TIAC_h_bi_female = ((Cm_organ_t0_1 * k_b_female) / ((lambda_effective1)) )+( (Cm_organ_t0_2 * k_b_female) / ((lambda_effective2)))
         
-
-
         return TIAC_h_bi_male, TIAC_h_bi_female
 
 
     def scale_monoexponential_tiac(self, row):
 
         lambda_effective = row['mono_exp:lambda_effective_1/h']
-
+        lambda_physical = log(2) / self.half_life #1/h
+        
+        lambda_biological = lambda_effective - lambda_physical
         
         Cm_organ_t0 = row['mono_exp:%ID'] / 100 
         
@@ -758,8 +755,8 @@ class BioDose():
         
         k_b_female = (60000 / wb_m) ** 0.25
 
-        TIAC_h_mono_male = Cm_organ_t0 / (k_b_male**(-1) * (lambda_effective))
-        TIAC_h_mono_female = Cm_organ_t0 / (k_b_female**(-1) * (lambda_effective))
+        TIAC_h_mono_male = Cm_organ_t0 / (k_b_male**(-1) * (lambda_biological) + lambda_physical)
+        TIAC_h_mono_female = Cm_organ_t0 / (k_b_female**(-1) * (lambda_biological) + lambda_physical)
 
         return TIAC_h_mono_male, TIAC_h_mono_female
 
