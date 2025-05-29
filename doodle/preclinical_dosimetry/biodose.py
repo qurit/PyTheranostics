@@ -767,21 +767,3 @@ class BioDose():
         self.disintegrations_all_organs = self.fitting_parameters[['h Female', 'h Male']]
                 
 
-            
-    def apply_scalling_factor_on_lambda_biological_monoexp(self):
-        # Original AUC for monoexponential decay:
-        # AUC_0 = A0 / (lambda_phys + lambda_bio)     ------> A0 = AUC_0 * (lambda_phys + lambda_bio)
-        #
-        # If the biological decay constant is scaled by a factor (e.g., 0.1),
-        # we define:
-        # lambda_bio_scaled = scaling_factor * lambda_bio
-        #
-        # So the new AUC becomes:
-        # AUC_scaled = A0 / (lambda_phys + scaling_factor * lambda_bio)                <--------- here we substitute A0 with   AUC_0 * (lambda_phys + lambda_bio)
-        #
-        # This can be expressed in terms of the original AUC as:
-        # AUC_scaled = AUC_0 * (lambda_phys + lambda_bio) / (lambda_phys + scaling_factor * lambda_bio)
-        
-        alpha = 0.25
-        kb = (70000/25) ** alpha 
-        
