@@ -26,7 +26,8 @@ dependencies = [
     "rt-utils",
     "scikit-image",
     "simpleitk",
-    "lmfit"
+    "lmfit",
+    "tqdm"
 ]
 
 [project.urls]
