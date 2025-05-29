@@ -2,7 +2,12 @@
 PyTheranostics - A Python library for nuclear medicine processing and dosimetry
 """
 
-__version__ = '0.1.0'
+try:
+    from importlib.metadata import version
+    __version__ = version("pytheranostics")
+except ImportError:
+    __version__ = "unknown"
+
 __author__ = 'Carlos Uribe, PhD, MCCPM'
 __email__ = 'curibe@bccrc.ca'
 __license__ = 'MIT'
@@ -42,6 +47,15 @@ from pytheranostics.fits.fits import (
 # DICOM handling
 from pytheranostics.dicomtools.dicomtools import DicomModify
 
+# Dosimetry imports
+from pytheranostics.dosimetry.OrganSDosimetry import OrganSDosimetry
+from pytheranostics.dosimetry.VoxelSDosimetry import VoxelSDosimetry
+from pytheranostics.dosimetry.olinda import load_phantom_mass
+from pytheranostics.ImagingTools.Tools import load_and_resample_RT
+from pytheranostics.ImagingDS.LongStudy import create_logitudinal_from_dicom
+
+
+
 # Define what should be imported with "from pytheranostics import *"
 __all__ = [
     'PlanarQC',
@@ -58,5 +72,10 @@ __all__ = [
     'monoexp_fun',
     'biexp_fun',
     'triexp_fun',
-    'DicomModify'
+    'DicomModify',
+    'OrganSDosimetry',
+    'VoxelSDosimetry',
+    'load_and_resample_RT',
+    'create_logitudinal_from_dicom',
+    'load_phantom_mass'
 ]
