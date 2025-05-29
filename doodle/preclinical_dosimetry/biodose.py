@@ -294,9 +294,8 @@ class BioDose():
         
     def calculate_tumor_sink_effect(self):
         tumor_value = self.disintegrations['h']['Tumor']
-        
-        # Calculate the sum of disintegration values for all organs except 'Remainder Body' (Organs included in the ROB (Adrenals, Muscle ecc.) are added to WB, so we don't want to add them twice)
-        wb_value = self.disintegrations['h'].sum() - self.disintegrations['h']['Remainder Body'] 
+
+        wb_value = self.disintegrations['h'].sum()  
 
         self.tumor_sink_effect_factor = (1 + (tumor_value / (wb_value - tumor_value))) # represents a multiplicative adjustment to the organ's disintegration value to account for normalizing or redistributing activity after subtracting the tumor's share from the whole body
         print(f'Tumor sink effect: {self.tumor_sink_effect_factor}')
@@ -493,7 +492,7 @@ class BioDose():
         self.biodi.index = ind_list
 
 
-    def create_human(self):
+    def create_human(self, tumor_name = None):
         # We are mostly using the disintegrations_all_organs dataframe, but we adjust the biodi dataframe as well to match the human phantom structure
         human = deepcopy(self)
         human.phantom='AdultHuman'
@@ -516,12 +515,12 @@ class BioDose():
         if 'Blood' in human.biodi.index:
             human.rename_organ('Blood','Heart Contents')
 
-        if 'Tail' in human.biodi.index:
+        if 'Tail' in human.disintegrations_all_organs.index:
             print('Tail is not modelled in the human phantom, removing it from the biodi')
             human.biodi = human.biodi.drop('Tail', axis=0)
             human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Tail', axis=0)
             
-        if 'Tumor' in human.biodi.index:
+        if 'Tumor' in human.disintegrations_all_organs.index:
             print('Tumor is not modelled in the human phantom, removing it from the biodi')
             human.biodi = human.biodi.drop('Tumor', axis=0)
             human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Tumor', axis=0)
@@ -534,9 +533,9 @@ class BioDose():
         human.literature_mass.set_index('Organ', inplace=True)
 
         human.disintegrations_all_organs.sort_index(inplace=True)
-        
-        human.disintegrations_all_organs.rename(columns={'h': 'h Male'}, inplace=True)
-        
+        print(human.disintegrations_all_organs)
+        if 'h Female' not in human.disintegrations_all_organs:
+            human.disintegrations_all_organs.rename(columns={'h': 'h Male'}, inplace=True)
         if 'h Female' not in human.disintegrations_all_organs:
             human.disintegrations_all_organs['h Female'] = human.disintegrations_all_organs['h Male']
         
@@ -548,7 +547,6 @@ class BioDose():
         human.disintegrations_all_organs.loc['Right Colon', 'h Male'] = (150/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']
         human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Large Intestine', axis=0)
         
-        
         human.not_inphantom=[]
         
         for org in human.disintegrations_all_organs.index: ########## for org in self.disinteggrations.index:
@@ -556,25 +554,26 @@ class BioDose():
                 human.not_inphantom.append(org)
                 
         human.not_inphantom = list(set(human.not_inphantom) - set(['Remainder Body']))
-        print('These organs from the biodi are not modelled in the phantom\n{}'.format(human.not_inphantom))
+        print('These organs from the biodi are not modelled in the phantom:\n{}'.format(human.not_inphantom))
+        if tumor_name:
+            human.not_inphantom_notumor=[org for org in human.not_inphantom if tumor_name not in org]
+        else:
+            human.not_inphantom_notumor=human.not_inphantom
         
-        human.disintegrations_all_organs.loc['Remainder Body', 'h Female'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom, 'h Female'])
-        human.disintegrations_all_organs.loc['Remainder Body', 'h Male'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom, 'h Male'])
+        human.disintegrations_all_organs.loc['Remainder Body', 'h Female'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom_notumor, 'h Female'])
+        human.disintegrations_all_organs.loc['Remainder Body', 'h Male'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom_notumor, 'h Male'])
         
         human.disintegrations_all_organs = human.disintegrations_all_organs[['h Female', 'h Male']]
-
-        print(human.not_inphantom)
         human.disintegrations_all_organs.drop(human.not_inphantom, inplace=True)  # Only organs that are in the phantom will be kept in the disintegrations dataframe and passed to olinda
         human.disintegrations_all_organs.sort_index(inplace=True)
-
         return human
     
     def apply_relative_mass_scaling(self, mouse_mass = 25):
         rMSF_data = pd.read_csv(path.join(PHANTOM_PATH,'rMSF_factor.csv'), index_col=0)  # TODO: CHANGE PATH
         
-        female_mass_sum = rMSF_data.loc[self.not_inphantom, 'Female'].sum()
-        male_mass_sum   = rMSF_data.loc[self.not_inphantom, 'Male'].sum()
-        mouse_mass_sum = rMSF_data.loc[self.not_inphantom, f'{mouse_mass}g_mouse'].sum()
+        female_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, 'Female'].sum()
+        male_mass_sum   = rMSF_data.loc[self.not_inphantom_notumor, 'Male'].sum()
+        mouse_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, f'{mouse_mass}g_mouse'].sum()
         
         mouse_body_mass   = rMSF_data.loc['Body', f'{mouse_mass}g_mouse']
         human_body_female = rMSF_data.loc['Body', 'Female']
@@ -657,7 +656,7 @@ class BioDose():
         print('The case file {} has been saved in\n{}'.format(self.sex+'.cas',dirname))
         
 
-    def scale_biexponential_tiac(self, row):
+    def scale_biexponential_tiac(self, row, biol_lambda_SF = 0.25):
         
         Cm_organ_t0_1 = row['bi_exp1:%ID'] / 100 
         Cm_organ_t0_2 = row['bi_exp2:%ID'] / 100 
@@ -678,18 +677,18 @@ class BioDose():
         lambda_biological1 = lambda_effective1 - lambda_physical
         lambda_biological2 = lambda_effective2 - lambda_physical
 
-        wb_m = 25
-        k_b_male = (73000 / wb_m) ** 0.25
-        k_b_female = (60000 / wb_m) ** 0.25
+        wb_m = self.wb_m
+        k_b_male = (73000 / wb_m) ** biol_lambda_SF
+        k_b_female = (60000 / wb_m) ** biol_lambda_SF
 
         TIAC_h_bi_male = ((Cm_organ_t0_1 ) / (((k_b_male)**(-1)*lambda_biological1 + lambda_physical)) ) + ( (Cm_organ_t0_2 ) / ((k_b_male)**(-1)*(lambda_biological2) + lambda_physical))
         
-        TIAC_h_bi_female = ((Cm_organ_t0_1 * k_b_female) / ((lambda_effective1)) )+( (Cm_organ_t0_2 * k_b_female) / ((lambda_effective2)))
+        TIAC_h_bi_female = ((Cm_organ_t0_1 ) / (((k_b_female)**(-1)*lambda_biological1 + lambda_physical)) ) + ( (Cm_organ_t0_2 ) / ((k_b_female)**(-1)*(lambda_biological2) + lambda_physical))
         
         return TIAC_h_bi_male, TIAC_h_bi_female
 
 
-    def scale_monoexponential_tiac(self, row):
+    def scale_monoexponential_tiac(self, row, biol_lambda_SF = 0.25):
 
         lambda_effective = row['mono_exp:lambda_effective_1/h']
         lambda_physical = log(2) / self.half_life #1/h
@@ -698,10 +697,10 @@ class BioDose():
         
         Cm_organ_t0 = row['mono_exp:%ID'] / 100 
         
-        wb_m = 25
-        k_b_male = (73000 / wb_m) ** 0.25
+        wb_m = self.wb_m
+        k_b_male = (73000 / wb_m) ** biol_lambda_SF
         
-        k_b_female = (60000 / wb_m) ** 0.25
+        k_b_female = (60000 / wb_m) ** biol_lambda_SF
 
         TIAC_h_mono_male = Cm_organ_t0 / (k_b_male**(-1) * (lambda_biological) + lambda_physical)
         TIAC_h_mono_female = Cm_organ_t0 / (k_b_female**(-1) * (lambda_biological) + lambda_physical)
@@ -709,7 +708,7 @@ class BioDose():
         return TIAC_h_mono_male, TIAC_h_mono_female
 
 
-    def M3(self,human_not_inphantom_notumor, tumor_name=None):
+    def lambda_biological_scaling(self, biol_lambda_SF = 0.25, tumor_name=None):
         
         print("At this point we are ignoring the tumor")
         if tumor_name:
@@ -756,12 +755,12 @@ class BioDose():
         
         for i, organ in enumerate(self.fitting_parameters.index):
             if self.fitting_parameters.loc[organ, 'fit_accepted'] == 1.0:
-                TIAC_h_mono_male, TIAC_h_mono_female = self.scale_monoexponential_tiac(self.fitting_parameters.iloc[i])
+                TIAC_h_mono_male, TIAC_h_mono_female = self.scale_monoexponential_tiac(self.fitting_parameters.iloc[i], biol_lambda_SF)
                 self.fitting_parameters.loc[organ, 'h Male'] = TIAC_h_mono_male
                 self.fitting_parameters.loc[organ, 'h Female'] = TIAC_h_mono_female
 
             elif self.fitting_parameters.loc[organ, 'fit_accepted'] == 2.0:
-                TIAC_h_bi_male, TIAC_h_bi_female = self.scale_biexponential_tiac(self.fitting_parameters.iloc[i])
+                TIAC_h_bi_male, TIAC_h_bi_female = self.scale_biexponential_tiac(self.fitting_parameters.iloc[i], biol_lambda_SF)
                 self.fitting_parameters.loc[organ, 'h Male'] = TIAC_h_bi_male
                 self.fitting_parameters.loc[organ, 'h Female'] = TIAC_h_bi_female
                 
