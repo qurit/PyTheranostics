@@ -7,6 +7,8 @@ import numpy
 from pytheranostics.ImagingTools.Tools import itk_image_from_array, load_from_dicom_dir
 from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
 from pytheranostics.ImagingTools.Tools import jaccard_index
+from multiprocessing import Pool
+from functools import partial
 
 MetaDataType = Dict[int, Dict[str, Any]]
 
@@ -255,29 +257,36 @@ class LongitudinalStudy:
         return None
     
     
-# TODO: Find the proper placement. Currently here to avoid circular imports. Consider making it part of the init class.
-def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -> LongitudinalStudy:
+def _process_dicom_dir(args):
+    """Helper function for parallel processing of DICOM directories"""
+    dir, modality = args
+    return load_from_dicom_dir(dir=dir, modality=modality)
+
+def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT", num_workers: int = None) -> LongitudinalStudy:
     """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
     corresponds to the order of the time points.
 
     Args:
-        dicom_dirs (List[str]): _description_
-        modality (str, optional): _description_. Defaults to "CT".
+        dicom_dirs (List[str]): List of directories containing DICOM files
+        modality (str, optional): Imaging modality. Defaults to "CT".
+        num_workers (int, optional): Number of parallel workers. Defaults to None (uses CPU count).
 
     Returns:
-        LongitudinalStudy: _description_
+        LongitudinalStudy: Longitudinal study object containing the loaded images and metadata
     """
-    # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
     mod_supported = ["CT", "Lu177_SPECT"]
     if modality not in mod_supported:
         raise NotImplemented(f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}")
 
-    images: Dict[int, Image] = {}
-    metadata: Dict[int, MetaDataType] = {}
-
-    for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(dir=dir, modality=modality)
-        images[time_id] = image
-        metadata[time_id] = meta
+    # Prepare arguments for parallel processing
+    process_args = [(dir, modality) for dir in dicom_dirs]
+    
+    # Use parallel processing to load DICOM files
+    with Pool(processes=num_workers) as pool:
+        results = pool.map(_process_dicom_dir, process_args)
+    
+    # Unpack results
+    images = {time_id: result[0] for time_id, result in enumerate(results)}
+    metadata = {time_id: result[1] for time_id, result in enumerate(results)}
 
     return LongitudinalStudy(images=images, meta=metadata, modality=modality if modality == "CT" else "NM")

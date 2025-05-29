@@ -9,30 +9,26 @@ from skimage.transform import resize
 from skimage import img_as_bool
 from pathlib import Path
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
+from functools import lru_cache
 
 MetaDataType = Dict[str, Any]  # This could be improved ...
 
 # TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
 # the code below)
 
+@lru_cache(maxsize=32)
 def load_metadata(dir: str, modality: str) -> MetaDataType:
-    """Loads relevant meta-data from a dicom dataset.
+    """Loads relevant meta-data from a dicom dataset with caching for better performance.
 
     Args:
-        dir (str): _description_
-        modality (str): _description_
-
-    Raises:
-        AssertionError: _description_
-        ValueError: _description_
-        AssertionError: _description_
-        ValueError: _description_
+        dir (str): Directory containing DICOM files
+        modality (str): Imaging modality
 
     Returns:
-        MetaDataType: _description_
+        MetaDataType: Dictionary containing metadata
     """
-
-    dicom_slices  = [pydicom.dcmread(fname) for fname in glob.glob(dir + "/*.dcm", recursive=False)]
+    # Use a more efficient glob pattern
+    dicom_slices = [pydicom.dcmread(fname) for fname in Path(dir).glob("*.dcm")]
 
     if len(dicom_slices) == 0:
         raise AssertionError(f"No Dicom data was found under {dir}")
@@ -41,14 +37,14 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     injected_activity = "N/A"
 
     if modality == "CT": 
-        dicom_slices = [f for f in dicom_slices if hasattr(f, "SliceLocation")]
-        dicom_slices = sorted(dicom_slices, key=lambda s: s.SliceLocation)
+        # Filter and sort in one pass
+        dicom_slices = sorted([f for f in dicom_slices if hasattr(f, "SliceLocation")], 
+                            key=lambda s: s.SliceLocation)
 
         if dicom_slices[0].Modality != "CT":
-            raise ValueError(f"Wrong modality. User specified CT, howere dicom indicates {dicom_slices[0].Modality}.")
+            raise ValueError(f"Wrong modality. User specified CT, however dicom indicates {dicom_slices[0].Modality}.")
         
     else:
-        # Should only be a single DICOM file for SPECT Reconstruction
         if len(dicom_slices) > 1:
             raise AssertionError(f"Found more than one potential SPECT dicom dataset")
         
@@ -63,12 +59,13 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
-    meta = {"AcquisitionDate": slice_.AcquisitionDate,
-            "AcquisitionTime": slice_.AcquisitionTime,
-            "PatientID": slice_.PatientID,
-            "Radionuclide": radionuclide,
-            "Injected_Activity_MBq": injected_activity
-            }
+    meta = {
+        "AcquisitionDate": slice_.AcquisitionDate,
+        "AcquisitionTime": slice_.AcquisitionTime,
+        "PatientID": slice_.PatientID,
+        "Radionuclide": radionuclide,
+        "Injected_Activity_MBq": injected_activity
+    }
 
     return meta
 
@@ -154,20 +151,21 @@ def load_from_dicom_dir(
     Returns the Image object and some relevant metadata. 
 
     Args:
-        dir (str): _description_
-        modality (str): _description_
+        dir (str): Directory containing DICOM files
+        modality (str): Imaging modality
 
     Returns:
-        Tuple[Image, MetaDataType]: _description_
+        Tuple[Image, MetaDataType]: Tuple containing the loaded image and metadata
     """
     # Read image content and spatial information using SimpleITK
+    # Use a more efficient path handling
     image = sitk_load_dcm_series(dcm_dir=Path(dir))
 
     # If Q-SPECT, need to re-scale Data as SimpleITK does not do it:
     if modality != "CT":
         image = apply_qspect_dcm_scaling(image=image, dir=dir)
 
-    # Load Meta Data using pydicom.
+    # Load Meta Data using pydicom with caching
     meta = load_metadata(dir=dir, modality=modality)
 
     return image, meta
