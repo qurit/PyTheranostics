@@ -258,34 +258,6 @@ class BioDose():
         except Exception as e:
             print(f"Error creating fitting parameters DataFrame: {e}")
         
-        
-
-#    def get_fit_accepted_dict(self):
-#        self.fit_accepted = {}  # Initialize an empty dictionary
-#        organs = self.biodi.index  # Assuming self.biodi contains the organ names
-#        
-#        # Ask the user to provide the numbers for each organ
-#        for organ in organs:
-#            while True:
-#                try:
-#                    choice = int(input(f"Enter a number (1, 2, 3, 4) for {organ}: "))
-#                    if choice in [1, 2, 3, 4]:
-#                        self.fit_accepted[organ] = choice
-#                        break
-#                    else:
-#                        print("Invalid choice. Please choose from 1, 2, 3, or 4.")
-#                except ValueError:
-#                    print("Invalid input. Please enter a valid number.")
-
-
-#    def num_decays(self,fit_accepted):
-#        ''' Sets the number of decays in each of the organ based on the accepted fit (e.g. exponential or bi-exponential) '''
-#        self.fit_accepted=fit_accepted
-#        self.disintegrations=pd.DataFrame(index=self.biodi.index,columns=['%ID/g*h'])
-#        for key in self.fit_accepted:
-#            self.disintegrations.loc[key,'%ID/g*h']=self.fit_results[key][self.fit_accepted[key]*2-1][0]
-#       
-#        self.disintegrations.loc["Remainder Body"] = np.nan
 
     def num_decays(self, fit_accepted):
         ''' Sets the number of decays in each of the organ based on the accepted fit (e.g. exponential or bi-exponential) '''
@@ -317,8 +289,6 @@ class BioDose():
             if pd.isna(self.disintegrations.loc['Red Marrow']).any():
                 self.disintegrations.loc['Red Marrow'] = self.disintegrations.loc['Heart Contents'] * 0.34
 
-
-
         self.disintegrations.loc["Remainder Body"] = np.nan
         
         
@@ -339,8 +309,6 @@ class BioDose():
                 df_corrected[organ] *= self.tumor_sink_effect_factor
         
         return df_corrected
-
-
 
     def phantom_data(self):
         print(PHANTOM_PATH)
@@ -434,8 +402,7 @@ class BioDose():
             
             self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Female']).sum())
             self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Male']).sum())
-            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Female']).sum()
-            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Male']).sum()
+
         
         self.disintegrations['h']=self.disintegrations['%ID*h']/100
         self.disintegrations_all_organs = self.disintegrations.copy()  # Store the original disintegrations before dropping organs
@@ -527,7 +494,6 @@ class BioDose():
 
 
     def create_human(self):
-        
         # We are mostly using the disintegrations_all_organs dataframe, but we adjust the biodi dataframe as well to match the human phantom structure
         human = deepcopy(self)
         human.phantom='AdultHuman'
@@ -567,13 +533,12 @@ class BioDose():
         human.literature_mass = pd.read_csv(path.join(PHANTOM_PATH, 'human_notinphantom_masses.csv')) 
         human.literature_mass.set_index('Organ', inplace=True)
 
-        human.disintegrations_all_organs.drop('%ID/g*h', axis=1, inplace=True)
-        human.disintegrations_all_organs.drop('%ID*h', axis=1, inplace=True)
-        
         human.disintegrations_all_organs.sort_index(inplace=True)
         
         human.disintegrations_all_organs.rename(columns={'h': 'h Male'}, inplace=True)
-        human.disintegrations_all_organs['h Female'] = human.disintegrations_all_organs['h Male']
+        
+        if 'h Female' not in human.disintegrations_all_organs:
+            human.disintegrations_all_organs['h Female'] = human.disintegrations_all_organs['h Male']
         
         human.disintegrations_all_organs.loc['Rectum', 'h Female'] = (70/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
         human.disintegrations_all_organs.loc['Rectum', 'h Male'] = (70/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']    
@@ -596,30 +561,13 @@ class BioDose():
         human.disintegrations_all_organs.loc['Remainder Body', 'h Female'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom, 'h Female'])
         human.disintegrations_all_organs.loc['Remainder Body', 'h Male'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom, 'h Male'])
         
-        
+        human.disintegrations_all_organs = human.disintegrations_all_organs[['h Female', 'h Male']]
+
         print(human.not_inphantom)
         human.disintegrations_all_organs.drop(human.not_inphantom, inplace=True)  # Only organs that are in the phantom will be kept in the disintegrations dataframe and passed to olinda
         human.disintegrations_all_organs.sort_index(inplace=True)
 
         return human
-
-
-#    def m1(self):
-#        self.disintegrations_m1=self.disintegrations_all_organs.copy()
-#        self.disintegrations_m1.rename(columns={'h': 'h Male'}, inplace=True)
-#        self.disintegrations_m1['h Female'] = self.disintegrations_m1['h Male']
-#        
-#        self.disintegrations_m1.loc['Rectum', 'h Female'] = (70/360) * self.disintegrations_m1.loc['Large Intestine', 'h Female'] 
-#        self.disintegrations_m1.loc['Rectum', 'h Male'] = (70/370) * self.disintegrations_m1.loc['Large Intestine', 'h Male']    
-#        self.disintegrations_m1.loc['Left Colon', 'h Female'] = (145/360) * self.disintegrations_m1.loc['Large Intestine', 'h Female'] 
-#        self.disintegrations_m1.loc['Left Colon', 'h Male'] = (150/370) * self.disintegrations_m1.loc['Large Intestine', 'h Male']
-#        self.disintegrations_m1.loc['Right Colon', 'h Female'] = (145/360) * self.disintegrations_m1.loc['Large Intestine', 'h Female'] 
-#        self.disintegrations_m1.loc['Right Colon', 'h Male'] = (150/370) * self.disintegrations_m1.loc['Large Intestine', 'h Male']
-#        
-#        self.disintegrations_m1.drop(self.not_inphantom, inplace=True)  # Only organs that are in the phantom will be kept in the disintegrations dataframe and passed to olinda
-#        self.disintegrations_m1.sort_index(inplace=True)
-#        
-#        return self.disintegrations_m1
     
     def apply_relative_mass_scaling(self, mouse_mass = 25):
         rMSF_data = pd.read_csv(path.join(PHANTOM_PATH,'rMSF_factor.csv'), index_col=0)  # TODO: CHANGE PATH
@@ -730,7 +678,7 @@ class BioDose():
         lambda_biological1 = lambda_effective1 - lambda_physical
         lambda_biological2 = lambda_effective2 - lambda_physical
 
-        wb_m = int(self.mouse_mass[:-1])
+        wb_m = 25
         k_b_male = (73000 / wb_m) ** 0.25
         k_b_female = (60000 / wb_m) ** 0.25
 
@@ -750,7 +698,7 @@ class BioDose():
         
         Cm_organ_t0 = row['mono_exp:%ID'] / 100 
         
-        wb_m = int(self.mouse_mass[:-1])
+        wb_m = 25
         k_b_male = (73000 / wb_m) ** 0.25
         
         k_b_female = (60000 / wb_m) ** 0.25
@@ -773,20 +721,6 @@ class BioDose():
         print(self.phantom)
         print('Disintegrations\n')
 
-        # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
-        if 'mouse' in self.phantom.lower():
-            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'mouse_notinphantom_masses.csv'))  # TODO: CHANGE PATH
-        
-#        elif 'human' in self.phantom.lower():
-#            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
-            
-        self.literature_mass.set_index('Organ',inplace=True)
-
-        if 'mouse' in self.phantom.lower():
-            self.literature_mass.loc['Muscle'] = self.phantom_mass.loc['Remainder Body']-self.literature_mass.sum()
-        
-
-        self.literature_mass=self.literature_mass.loc[self.fitting_parameters.index.intersection(self.literature_mass.index)]
 
         fit_accepted_df = pd.DataFrame(list(self.fit_accepted.items()), columns=['Organ', 'fit_accepted'])
         self.fitting_parameters = self.fitting_parameters.merge(fit_accepted_df, on="Organ")
@@ -807,10 +741,10 @@ class BioDose():
 
             for org in self.not_inphantom_notumor:
                 if org != 'Tail':
+                    print(org)
                     self.fitting_parameters.loc[org, 'mono_exp:%ID'] = self.fitting_parameters.loc[org, 'mono_exp:%ID/g'] * self.literature_mass.loc[org, self.mouse_mass]
                     self.fitting_parameters.loc[org, 'bi_exp1:%ID'] = self.fitting_parameters.loc[org, 'bi_exp:1_%ID/g'] * self.literature_mass.loc[org, self.mouse_mass]
                     self.fitting_parameters.loc[org, 'bi_exp2:%ID'] = self.fitting_parameters.loc[org, 'bi_exp:2_%ID/g'] * self.literature_mass.loc[org, self.mouse_mass]
-
                 else:
                     pass
         print(self.fitting_parameters)
@@ -831,26 +765,24 @@ class BioDose():
                 self.fitting_parameters.loc[organ, 'h Male'] = TIAC_h_bi_male
                 self.fitting_parameters.loc[organ, 'h Female'] = TIAC_h_bi_female
                 
-        self.fitting_parameters.rename({'Skeleton': 'Bone Surfaces'}, inplace=True)
-        self.fitting_parameters.rename({'Blood': 'Heart Contents'}, inplace=True)
-        self.template_for_m4 =  self.fitting_parameters
-        
+        self.disintegrations_all_organs = self.fitting_parameters[['h Female', 'h Male']]
+                
 
-        self.fitting_parameters.loc['Rectum', 'h Female'] = (70/360) * self.fitting_parameters.loc['Large Intestine', 'h Female'] 
-        self.fitting_parameters.loc['Rectum', 'h Male'] = (70/370) * self.fitting_parameters.loc['Large Intestine', 'h Male']    
-        self.fitting_parameters.loc['Left Colon', 'h Female'] = (145/360) * self.fitting_parameters.loc['Large Intestine', 'h Female'] 
-        self.fitting_parameters.loc['Left Colon', 'h Male'] = (150/370) * self.fitting_parameters.loc['Large Intestine', 'h Male']
-        self.fitting_parameters.loc['Right Colon', 'h Female'] = (145/360) * self.fitting_parameters.loc['Large Intestine', 'h Female'] 
-        self.fitting_parameters.loc['Right Colon', 'h Male'] = (150/370) * self.fitting_parameters.loc['Large Intestine', 'h Male']
-        self.fitting_parameters = self.fitting_parameters.drop('Large Intestine', axis=0)
-
-        self.fitting_parameters.loc['Red Marrow'] = 0.34 * self.fitting_parameters.loc['Heart Contents']  
-
-        self.fitting_parameters.loc['Remainder Body', 'h Female'] = self.fitting_parameters['h Female'].loc[human_not_inphantom_notumor].sum()
-        self.fitting_parameters.loc['Remainder Body', 'h Male'] =  self.fitting_parameters['h Male'].loc[human_not_inphantom_notumor].sum()
-        
-        for org in human_not_inphantom_notumor:
-            self.fitting_parameters = self.fitting_parameters.drop(org, axis=0)
-        
-        self.fitting_parameters.sort_index(inplace=True)
             
+    def apply_scalling_factor_on_lambda_biological_monoexp(self):
+        # Original AUC for monoexponential decay:
+        # AUC_0 = A0 / (lambda_phys + lambda_bio)     ------> A0 = AUC_0 * (lambda_phys + lambda_bio)
+        #
+        # If the biological decay constant is scaled by a factor (e.g., 0.1),
+        # we define:
+        # lambda_bio_scaled = scaling_factor * lambda_bio
+        #
+        # So the new AUC becomes:
+        # AUC_scaled = A0 / (lambda_phys + scaling_factor * lambda_bio)                <--------- here we substitute A0 with   AUC_0 * (lambda_phys + lambda_bio)
+        #
+        # This can be expressed in terms of the original AUC as:
+        # AUC_scaled = AUC_0 * (lambda_phys + lambda_bio) / (lambda_phys + scaling_factor * lambda_bio)
+        
+        alpha = 0.25
+        kb = (70000/25) ** alpha 
+        
