@@ -21,9 +21,10 @@ from lmfit import Model
 
 
 this_dir=path.dirname(__file__)
+parent_dir = path.dirname(this_dir)
 TEMPLATE_PATH = path.join(this_dir,"olindaTemplates")
 PHANTOM_PATH = path.join(this_dir,'phantomdata') # These variables use only lowercases so "PhantomData" is in lowercase
-
+SVALUES_PATH = path.join(parent_dir, 'data', 's-values')
 
 class BioDose():
     '''
@@ -70,7 +71,7 @@ class BioDose():
         biodi['Organ'] = biodi['Organ'].replace('Testis','Testes')
         biodi['Organ'] = biodi['Organ'].replace('Lung','Lungs')
         biodi['Organ'] = biodi['Organ'].replace('Large Intestines','Large Intestine')
-        biodi['Organ'] = biodi['Organ'].replace('Small Intestines','Small Intestine')
+        biodi['Organ'] = biodi['Organ'].replace('Small Intestines',)
         biodi['Organ'] = biodi['Organ'].replace('Bone','Skeleton')
         biodi['Organ'] = biodi['Organ'].replace('Kidney','Kidneys')
         biodi['Organ'] = biodi['Organ'].replace('Tumour','Tumor')
@@ -415,6 +416,94 @@ class BioDose():
     def add_tumor_mass(self,tumor_name,tumor_mass):
         self.phantom_mass.loc[tumor_name]=tumor_mass  #grams   Provided by average of biodi from Etienne
         
+    def calculate_absorbed_dose(self, model, disintegrations):
+        """
+        Calculate absorbed dose per target organ based on selected model and disintegration data.
+        
+        Args:
+            model (str): One of 'mouse25g', 'mouse30g', or 'mouse35g'
+            disintegrations (pd.DataFrame): DataFrame with source organ disintegrations in hours
+        
+        Returns:
+            pd.DataFrame: Absorbed dose in mGy and Gy for each target organ
+        """
+        
+        disintegrations = disintegrations.copy()
+        
+        model_files = {
+            'mouse25g': '177Lu_mouse_25g_sfactors_olinda.csv',
+            'mouse30g': '177Lu_mouse_30g_sfactors_olinda.csv',
+            'mouse35g': '177Lu_mouse_35g_sfactors_olinda.csv',
+            'Female': '177Lu_S_values_female_olinda.csv',
+            'Male': '177Lu_S_values_male_olinda.csv',
+        }
+        print(model)
+        if model not in model_files:
+            raise ValueError(f"Invalid model '{model}'. Expected one of: {list(model_files.keys())}")
+
+        svalues_path = path.join(SVALUES_PATH, model_files[model])
+        svalues_df = pd.read_csv(svalues_path, index_col=0)  # S-values in mSv/MBq-s
+        print(f"Loaded S-values from: {svalues_path}")
+        print("Target organs (S-value index):", svalues_df.index.tolist())
+        
+        organ_name_map_mouse_olinda = {'Large Intestine': 'Large Int','Small Intestine': 'Small Int','Bladder': 'Urin Blad','Remainder Body': 'Tot Body'}
+        organ_name_map_human_olinda = {'Gallbladder': 'GB Cont', 'Left Colon': 'LLI Cont', 'Right Colon': 'ULI Cont', 'Stomach': 'StomCont',
+                                       'Salivary Glands': 'Salivary', 'Red Marrow': 'Red Mar.', 'Bone Surfaces': 'CortBone',
+                                       'Heart': 'Hrt Wall', 'Heart Contents': 'HeartCon',
+                                       'Small Intestine': 'SI Cont','Bladder': 'UB Cont','Remainder Body': 'Tot Body'}
+
+        if 'mouse' in model:
+            disintegrations.index = disintegrations.index.to_series().replace(organ_name_map_mouse_olinda)
+        else:
+            disintegrations.index = disintegrations.index.to_series().replace(organ_name_map_human_olinda)
+        
+        print(disintegrations)
+        if 'mouse' in model:
+            disintegrations['s'] = disintegrations['h'] * 3600
+        else:
+            disintegrations['s'] = disintegrations[f'h {model}'] * 3600
+            
+        print(f"Disintegrations in seconds:\n{disintegrations['s']}")
+        # Apply S-values and compute dose
+        dose_matrix = self.apply_s_value(disintegrations, svalues_df)
+        total_dose_per_target = dose_matrix.sum(axis=1)  # Sum over source organs
+
+        # Format output
+        dose_df = total_dose_per_target.to_frame(name='Absorbed dose (mGy/MBq)')
+        dose_df.index.name = 'Target organ'
+        dose_df = dose_df.reset_index()
+        dose_df['Absorbed dose (Gy/MBq)'] = dose_df['Absorbed dose (mGy/MBq)'] / 1000
+
+        return dose_df
+        
+    def apply_s_value(self, tia_df, s_values):
+        """
+        Multiply S-values by TIA to compute dose matrix.
+        
+        Args:
+            tia_df (pd.DataFrame): Disintegration times in seconds
+            s_values (pd.DataFrame): S-values table (target organs as index, source organs as columns)
+        
+        Returns:
+            pd.DataFrame: Dose matrix (target organ x source organ)
+        """
+        
+        common_source_organs = tia_df.index.intersection(s_values.columns)
+        
+        print(f'{len(common_source_organs)} source organs: {common_source_organs}')
+        
+        if common_source_organs.empty:
+            raise ValueError("No common source organs between TIA and S-value table.")
+
+        # Subset both dataframes
+        tia_series = tia_df.loc[common_source_organs, 's']
+        s_values_subset = s_values[common_source_organs]
+
+        # Multiply S-values by corresponding TIA
+        dose_df = s_values_subset.multiply(tia_series, axis=1)
+
+        return dose_df        
+
             
     def create_mousecase(self, df, method, savefile=False,dirname='./',):
         
@@ -503,17 +592,19 @@ class BioDose():
             print('Small Intestine added to the biodi')
         else:
             print('Small Intestine already in the biodi, no need to add it')
-            
-        if 'Red Marrow' in self.biodi.index:
-            if pd.isna(self.biodi.loc['Red Marrow']).any():
-                self.biodi.loc['Red Marrow'] = self.biodi.loc['Heart Contents'] * 0.34
-                self.disintegrations_all_organs.loc['Red Marrow', 'h'] = self.disintegrations_all_organs.loc['Heart Contents', 'h'] * 0.34
 
         if 'Skeleton' in human.biodi.index:
             human.rename_organ('Skeleton','Bone Surfaces')
 
         if 'Blood' in human.biodi.index:
             human.rename_organ('Blood','Heart Contents')
+            
+        if 'Red Marrow' not in human.disintegrations_all_organs.index:
+            try:
+                human.disintegrations_all_organs.loc['Red Marrow', 'h'] = human.disintegrations_all_organs.loc['Heart Contents', 'h'] * 0.34
+            except:
+                human.disintegrations_all_organs.loc['Red Marrow', 'h Female'] = human.disintegrations_all_organs.loc['Heart Contents', 'h Female'] * 0.34
+                human.disintegrations_all_organs.loc['Red Marrow', 'h Male'] = human.disintegrations_all_organs.loc['Heart Contents', 'h Male'] * 0.34
 
         if 'Tail' in human.disintegrations_all_organs.index:
             print('Tail is not modelled in the human phantom, removing it from the biodi')
@@ -538,7 +629,6 @@ class BioDose():
             human.disintegrations_all_organs.rename(columns={'h': 'h Male'}, inplace=True)
         if 'h Female' not in human.disintegrations_all_organs:
             human.disintegrations_all_organs['h Female'] = human.disintegrations_all_organs['h Male']
-        
         human.disintegrations_all_organs.loc['Rectum', 'h Female'] = (70/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
         human.disintegrations_all_organs.loc['Rectum', 'h Male'] = (70/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']    
         human.disintegrations_all_organs.loc['Left Colon', 'h Female'] = (145/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
@@ -546,7 +636,7 @@ class BioDose():
         human.disintegrations_all_organs.loc['Right Colon', 'h Female'] = (145/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
         human.disintegrations_all_organs.loc['Right Colon', 'h Male'] = (150/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']
         human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Large Intestine', axis=0)
-        
+        print(human.disintegrations_all_organs)
         human.not_inphantom=[]
         
         for org in human.disintegrations_all_organs.index: ########## for org in self.disinteggrations.index:
