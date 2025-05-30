@@ -130,7 +130,9 @@ def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray,
             raise ValueError("Parameters 'A1', 'B1', and 'C1' must be present to apply the constraint 'C1 = -(A1 + B1)'.")
 
     # Perform the fit
-    result = model.fit(y_data, params, x=x_data, weights=sigma)
+    #result = model.fit(y_data, params, x=x_data, weights=sigma)
+    result = model.fit(y_data, params, x=x_data, weights=None if sigma is None else 1.0 / sigma)
+
 
     # Define the fitted model function
     def fitted_model(x):
