@@ -68,8 +68,10 @@ def plot_tac_residuals(result: lmfit.model.ModelResult,
     # Retrieve x_data and y_data from the fit result
     x_data = result.userkws['x']
     y_data = result.data
-    weights = 1 / result.weights
-
+    if result.weights is not None:
+        weights = 1 / result.weights
+    else:
+        weights = None
     # Generate x-values for plotting the fitted model starting from x=0
     x_fit = numpy.linspace(0, x_data[-1] * 2, 500)
     y_fit = result.eval(x=x_fit)
