@@ -135,3 +135,9 @@ Notebooks
 xcatPhantom
 doodle/local
 doodle/.vscode
+
+/doodle/data/s-values/177Lu_mouse_25g_sfactors_olinda.csv
+/doodle/data/s-values/177Lu_mouse_30g_sfactors_olinda.csv
+/doodle/data/s-values/177Lu_mouse_35g_sfactors_olinda.csv
+/doodle/data/s-values/177Lu_S_values_female_olinda.csv
+/doodle/data/s-values/177Lu_S_values_male_olinda.csv
