@@ -5,8 +5,6 @@ from SimpleITK import Image
 import pydicom
 import glob
 from rt_utils import RTStructBuilder
-from skimage.transform import resize
-from skimage import img_as_bool
 from pathlib import Path
 from doodle.dicomtools.dicomtools import sitk_load_dcm_series
 
@@ -77,20 +75,28 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
 
     return meta
 
-def itk_image_from_array(array: numpy.ndarray, ref_image: Image) -> Image:
+def itk_image_from_array(array: numpy.ndarray, ref_image: Image, is_mask: bool=False) -> Image:
     """Create an ITK Image object with a new array and existing
         meta-data from another reference ITK image.
 
     Args:
         array (numpy.ndarray): _description_
         ref_image (Image): _description_
+        is_mask (bool)
 
     Returns:
         Image: _description_
     """
     
+    # Cast if masks:
+    if is_mask:
+        array = array.astype(numpy.uint8)
+    
     image = SimpleITK.GetImageFromArray(array)
 
+    if is_mask:
+        image = SimpleITK.Cast(image, SimpleITK.sitkUInt8)
+    
     # Set Manually basic meta:
     tmp_spacing = list(ref_image.GetSpacing())
     tmp_origin = list(ref_image.GetOrigin())
@@ -152,6 +158,90 @@ def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tupl
     # metadata from original image.
     return itk_image_from_array(array=image_array, ref_image=image)
 
+def apply_qspect_dcm_origin(image: Image, dir: str) -> Image:
+    """Apply Origin and Direction from dicom header if needed.
+
+    Parameters
+    ----------
+    image : SimpleITK.Image
+        SimpleITK image object
+    dir : str
+        Path to dcm file containing SPECT reconstruction
+
+    Returns
+    -------
+    Image
+        Image with correct Origin and Direction
+    """
+    # We use pydicom to access the appropriate tag:
+    # First, find the SPECT dicom file:
+    path_dir = Path(dir)
+    nm_files = [files for files in path_dir.glob("*.dcm")]
+    
+    if len(nm_files) != 1:
+        raise AssertionError(f"Found more than 1 .dcm file inside {path_dir.name}, not sure which is is SPECT.")
+    
+    dcm_data = pydicom.dcmread(str(nm_files[0]))
+    
+    if getattr(dcm_data, "ImagePositionPatient", None) is None:
+        
+        # Verify SimpleITK got the right origin and direction
+        dcm_origin = dcm_data.DetectorInformationSequence[0].ImagePositionPatient
+        itk_origin = image.GetOrigin()
+        
+        for idx in range(len(dcm_origin)):
+            if abs(dcm_origin[idx] - itk_origin[idx]) > 0.1:
+                raise AssertionError(f"Missmatch between DCM origin {dcm_origin} and ITK origin {itk_origin}")
+        
+        dcm_direction = dcm_data.DetectorInformationSequence[0].ImageOrientationPatient
+        itk_direction = image.GetDirection()
+        
+        for idx in range(len(dcm_direction)):
+            if abs(dcm_direction[idx] - itk_direction[idx]) > 0.1:
+                raise AssertionError(f"Missmatch between DCM direction {dcm_direction} and ITK direction {itk_direction}")
+        
+    else:
+        image.SetOrigin(dcm_data.ImagePositionPatient)
+        image.SetDirection(list(dcm_data.ImageOrientationPatient) + [0, 0, 1])
+        
+    return image
+
+def squeeze_sitk_image_dimension(img: SimpleITK.Image,  
+                            dim: int = 3,  
+                            slice_index: int = 0  
+                           ) -> SimpleITK.Image:
+    """
+    Remove a singleton dimension from a SimpleITK image, like numpy.squeeze.
+
+    Parameters
+    ----------
+    img : SimpleITK.Image
+        Your input image (e.g. a 4D volume with size (Nx, Ny, Nz, 1)).
+    dim : int
+        The zero-based dimension to remove (for (Nx,Ny,Nz,1), dim=3).
+    slice_index : int
+        Which slice along that dimension to keep (must be < img.GetSize()[dim]).
+
+    Returns
+    -------
+    squeezed : SimpleITK.Image
+        A new image with one fewer dimension (e.g. (Nx,Ny,Nz)).
+    """
+    # 1) build size vector, set the target dim to 0 => collapse it
+    size = list(img.GetSize())
+    size[dim] = 0
+
+    # 2) build index vector, pick which slice of the dropped dim you want
+    index = [0]*img.GetDimension()
+    index[dim] = slice_index
+
+    # 3) run the extractor
+    extractor = SimpleITK.ExtractImageFilter()
+    extractor.SetSize(size)
+    extractor.SetIndex(index)
+    
+    return extractor.Execute(img)
+
 def load_from_dicom_dir(
     dir: str, modality: str, calibration_factor: Optional[float] = None
     ) -> Tuple[Image, MetaDataType]:
@@ -161,18 +251,23 @@ def load_from_dicom_dir(
     Args:
         dir (str): _description_
         modality (str): _description_
-        calibration_factor (str, optional):
+        calibration_factor (str, optional): Factor to scale SPECT voxel values (e.g., could be SPECT calibration Factor in BQ/CPS or dimensionless factor)
     Returns:
         Tuple[Image, MetaDataType]: _description_
     """
     # Read image content and spatial information using SimpleITK
     image = sitk_load_dcm_series(dcm_dir=Path(dir))
 
-    # If Q-SPECT, need to re-scale Data as SimpleITK does not do it:
+    # If Q-SPECT, need to re-scale Data and possibly add Origin/Direction:
     if modality != "CT":
+        
+        # Remove redundant dimension
+        image = squeeze_sitk_image_dimension(img=image)
+        image = apply_qspect_dcm_origin(image=image, dir=dir)
         
         if calibration_factor is None:
             scale_factor = None
+            
         else:
             scale_factor = (calibration_factor, 0)
             
@@ -188,62 +283,114 @@ def load_from_dicom_dir(
 
     return image, meta
 
-def load_and_resample_RT(
-    ref_dicom_dir: str,
-    rt_struct_dir: str,
-    target_shape: Tuple[int, int, int]
-    ) -> Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]:
-    """Load and resample RT data from DICOM files in the specified folder.
+def load_RTStruct(ref_dicom_ct_dir: str,
+                  rt_struct_file: str) -> Dict[str, SimpleITK.Image]:
+    """Load RTStruct Contours and Generate Masks.
 
-    Args:
-        ref_dicom_dir (str): _description_
-        rt_struct_dir (str): _description_
-        target_shape (Tuple[int, int, int]): _description_
+    Parameters
+    ----------
+    ref_dicom_ct_dir : str
+        Path to reference Dicom dir of CT slices associated with RTStruct
+    rt_struct_file : str
+        Path to RTStruct file.
 
-    Raises:
-        FileNotFoundError: _description_
-
-    Returns:
-        Tuple[Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]]: _description_
+    Returns
+    -------
+    Dict[str, SimpleITK.Image]
+        A Dictionary containing each mask present in the RTStruct file.
     """
-    
-    # TODO: separate RTtoMask loading from re-sampling. 
-    # For generalizability, Re-sampling should use spacing and origin from reference and target 
-    # images.
-
     def clean_roi_name(roi_name: str) -> str:
         cleaned_roi_name = roi_name.replace(" ", "").replace('-', '_').replace('(', '_').replace(')', '')
         return cleaned_roi_name
-
-    def resample_mask(mask: numpy.ndarray, shape: Tuple[int, int, int]) -> numpy.ndarray:
-        return img_as_bool(resize(mask, shape))
-
-    CT_folder = Path(ref_dicom_dir)
-    RT_folder = Path(rt_struct_dir)
-
+    
+    CT_folder = Path(ref_dicom_ct_dir)
+        
     if not CT_folder.exists():
         raise FileNotFoundError(f"Folder {CT_folder.name} does not exists.")
 
-    # TODO: very specific to current local structure. We might want to make it more generic... (e.g., when
-    # we build a 'database')
+    CT_sitk = sitk_load_dcm_series(dcm_dir=CT_folder)
+    
     RT = RTStructBuilder.create_from(
-        dicom_series_path=glob.glob(str(CT_folder))[0],
-        rt_struct_path=glob.glob(str(RT_folder) + "/*.dcm")[0]
+        dicom_series_path=ref_dicom_ct_dir,
+        rt_struct_path=rt_struct_file
     )
-    roi_masks = {}
+    
+    roi_masks: Dict[str, SimpleITK.Image] = {}
     roi_names = RT.get_roi_names()
     
     # Clean names, as they might come with unsupported characters from third party software.
     for roi_name in roi_names:
         cleaned_roi_name = clean_roi_name(roi_name)
         mask = RT.get_roi_mask_by_name(roi_name)
-        roi_masks[cleaned_roi_name] = mask
+        roi_masks[cleaned_roi_name] = itk_image_from_array(array=numpy.transpose(mask, axes=(2, 0, 1)), ref_image=CT_sitk, is_mask=True)
+    
+    return roi_masks
+
+def resample_mask_to_target(mask_img: SimpleITK.Image,
+                            target_img: SimpleITK.Image
+                           ) -> Tuple[SimpleITK.Image, numpy.ndarray]:
+    """
+    Resample a binary mask (originally from CT) to match a target SPECT image in physical space (location/voxel spacing).
+
+    Parameters
+    ----------
+    mask_img : SimpleITK.Image
+      Binary CT mask (e.g. sitkUInt8 or sitkUInt16).
+    target_img : SimpleITK.Image
+        The reference image (SPECT) whose spacing, origin,
+        direction, and size you want to match.
+
+    Returns
+    -------
+    resampled_mask_img : SimpleITK.Image
+        The mask resampled into the target image's space.
+    resampled_mask_array : np.ndarray
+        A NumPy array of shape (z, y, x) aligned exactly with
+        the SimpleITK target image.
+    """
+    # ensure mask is of an integer type suitable for NN interpolation
+    mask_cast = SimpleITK.Cast(mask_img, SimpleITK.sitkUInt8)
+
+    resampler = SimpleITK.ResampleImageFilter()
+    # copy geometry from target
+    resampler.SetReferenceImage(target_img)
+    # nearest‐neighbor to keep it binary
+    resampler.SetInterpolator(SimpleITK.sitkNearestNeighbor)
+    resampler.SetDefaultPixelValue(0)
+
+    return resampler.Execute(mask_cast)
+
+def load_and_resample_RT_to_target(
+    ref_dicom_ct_dir: str,
+    rt_struct_file: str,
+    target_img: SimpleITK.Image
+) -> Tuple[Dict[str, SimpleITK.Image], Dict[str, SimpleITK.Image]]:
+    """_summary_
+
+    Parameters
+    ----------
+    ref_dicom_ct_dir : str
+        _description_
+    rt_struct_file : str
+        _description_
+    target_img : SimpleITK.Image
+        _description_
+
+    Returns
+    -------
+    Tuple[Dict[str, SimpleITK.Image], Dict[str, SimpleITK.Image]]
+        Reference (CT) and Resampleda (SPECT) Masks from RTStruct.
+    """
+    ref_masks = load_RTStruct(ref_dicom_ct_dir=ref_dicom_ct_dir, rt_struct_file=rt_struct_file)
+
+    resampled_masks: Dict[str, SimpleITK.Image] = {}
+    
+    for mask_name, mask_image in ref_masks.items():
+        print(f"Resampling Masks: {mask_name} ...")
+        resampled_masks[mask_name] = resample_mask_to_target(mask_img=mask_image, target_img=target_img)        
         
-    # Resampling:
-    roi_masks_resampled = {organ: resample_mask(mask, target_shape) for organ, mask in roi_masks.items()}
-
-    return roi_masks, roi_masks_resampled
-
+    return ref_masks, resampled_masks
+        
 def ensure_masks_disconnect(original_masks: Dict[str, numpy.ndarray]) -> Dict[str, numpy.ndarray]:
     """_summary_
 
@@ -275,7 +422,6 @@ def ensure_masks_disconnect(original_masks: Dict[str, numpy.ndarray]) -> Dict[st
         
     return final_masks
    
-    
 def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]], requested_rois: List[str]) -> Dict[str, numpy.ndarray]:
     """Extract masks from NM dataset, according to user-defined list. Enforce that masks are disconnected.
         Constrains: 
@@ -330,7 +476,6 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
             
     return corrected_masks
                 
-
 def jaccard_index(mask_1: numpy.ndarray, mask_2: numpy.ndarray) -> float:
     """_summary_
 
