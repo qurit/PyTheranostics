@@ -32,6 +32,7 @@ class LongitudinalStudy:
         self.modality = modality
         self.images = images
         self.masks:  Dict[int, Dict[str, numpy.ndarray]] = {}  # {time_id: {mask_name: array}}
+        
         self.meta = meta
         
         # Mask mapping format:
@@ -63,12 +64,12 @@ class LongitudinalStudy:
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
-    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Optional[Dict[str, str]] = None) -> None:
+    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, SimpleITK.Image], mask_mapping: Optional[Dict[str, str]] = None) -> None:
         """Add Masks to time point.
 
         Args:
             time_id (int): Index of time-point ID.
-            masks (Dict[str, numpy.ndarray]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_array}
+            masks (Dict[str, SimpleITK.Image]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_image (simpleITK)}
             mask_mapping (Optional[Dict[str, str]], optional): Mapping between masks names in input masks dictionary, and standard mask names in pyTheranostics. Defaults to None. If None, takes each name as is.
             
         Raises:
@@ -94,8 +95,8 @@ class LongitudinalStudy:
             if mask_target in self.masks[time_id]:
                 print(f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!")
                 
-            self.masks[time_id][mask_target] = masks[mask_source]
-        
+            self.masks[time_id][mask_target] = numpy.transpose(SimpleITK.GetArrayFromImage(masks[mask_source]), axes=(1, 2, 0))
+            
         return None
     
     def volume_of(self, region: str, time_id: int) -> float:
@@ -264,7 +265,7 @@ def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT",
     Args:
         dicom_dirs (List[str]): _description_
         modality (str, optional): _description_. Defaults to "CT".
-        calibration_factor (float, optional): Converts reconstructed SPECT image in units of Bq / mL. Defatuls to 1.
+        calibration_factor (float, optional): Converts reconstructed SPECT image (raw counts * num_proj) to units of Bq / mL. Defatuls to 1.
     Returns:
         LongitudinalStudy: _description_
     """
