@@ -12,18 +12,13 @@ from scipy import integrate
 
 
 import matplotlib.pylab as plt
-#from doodle.plots.plots import monoexp_fit_plots, biexp_fit_plots
-from doodle.fits.fits import exponential_fit_lmfit, calculate_r_squared, get_exponential, monoexp_fun, biexp_fun, biexp_fun_uptake, triexp_fun
+from pytheranostics.fits.fits import exponential_fit_lmfit, calculate_r_squared, get_exponential, monoexp_fun, biexp_fun, biexp_fun_uptake, triexp_fun
 from typing import Any, Callable, Optional, Tuple, Dict
-from doodle.plots.plots import plot_tac_residuals
+from pytheranostics.plots.plots import plot_tac_residuals
 from scipy import integrate
 from scipy.optimize import curve_fit
 import lmfit
 from lmfit import Model
-
-from pytheranostics.fits.fits import monoexp_fun, biexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake, fit_biexp, fit_triexp
-from pytheranostics.plots.plots import monoexp_fit_plots, biexp_fit_plots
-
 
 this_dir=path.dirname(__file__)
 parent_dir = path.dirname(this_dir)
