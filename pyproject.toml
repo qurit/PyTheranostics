@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytheranostics"
+version = "0.2.0"
+description = "A library of tools to process nuclear medicine scans and take them through the dosimetry workflow to calculate the absorbed dose in target organs."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+authors = [
+    { name = "Carlos Uribe, PhD, MCCPM", email = "curibe@bccrc.ca" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pandas",
+    "pydicom",
+    "openpyxl",
+    "rt-utils",
+    "scikit-image",
+    "simpleitk",
+    "lmfit"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/qurit/PyTheranostics"
+"Bug Tracker" = "https://github.com/qurit/PyTheranostics/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "flake8>=6.0",
+    "black>=23.0",
+    "mypy>=1.0",
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=1.0"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "pytheranostics",
+    "pytheranostics.calibrations",
+    "pytheranostics.dicomtools",
+    "pytheranostics.dosimetry",
+    "pytheranostics.fits",
+    "pytheranostics.plots",
+    "pytheranostics.qc",
+    "pytheranostics.segmentation",
+    "pytheranostics.registration",
+    "pytheranostics.shared"
+] 
