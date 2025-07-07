@@ -246,9 +246,9 @@ class LongitudinalStudy:
         
         for mask_id, region_name in enumerate(mask_names):
             all_masks += (mask_id + 1) * (self.masks[time_id][region_name]).astype(numpy.int16)
-
+                
         mask_image = itk_image_from_array(array=numpy.transpose(all_masks, axes=(2, 0, 1)), ref_image=self.images[time_id])
-        
+                
         print(f"Writing Masks ({mask_names}) into nifty file.")
         
         SimpleITK.WriteImage(image=mask_image, fileName=out_path / f"Masks_{time_id}.nii.gz")

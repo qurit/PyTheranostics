@@ -7,6 +7,7 @@ import glob
 from rt_utils import RTStructBuilder
 from pathlib import Path
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
+from pytheranostics.registration.CTtoSPECT import register_ct_to_spect, transform_ct_mask_to_spect
 
 MetaDataType = Dict[str, Any]  # This could be improved ...
 
@@ -87,11 +88,10 @@ def itk_image_from_array(array: numpy.ndarray, ref_image: Image, is_mask: bool=F
     Returns:
         Image: _description_
     """
-    
     # Cast if masks:
     if is_mask:
         array = array.astype(numpy.uint8)
-    
+
     image = SimpleITK.GetImageFromArray(array)
 
     if is_mask:
@@ -104,8 +104,8 @@ def itk_image_from_array(array: numpy.ndarray, ref_image: Image, is_mask: bool=F
     if len(tmp_spacing) - len(array.shape) == 1:  # Sometime we get NM data with 4 dimensions, the last one being just a dummy.
         tmp_spacing = tmp_spacing[:-1]
         tmp_origin = tmp_origin[:-1]
-    
-    image.SetSpacing(tmp_spacing)
+
+    image.SetSpacing([tmp_spacing[0], tmp_spacing[1], tmp_spacing[2]])
     image.SetOrigin(tmp_origin)
     tmp_direction = list(ref_image.GetDirection())
     
@@ -281,7 +281,66 @@ def load_from_dicom_dir(
     # Load Meta Data using pydicom.
     meta = load_metadata(dir=dir, modality=modality)
 
+    # Force Orthogonality of Patient Orientation
+    image = force_orthogonality(image=image)
+
     return image, meta
+
+def are_vectors_orthogonal(origin: List[float], tol: float=1e-24):
+    """Checks if the patient orientation is given by orthogonal vectors
+    
+    Returns True if a·b, a·c, and b·c are all within ±tol; otherwise False.
+
+    Parameters
+    ----------
+    origin : List[float]
+        Coordinates of Patient Orientation
+    tol : float, optional
+        Tolerance, by default 1e-8
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    # split into three 3D vectors
+    a = origin[0:3]
+    b = origin[3:6]
+    c = origin[6:9]
+
+    def dot(u, v):
+        return sum(ui * vi for ui, vi in zip(u, v))
+
+    return (
+        abs(dot(a, b)) < tol
+        and abs(dot(a, c)) < tol
+        and abs(dot(b, c)) < tol
+    )
+
+def force_orthogonality(image: SimpleITK.Image) -> SimpleITK.Image:
+    """_summary_
+
+    Parameters
+    ----------
+    image : SimpleITK.Image
+        _description_
+
+    Returns
+    -------
+    SimpleITK.Image
+        _description_
+    """
+    if not are_vectors_orthogonal(image.GetDirection()):
+        print(f"Patient Orientation Vectors are NOT orthogonal. Forcing...")
+        prev_origin = image.GetDirection()
+        new_origin = [round(vec_element) for vec_element in prev_origin]
+        print(f">> Original Orientation: {prev_origin}, New Orientation: {new_origin} ")
+        image.SetDirection(new_origin)
+    else:
+        prev_origin = image.GetDirection()
+        new_origin = [round(vec_element) for vec_element in prev_origin]
+        print(f">> Original Orientation: {prev_origin}")
+    return image
 
 def load_RTStruct(ref_dicom_ct_dir: str,
                   rt_struct_file: str) -> Dict[str, SimpleITK.Image]:
@@ -308,7 +367,7 @@ def load_RTStruct(ref_dicom_ct_dir: str,
     if not CT_folder.exists():
         raise FileNotFoundError(f"Folder {CT_folder.name} does not exists.")
 
-    CT_sitk = sitk_load_dcm_series(dcm_dir=CT_folder)
+    CT_sitk = force_orthogonality(image=sitk_load_dcm_series(dcm_dir=CT_folder))
     
     RT = RTStructBuilder.create_from(
         dicom_series_path=ref_dicom_ct_dir,
@@ -388,9 +447,78 @@ def load_and_resample_RT_to_target(
     for mask_name, mask_image in ref_masks.items():
         print(f"Resampling Masks: {mask_name} ...")
         resampled_masks[mask_name] = resample_mask_to_target(mask_img=mask_image, target_img=target_img)        
-        
+
     return ref_masks, resampled_masks
         
+def load_and_register_RT_to_target(
+    ref_dicom_ct_dir: str,
+    rt_struct_file: str,
+    target_img: SimpleITK.Image
+) -> Tuple[Dict[str, SimpleITK.Image], Dict[str, SimpleITK.Image]]:
+    """_summary_
+
+    Parameters
+    ----------
+    ref_dicom_ct_dir : str
+        _description_
+    rt_struct_file : str
+        _description_
+    target_img : SimpleITK.Image
+        _description_
+
+    Returns
+    -------
+    Tuple[Dict[str, SimpleITK.Image], Dict[str, SimpleITK.Image]]
+        Reference (CT) and Resampleda (SPECT) Masks from RTStruct.
+    """
+    ref_masks = load_RTStruct(ref_dicom_ct_dir=ref_dicom_ct_dir, rt_struct_file=rt_struct_file)
+    ref_ct, _ = load_from_dicom_dir(dir=ref_dicom_ct_dir, modality="CT")
+    
+    ref_ct = SimpleITK.Cast(ref_ct, SimpleITK.sitkFloat32)
+    target_img = SimpleITK.Cast(target_img, SimpleITK.sitkFloat32)
+    
+    # Register:
+    _, transform = register_ct_to_spect(ct_image=ref_ct, spect_image=target_img)
+    
+    resampled_masks: Dict[str, SimpleITK.Image] = {}
+    
+    for mask_name, mask_image in ref_masks.items():
+        print(f"Registering Masks: {mask_name} ...")
+        resampled_masks[mask_name] = transform_ct_mask_to_spect(mask=mask_image, spect=target_img, transform=transform)        
+
+    return ref_masks, resampled_masks
+
+
+def resample_to_target(source_img: SimpleITK.Image,
+                       target_img: SimpleITK.Image,
+                       default_value: float = -1000.0) -> SimpleITK.Image:
+    """
+    Resample source_img to match the grid (origin, spacing, direction, size)
+    of target_image using the SimpleITK Linear interpolator.
+
+    Parameters:
+        source_img (sitk.Image): The image to be resampled.
+        target_img (sitk.Image): The reference image defining the desired grid.
+        default_value (float): Pixel value for voxels outside source_img domain. Defaults to CT air values.
+
+    Returns:
+        sitk.Image: The resampled image.
+    """
+    # Set up the resampler
+    resampler = SimpleITK.ResampleImageFilter()
+    resampler.SetReferenceImage(target_img)
+    resampler.SetInterpolator(SimpleITK.sitkLinear)
+    resampler.SetDefaultPixelValue(default_value)
+
+    # Use an identity transform to align in physical space
+    identity = SimpleITK.Transform(source_img.GetDimension(), SimpleITK.sitkIdentity)
+    resampler.SetTransform(identity)
+
+    # Perform resampling
+    resampled_img = resampler.Execute(source_img)
+    return resampled_img
+
+
 def ensure_masks_disconnect(original_masks: Dict[str, numpy.ndarray]) -> Dict[str, numpy.ndarray]:
     """_summary_
 
