@@ -43,8 +43,8 @@ class PhantomToCTBoneReg:
         self.verbose = verbose
 
     def initial_alignment(self, 
-                          fixed_image: SimpleITK.SimpleITK.Image,
-                          moving_image: SimpleITK.SimpleITK.Image) -> None:
+                          fixed_image: SimpleITK.Image,
+                          moving_image: SimpleITK.Image) -> None:
         
         self.InitialTransform = SimpleITK.CenteredTransformInitializer(
                                 fixed_image,
@@ -56,8 +56,8 @@ class PhantomToCTBoneReg:
         return None
     
     def rigid_alignment(self, 
-                        fixed_image: SimpleITK.SimpleITK.Image, 
-                        moving_image: SimpleITK.SimpleITK.Image) -> None:
+                        fixed_image: SimpleITK.Image, 
+                        moving_image: SimpleITK.Image) -> None:
         """Rigid Registration. Please Note currently we only support default parameters.
         TODO: add support for user-defined registration parameters, probably using **kwargs"""
 
@@ -98,8 +98,8 @@ class PhantomToCTBoneReg:
         return None
     
     def elastic_alignment(self,
-                          fixed_image: SimpleITK.SimpleITK.Image, 
-                          moving_image: SimpleITK.SimpleITK.Image) -> None:
+                          fixed_image: SimpleITK.Image, 
+                          moving_image: SimpleITK.Image) -> None:
 
         # Define a simple callback which allows us to monitor registration progress.
         def iteration_callback(filter):  # TODO: Remove verbose ... or make it optional.
@@ -128,9 +128,9 @@ class PhantomToCTBoneReg:
         return None
 
     @staticmethod
-    def transform(fixed_image: SimpleITK.SimpleITK.Image, 
-                  moving_image: SimpleITK.SimpleITK.Image,
-                  transform: Transform) -> SimpleITK.SimpleITK.Image:
+    def transform(fixed_image: SimpleITK.Image, 
+                  moving_image: SimpleITK.Image,
+                  transform: Transform) -> SimpleITK.Image:
         if transform is None:
             raise AssertionError("Transform was not calculated.")
         
@@ -138,13 +138,14 @@ class PhantomToCTBoneReg:
                                   0.0, moving_image.GetPixelID())
 
     def register(self, 
-                 fixed_image: SimpleITK.SimpleITK.Image, 
-                 moving_image: SimpleITK.SimpleITK.Image
-                 ) -> SimpleITK.SimpleITK.Image:
+                 fixed_image: SimpleITK.Image, 
+                 moving_image: SimpleITK.Image
+                 ) -> SimpleITK.Image:
         
         # Initial Geometric Transform: Align images in space.
         self.initial_alignment(fixed_image=fixed_image, moving_image=moving_image)
 
+        assert self.InitialTransform is not None
         moving_image = self.transform(fixed_image=fixed_image,
                                       moving_image=moving_image,
                                       transform=self.InitialTransform)
@@ -154,6 +155,7 @@ class PhantomToCTBoneReg:
             print("Computing Rigid Registration ...")
             self.rigid_alignment(fixed_image=fixed_image, moving_image=moving_image)
 
+        assert self.RigidTransform is not None
         moving_image = self.transform(fixed_image=fixed_image,
                                       moving_image=moving_image,
                                       transform=self.RigidTransform)
@@ -163,14 +165,15 @@ class PhantomToCTBoneReg:
             print("Computing Elastic Registration, This might take several minutes ...")
             self.elastic_alignment(fixed_image=fixed_image, moving_image=moving_image)
 
+        assert self.ElasticTransform is not None
         return self.transform(fixed_image=fixed_image,
                               moving_image=moving_image,
                               transform=self.ElasticTransform)
         
     def register_mask(self, 
-                      fixed_image: SimpleITK.SimpleITK.Image, 
+                      fixed_image: SimpleITK.Image, 
                       mask_path: Path = Path("../data/phantom/bone_marrow/Marrow.nii.gz")
-                 ) -> SimpleITK.SimpleITK.Image:
+                 ) -> SimpleITK.Image:
         mask_image = SimpleITK.ReadImage(fileName=mask_path)
         mask_image.SetOrigin(fixed_image.GetOrigin())
         mask_image = SimpleITK.Cast(mask_image, SimpleITK.sitkFloat32)
