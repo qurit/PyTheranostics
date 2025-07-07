@@ -2,13 +2,13 @@ from typing import Any, Dict, Optional
 from pandas import DataFrame
 from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
 from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
-from pytheranostics.ImagingTools.Tools import itk_image_from_array
+from pytheranostics.ImagingTools.Tools import itk_image_from_array, resample_to_target
 from pytheranostics.fits.fits import get_exponential
 import numpy
 import shutil
 import os
 from pytheranostics.dosimetry.dvk import DoseVoxelKernel
-
+import SimpleITK
 
 class VoxelSDosimetry(BaseDosimetry):
     """Voxel S Dosimetry class: Computes parameters of fit for time activity curves at the region (organ/lesion) level, and
@@ -46,7 +46,7 @@ class VoxelSDosimetry(BaseDosimetry):
             If overlapping structures are found when adding regions to calculate voxel-TIA.
         """
 
-        ref_time_id = self.config["ReferenceTimePoint"]
+        ref_time_id = int(self.config["ReferenceTimePoint"])
         tia_map = numpy.zeros_like(self.nm_data.array_at(time_id=ref_time_id))
         
         # Check we're not having overlapping regions:
@@ -78,9 +78,9 @@ class VoxelSDosimetry(BaseDosimetry):
 
         # Create ITK Image Object and embed it into a LongStudy.  #TODO: modularize, repeated code downwards.
         tia_image = itk_image_from_array(array=numpy.transpose(tia_map, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])
-        self.tia_map = LongitudinalStudy(images={0: tia_image}, meta={0: self.nm_data.meta[ref_time_id]}, modality="NM")
-        self.tia_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
-
+        self.tia_map = LongitudinalStudy(images={0: tia_image}, meta={0: self.nm_data.meta[ref_time_id]}, modality="NM")   
+        self.tia_map.masks[0] = self.nm_data.masks[0].copy()  # Copy masks.
+        
         return None
 
     def apply_voxel_s(self) -> None:
@@ -91,9 +91,15 @@ class VoxelSDosimetry(BaseDosimetry):
         
         dose_kernel = DoseVoxelKernel(isotope=self.nm_data.meta[0]["Radionuclide"], voxel_size_mm=nm_voxel_mm)
         
+        # Resample CT to NM (Default using linear interpolator)
+        resampled_ct = resample_to_target(source_img=self.ct_data.images[ref_time_id], 
+                                          target_img=self.nm_data.images[ref_time_id])
+        
         dose_map_array = dose_kernel.tia_to_dose(
             tia_mbq_s=self.tia_map.array_at(0) * self.toMBqs, 
-            ct=self.ct_data.array_at(time_id=ref_time_id) if self.config["ScaleDoseByDensity"] else None
+            ct=numpy.transpose(
+                SimpleITK.GetArrayFromImage(resampled_ct), axes=(1, 2, 0)
+                ) if self.config["ScaleDoseByDensity"] else None
             )
         
         # Create ITK Image Object and embed it into a LongStudy
@@ -105,8 +111,8 @@ class VoxelSDosimetry(BaseDosimetry):
                 0: itk_image_from_array(array=numpy.transpose(dose_map_array, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])},
             meta={0: self.nm_data.meta[ref_time_id]}
             )
-        
-        self.dose_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
+  
+        self.dose_map.masks[0] = self.nm_data.masks[0].copy()
         
         return None
     
