@@ -1,11 +1,15 @@
 import numpy as np
 from datetime import datetime
 
-def decay_act(a_initial,delta_t,half_life):
+def decay_act(a_initial, delta_t, half_life):
+    if np.any(np.asarray(a_initial) < 0):
+        raise ValueError("a_initial must be positive")
+    if np.any(np.asarray(delta_t) < 0):
+        raise ValueError("delta_t must be positive")
+    if np.any(np.asarray(half_life) < 0):
+        raise ValueError("half_life must be positive")
 
     return a_initial * np.exp(-np.log(2)/half_life * delta_t)
-
-
 
 
 def get_activity_at_injection(injection_date,pre_inj_activity,pre_inj_time,post_inj_activity,post_inj_time,injection_time,half_life):
