@@ -39,6 +39,18 @@ dose = tx.dosimetry.calculate_absorbed_dose(image)
 tx.plots.plot_dose_distribution(dose)
 ```
 
+## Database
+
+To use save to a locally hosted database, follow these instructions:
+
+1. [Install Docker Desktop](https://www.docker.com/products/docker-desktop/)
+1. [Clone the AscintaDB repo](https://github.com/jasonspence/AscintaDB)
+1. From this repo in your virtual environment, run `pip install ../path/to/AscintaDB`
+1. Create a .env file, run `cp .env.template .env`
+1. Turn on Docker Desktop
+1. Run the startup script `ascintadb` - this turns on the database
+1. Run the test script `python pytheranostics/tests/test_database_integration.py`
+
 ## Documentation
 
 For detailed documentation, visit our [documentation page](https://pytheranostics.readthedocs.io/).
