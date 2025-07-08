@@ -2,7 +2,6 @@ from typing import Any, Callable, Optional, Tuple, Dict
 
 import numpy
 from pytheranostics.fits.functions import biexp_fun, monoexp_fun, triexp_fun, biexp_fun_uptake
-from scipy.optimize import curve_fit
 import lmfit
 from lmfit import Model
 
