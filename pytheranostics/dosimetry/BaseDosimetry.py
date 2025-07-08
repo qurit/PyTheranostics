@@ -428,9 +428,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # Apply Criterion
         aic_results = [(idx, fit.aic) for idx, fit in enumerate(all_fits)]
         aic_results = sorted(aic_results, key=lambda x: x[1]) # Sort
-        
-        print("DEBUG: AIC Results", aic_results)
-        
+                
         # If only one model fit, that is the winner.
         if len(aic_results) == 1:
             self.config["rois"][region]["with_uptake"] = fit_config[0][0]
