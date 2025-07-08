@@ -2,7 +2,7 @@ import json
 import math
 import abc
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from os import path
 
 import numpy
@@ -334,7 +334,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             
             fit_results = self.smart_fit_selection(region_data=region_data, region=region)
 
-            plot_tac_residuals(result=fit_results, region=region)
+            plot_tac_residuals(result=fit_results, region=region, output_dir=self.db_dir)
             
             # Parameters for sum of exponential functions:
             fit_params = [fit_results.params[param].value for param in fit_results.params.keys()]  # A1, B1, A2, B2, ...
