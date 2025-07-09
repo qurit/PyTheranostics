@@ -173,7 +173,8 @@ class GammaCamera(PlanarQC):
         print("Calibration Results. Sensitivity in cps/MBq. Calibration factor in MBq/cps")
         pprint.pprint(self.cal_dic)
 
-    def calculate_uncertainty(self, site_id, camera_model, uncertainty_activity=0.03359):
+    def calculate_uncertainty(self, site_id, camera_model, uncertainty_activity):
+
         u_prim_list = []
         for detector in ['Detector1', 'Detector2']:
             u_pw = math.sqrt(self.win_check['photopeak']['counts'][detector])
