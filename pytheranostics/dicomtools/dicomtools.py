@@ -276,7 +276,7 @@ def numpy_to_dcm_basic(array: np.ndarray, voxel_spacing: Tuple[float, float, flo
     return None
 
 
-def sitk_load_dcm_series(dcm_dir: Path) -> SimpleITK.SimpleITK.Image:
+def sitk_load_dcm_series(dcm_dir: Path) -> SimpleITK.Image:
     """Load Series from DICOM folder, and return SITK image
     
     Parameters
