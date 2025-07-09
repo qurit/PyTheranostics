@@ -227,6 +227,13 @@ def squeeze_sitk_image_dimension(img: SimpleITK.Image,
     squeezed : SimpleITK.Image
         A new image with one fewer dimension (e.g. (Nx,Ny,Nz)).
     """
+    # 0) If image is 2-D, error; if image is 3-D, nothing to do.
+    if img.GetDimension() < 3:
+        raise AssertionError(f"Image Dimensions are not valid:  dim={img.GetDimension()}, size={img.GetSize()}")
+    
+    if img.GetDimension == 3:
+        return img
+    
     # 1) build size vector, set the target dim to 0 => collapse it
     size = list(img.GetSize())
     size[dim] = 0
