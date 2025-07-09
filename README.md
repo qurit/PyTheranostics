@@ -57,14 +57,10 @@ If you use PyTheranostics in your research, please cite:
 
 ```
 @software{pytheranostics2024,
-  author = {Carlos Uribe},
+  author = {Sara Kurkowska, Pedro Esquinas,Carlos Uribe},
   title = {PyTheranostics: A Python Library for Nuclear Medicine Processing and Dosimetry},
   year = {2024},
   url = {https://github.com/qurit/PyTheranostics}
 }
 ```
 
-## Contact
-
-- Author: Carlos Uribe, PhD, MCCPM
-- Email: curibe@bccrc.ca
