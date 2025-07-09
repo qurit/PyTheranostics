@@ -231,7 +231,7 @@ def squeeze_sitk_image_dimension(img: SimpleITK.Image,
     if img.GetDimension() < 3:
         raise AssertionError(f"Image Dimensions are not valid:  dim={img.GetDimension()}, size={img.GetSize()}")
     
-    if img.GetDimension == 3:
+    if img.GetDimension() == 3:
         return img
     
     # 1) build size vector, set the target dim to 0 => collapse it
