@@ -3,6 +3,7 @@ import numpy
 from typing import Optional
 import lmfit
 from pathlib import Path
+from typing import Optional
 
 def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
     """Create a montage of energy window images.
@@ -49,7 +50,8 @@ def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
 
     plt.tight_layout()
 
-def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, output_dir: Optional[Path] = None) -> None:
+def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, x_label: str = "Time [hr]",
+                       y_label: str = "Activity [MBq]", output_dir: Optional[Path] = None) -> None:
     """Plot Time activity curve and residuals.
 
     Parameters
@@ -58,6 +60,10 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, output_dir:
         The fitted lmfit model results.
     region : str
         The region (e.g., organ, tumor) where fit happened.
+    x_label: str
+        The label in X Axis. Defaults to "Time [hr]"
+    y_label: str
+        The label in Y Axis. Defaults to "Activity [MBq]"
     output_dir: Optional[str]
         A path to a directory where figure will be saved.
     """
@@ -82,21 +88,26 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, output_dir:
     # Retrieve x_data and y_data from the fit result
     x_data = result.userkws['x']
     y_data = result.data
-
+    if result.weights is not None:
+        weights = 1 / result.weights
+    else:
+        weights = None
     # Generate x-values for plotting the fitted model starting from x=0
-    x_fit = numpy.linspace(0, x_data.max(), 500)
+    x_fit = numpy.linspace(0, x_data[-1] * 2, 500)
     y_fit = result.eval(x=x_fit)
 
     # First subplot: Linear scale plot
     ax1 = axs[0]
     # Plot data points
-    ax1.plot(x_data, y_data, 'o', markersize=5)
+    ax1.errorbar(x_data, y_data, yerr=weights, fmt='o', markersize=5)
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color='red')
     ax1.set_xlim(left=0)  # Start x-axis from zero
+    ax1.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
+    ax1.set_ylim(bottom=0)  # Start y-axis from zero
     ax1.set_title(region)
-    ax1.set_xlabel("Time [hr]")
-    ax1.set_ylabel(f"Activity [MBq]")
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel(y_label)
     # Add R-squared and AIC as text
     ax1.text(0.7, 0.9, f'$R^2={result.rsquared:.3f}$', transform=ax1.transAxes)
     ax1.text(0.7, 0.85, f'AIC={result.aic:.3f}', transform=ax1.transAxes)
@@ -112,10 +123,11 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, output_dir:
     # Plot fitted model
     ax2.plot(x_fit, y_fit, color='red')
     ax2.set_xlim(left=0)  # Start x-axis from zero
+    ax2.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
     ax2.set_yscale("log")
     ax2.set_title(title_text)
-    ax2.set_xlabel("Time [hr]")
-    ax2.set_ylabel("Activity [MBq]")
+    ax2.set_xlabel(x_label)
+    ax2.set_ylabel(y_label)
     # Remove legend if present
     legend = ax2.get_legend()
     if legend:
@@ -125,7 +137,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, output_dir:
     ax3 = axs[2]
     result.plot_residuals(ax=ax3, data_kws={"markersize": 5})
     ax3.set_title("Residuals")
-    ax3.set_xlabel("Time [hr]")
+    ax3.set_xlabel(x_label)
     ax3.set_ylabel("Residuals")
 
     if output_dir is not None:

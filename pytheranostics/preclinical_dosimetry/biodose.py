@@ -8,22 +8,30 @@ from copy import deepcopy
 from scipy import integrate
 
 
-import matplotlib.pylab as plt
-from pytheranostics.fits.fits import monoexp_fun, biexp_fun, fit_monoexp, find_a_initial, fit_biexp_uptake, fit_biexp, fit_triexp
-from pytheranostics.plots.plots import monoexp_fit_plots, biexp_fit_plots
+### Importing necessary libraries for plotting and fitting
 
+
+import matplotlib.pylab as plt
+from pytheranostics.fits.fits import exponential_fit_lmfit, calculate_r_squared, get_exponential, monoexp_fun, biexp_fun, biexp_fun_uptake, triexp_fun
+from typing import Any, Callable, Optional, Tuple, Dict
+from pytheranostics.plots.plots import plot_tac_residuals
+from scipy import integrate
+from scipy.optimize import curve_fit
+import lmfit
+from lmfit import Model
 
 this_dir=path.dirname(__file__)
+parent_dir = path.dirname(this_dir)
 TEMPLATE_PATH = path.join(this_dir,"olindaTemplates")
 PHANTOM_PATH = path.join(this_dir,'phantomdata') # These variables use only lowercases so "PhantomData" is in lowercase
-
+SVALUES_PATH = path.join(parent_dir, 'data', 's-values')
 
 class BioDose():
     '''
     This is a class for the analysis of biodistribution data in preclinical experiments
     '''
 
-    def __init__(self, isotope, half_life, phantom,  sex, uptake=None, timepoints=None):
+    def __init__(self, isotope, half_life, phantom, mouse_mass, sex, uptake=None, timepoints=None):
         'half_life in hours'
         if uptake is None:
             uptake = []
@@ -33,22 +41,21 @@ class BioDose():
         self.isotope = isotope
         self.half_life = half_life
         self.phantom = phantom
+        self.mouse_mass = mouse_mass
         self.uptake = uptake
         self.sex = sex
         self.t = timepoints
         self.biodi = None
+        self.wb_m = int(self.mouse_mass[:-1]) 
 
-    def rename_organ(self,oldname,newname):
-        ind_list=self.biodi.index.tolist()
-        ind_pos = ind_list.index(oldname)
-        ind_list[ind_pos] = newname
-        self.biodi.index = ind_list
-                
+
     def read_biodi(self, biodi_file):
         '''This method reads a biodi file and sets the data as a pandas dataframe in self.biodi
         '''
         print('Reading biodistribution information from the file: {}'.format(biodi_file))
         biodi = pd.read_csv(biodi_file)
+        
+        # Generalize the biodi organ names
         biodi['Organ'] = biodi['Organ'].str.title()
         biodi['Organ'] = biodi['Organ'].replace('Adrenal Glands','Adrenals')
         biodi['Organ'] = biodi['Organ'].replace('Adrenal','Adrenals')
@@ -62,8 +69,9 @@ class BioDose():
         biodi['Organ'] = biodi['Organ'].replace('Seminal','Seminals')
         biodi['Organ'] = biodi['Organ'].replace('Seminal Vesicles','Seminals')
         biodi['Organ'] = biodi['Organ'].replace('Testis','Testes')
+        biodi['Organ'] = biodi['Organ'].replace('Lung','Lungs')
         biodi['Organ'] = biodi['Organ'].replace('Large Intestines','Large Intestine')
-        biodi['Organ'] = biodi['Organ'].replace('Small Intestines','Small Intestine')
+        biodi['Organ'] = biodi['Organ'].replace('Small Intestines',)
         biodi['Organ'] = biodi['Organ'].replace('Bone','Skeleton')
         biodi['Organ'] = biodi['Organ'].replace('Kidney','Kidneys')
         biodi['Organ'] = biodi['Organ'].replace('Tumour','Tumor')
@@ -84,123 +92,173 @@ class BioDose():
         self.biodi['sigma'] = np.round(biodi['sigma']*decay_factor,5)
         print('Decayed biodistribution stored in self.biodi')
         
+    def initialize_results_df(self):
+        '''
+        This method initializes the results dataframe with the organ list and columns for the different fits.
+        '''
+        columns = ['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 
+                   'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 
+                   'Perctage_diff - bi vs tri uptake washout']
+        if not hasattr(self, 'area') or self.area is None:
+            self.area = pd.DataFrame(index=self.biodi.index, columns=columns)
+        if not hasattr(self, 'fit_results') or self.fit_results is None:
+            self.fit_results = {}
+
+
+    def update_fit_results(self, org, mono_params=None, bi_params=None, uptake_params=None,
+                           area_mono=None, area_bi=None, area_uptake=None):
+        '''
+        This method updates the fit results for a given organ.
+        '''
+        area_mono_val = area_mono[0] if isinstance(area_mono, (tuple, list)) else area_mono
+        area_bi_val = area_bi[0] if isinstance(area_bi, (tuple, list)) else area_bi
+        
+        if mono_params and area_mono:
+            self.area.loc[org, 'Mono-Exponential'] = area_mono_val
+        
+        if bi_params and area_bi:
+            self.area.loc[org, 'Bi-Exponential'] = area_bi_val
+            if area_mono and area_mono_val != 0:
+                self.area.loc[org, 'Perctage_diff - mono vs bi washout'] = (
+                    abs(area_mono_val - area_bi_val) / area_mono_val * 100
+                )
+
+        if uptake_params and area_uptake:
+            self.area.loc[org, 'Bi-Exponential_uptake'] = area_uptake[0]
+
+        self.fit_results[org] = [
+            (mono_params['A1'], mono_params['A2']) if mono_params else None,
+            area_mono,
+            (bi_params['A1'], bi_params['A2'], bi_params['B1'], bi_params['B2']) if bi_params else
+            (uptake_params['A1'], uptake_params['A2'], uptake_params['B1'], uptake_params['B2']) if uptake_params else None,
+            area_bi if bi_params else area_uptake
+        ]
 
         
-
-    def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,1), biguess=(1,1,1,1), uptakeguess=(1,1,-1,1), ignore_weights=False,append_zero=True,skip_points=0):
-        ''' This method fits the curves and stores the results in self.fit_results.  The results can be seen in self.area organized in a pandas dataframe.'''
-
+    def curve_fits(self, organlist=None, uptake=False, maxev=100000, monoguess=(1,0.1),  
+               uptakeguess=(1,1,-1,1), ignore_weights=False, append_zero=True, tps_to_skip_fit=0):
+        ''' 
+        This method fits the curves using lmfit and stores the results in self.fit_results.  
+        The results can be seen in self.area organized in a pandas dataframe.
+        '''
         decayconst = log(2)/self.half_life
+    
         if organlist is None:
-            self.area = pd.DataFrame(index=organlist, columns=['Mono-Exponential', 'Bi-Exponential', 'Bi-Exponential_uptake', 'Tri-Exponential', 'Perctage_diff - mono vs bi washout', 'Perctage_diff - bi vs tri uptake washout'])
-            self.fit_results = {}
             organlist = self.biodi.index
-            
-        #self.monoexp_parameters = pd.DataFrame()
+
+        # Initialize results DataFrame
+        self.initialize_results_df()
+
         dfs = []
         for org in organlist:
             bio_data = self.biodi.loc[org]['%ID/g']
             activity = np.asarray(bio_data)
-            t = np.asarray((self.t))
-            sigmas = self.biodi.loc[org]['sigma']
-            sigmas = np.asarray(sigmas)
-            xlabel = 't (h)'
+            t = np.asarray(self.t)
+            sigmas = np.asarray(self.biodi.loc[org]['sigma'])
             ylabel = '%ID/g'
-            
-            if uptake == False:
-                popt1,tt1,yy1,residuals1 = fit_monoexp(t, activity,decayconst=decayconst,skip_points=skip_points, monoguess=monoguess,   maxev=maxev, limit_bounds=False, sigmas = sigmas) 
-                monoexp_fit_plots(t, activity, tt1, yy1, org,  popt1[2], residuals1, xlabel, ylabel, skip_points, sigmas)
-                popt2,tt2,yy2,residuals2 = fit_biexp(t, activity, maxev=maxev, biguess=biguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)
-                biexp_fit_plots(t, activity, tt2, yy2, org, popt2[4], residuals2, xlabel, ylabel, skip_points, sigmas)
+
+            if not uptake:
+                # Mono-exponential fit
+                result_mono, fitted_mono = exponential_fit_lmfit(
+                    t[tps_to_skip_fit:], activity[tps_to_skip_fit:],
+                    num_exponentials=1,
+                    sigma=sigmas[tps_to_skip_fit:],
+                    params_init={'A1': monoguess[0], 'A2': monoguess[1]},
+                    bounds={'A1': (0, None), 'A2': (decayconst, None)}
+                )         
+                plot_tac_residuals(result=result_mono, region=org, y_label=ylabel)
+                
+                # Bi-exponential fit
+                result_bi, fitted_bi = exponential_fit_lmfit(
+                    t[tps_to_skip_fit:], activity[tps_to_skip_fit:],
+                    num_exponentials=2,
+                    sigma=sigmas[tps_to_skip_fit:],
+                    params_init={'A1': result_mono.params['A1'].value * 0.6, 'A2': result_mono.params['A2'].value * 0.8, 
+                                 'B1': result_mono.params['A1'].value * 0.4, 'B2': result_mono.params['A2'].value * 1.2},
+                    bounds={'A1': (0, None), 'A2': (decayconst, None),
+                            'B1': (0, None), 'B2': (decayconst, None)}
+                )
+                plot_tac_residuals(result=result_bi, region=org, y_label=ylabel)
+                # Store results
+                mono_params = result_mono.params.valuesdict()
+                bi_params = result_bi.params.valuesdict()
+
                 organ_data = {
                     'Organ': [org],
-                    '%ID/g': [popt1[0]], 
-                    'lambda_effective_1/h': [popt1[1]],  
+                    'mono_exp:%ID/g': [mono_params['A1']], 
+                    'mono_exp:lambda_effective_1/h': [mono_params['A2']],  
+                    'bi_exp:1_%ID/g': [bi_params['A1']], 
+                    'bi_exp:lambda_effective1_1/h': [bi_params['A2']], 
+                    'bi_exp:lambda_effective2_1/h': [bi_params['B2']], 
+                    'bi_exp:2_%ID/g': [bi_params['B1']]
                 }
-                # Creating a temporary DataFrame for the current organ
                 organ_df = pd.DataFrame(organ_data, index=[org])
                 dfs.append(organ_df)
 
-                # Appending the temporary DataFrame to the main DataFrame
-                #self.monoexp_parameters = self.monoexp_parameters.append(organ_df, ignore_index=True)
-
-                if skip_points == 0:
-                    area1 = integrate.quad(monoexp_fun, 0, np.inf, args=(popt1[0], popt1[1]))
-                    area2 = integrate.quad(biexp_fun, 0, np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
-                elif skip_points == 1:
-                    # calculate triangle on the left, made by first point and (0,0) with height the height of the first point
-                    triangle_area = t[0] * bio_data.iloc[0] / 2  # base is time of first point, height is height of first point
-                    trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2  # base1 is height of first point, base2 is height of second point, height is difference in times
-
-                    monoexp_area = integrate.quad(monoexp_fun, t[skip_points], np.inf, args=(popt1[0], popt1[1]))
-                    biexp_area = integrate.quad(biexp_fun, t[skip_points], np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
-
-                    area1 = triangle_area + trapezoid_area + monoexp_area
-                    area2 = triangle_area + trapezoid_area + biexp_area
-                elif skip_points >= 2:
-                    # calculate triangle on the left, made by first point and (0,0) with height the height of the first point
-                    triangle_area = t[0] * bio_data.iloc[0] / 2  # base is time of first point, height is height of first point
-                    trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2  # base1 is height of first point, base2 is height of second point, height is difference in times
-                    trapezoid_area2 = (bio_data.iloc[1] + bio_data.iloc[2]) * (t[2] - t[1]) / 2 
-                    monoexp_area = integrate.quad(monoexp_fun, t[skip_points], np.inf, args=(popt1[0], popt1[1]))
-                    biexp_area = integrate.quad(biexp_fun, t[skip_points], np.inf, args=(popt2[0], popt2[1], popt2[2], popt2[3]))
-
-                    area1 = triangle_area + trapezoid_area + trapezoid_area2 + monoexp_area
-                    area2 = triangle_area + trapezoid_area + trapezoid_area2 + biexp_area                    
-                    
-                elif skip_points >= 3:    
-                    print('Error: Value must be equal to 0 or 1.') 
-                
-                self.fit_results[org]=[popt1,area1,popt2,area2]
-
-                if np.isnan(area1).all():
-                    self.area.loc[org,'Bi-Exponential']=area2[0]
+                # Calculate areas
+                if tps_to_skip_fit == 0:
+                    area_mono = integrate.quad(
+                        lambda x: monoexp_fun(x, mono_params['A1'], mono_params['A2']), 
+                        0, np.inf
+                    )
+                    area_bi = integrate.quad(
+                        lambda x: biexp_fun(x, bi_params['A1'], bi_params['A2'], 
+                                          bi_params['B1'], bi_params['B2']), 
+                        0, np.inf
+                    )
                 else:
-                    self.area.loc[org,'Mono-Exponential']=area1[0]
-                    self.area.loc[org,'Bi-Exponential']=area2[0]
-                    self.area.loc[org,'Perctage_diff - mono vs bi washout']= abs(area1[0] - area2[0]) / area1[0] * 100     
-                    #self.area.loc[org]=[area1[0],area2[0]]
+                    # Handle skipped points by adding trapezoidal areas
+                    triangle_area = t[0] * bio_data.iloc[0] / 2
+                    trapezoid_area = (bio_data.iloc[0] + bio_data.iloc[1]) * (t[1] - t[0]) / 2
+
+                    monoexp_area = integrate.quad(
+                        lambda x: monoexp_fun(x, mono_params['A1'], mono_params['A2']), 
+                        t[tps_to_skip_fit], np.inf
+                    )
+                    biexp_area = integrate.quad(
+                        lambda x: biexp_fun(x, bi_params['A1'], bi_params['A2'], 
+                                          bi_params['B1'], bi_params['B2']), 
+                        t[tps_to_skip_fit], np.inf
+                    )
+
+                    if tps_to_skip_fit == 1:
+                        area_mono = triangle_area + trapezoid_area + monoexp_area[0]
+                        area_bi = triangle_area + trapezoid_area + biexp_area[0]
+                    elif tps_to_skip_fit >= 2:
+                        trapezoid_area2 = (bio_data.iloc[1] + bio_data.iloc[2]) * (t[2] - t[1]) / 2
+                        area_mono = triangle_area + trapezoid_area + trapezoid_area2 + monoexp_area[0]
+                        area_bi = triangle_area + trapezoid_area + trapezoid_area2 + biexp_area[0]
+
+                self.update_fit_results(org, mono_params=mono_params, bi_params=bi_params,
+                                    area_mono=area_mono, area_bi=area_bi)
 
             else:
-                popt3,tt3,yy3,residuals3 = fit_biexp_uptake(t, activity, maxev=maxev, uptakeguess=uptakeguess, decayconst=decayconst, ignore_weights=ignore_weights,  skip_points=skip_points, sigmas = sigmas)                
-                biexp_fit_plots(t, activity, tt3, yy3, org, popt3[4], residuals3, xlabel, ylabel, skip_points, sigmas)
-                area3 = integrate.quad(biexp_fun, 0, np.inf, args=(popt3[0], popt3[1], popt3[2], popt3[3]))
+                # Uptake model
+                result_uptake, fitted_uptake = exponential_fit_lmfit(
+                    t[tps_to_skip_fit:], activity[tps_to_skip_fit:],
+                    num_exponentials=2,
+                    sigma=sigmas[tps_to_skip_fit:],
+                    with_uptake=True,
+                    params_init={'A1': uptakeguess[0], 'A2': uptakeguess[1], 
+                               'B1': uptakeguess[2], 'B2': uptakeguess[3]},
+                    bounds={'A1': (0, None), 'A2': (decayconst, None),
+                            'B1': (None, None), 'B2': (decayconst, None)}
+                )
+                plot_tac_residuals(result=result_uptake, region=org, y_label=ylabel)
+                uptake_params = result_uptake.params.valuesdict()
+                area_uptake = integrate.quad(
+                    lambda x: biexp_fun_uptake(x, uptake_params['A1'], uptake_params['A2'], 
+                                            uptake_params['B2']), 
+                    0, np.inf
+                )
 
-                self.area.loc[org,'Bi-Exponential_uptake'] = area3[0]
-                #self.area.loc[org,'Tri-Exponential'] = area4[0]
-                #self.area.loc[org,'Perctage_diff - bi vs tri uptake washout'] = abs(area3[0] - area4[0]) / area3[0] * 100                
-        
+                self.update_fit_results(org, uptake_params=uptake_params, area_uptake=area_uptake)
+
         try:
-            self.monoexp_parameters = pd.concat(dfs, ignore_index=True)   
-        except:
-            print("")
-
-#    def get_fit_accepted_dict(self):
-#        self.fit_accepted = {}  # Initialize an empty dictionary
-#        organs = self.biodi.index  # Assuming self.biodi contains the organ names
-#        
-#        # Ask the user to provide the numbers for each organ
-#        for organ in organs:
-#            while True:
-#                try:
-#                    choice = int(input(f"Enter a number (1, 2, 3, 4) for {organ}: "))
-#                    if choice in [1, 2, 3, 4]:
-#                        self.fit_accepted[organ] = choice
-#                        break
-#                    else:
-#                        print("Invalid choice. Please choose from 1, 2, 3, or 4.")
-#                except ValueError:
-#                    print("Invalid input. Please enter a valid number.")
-
-
-#    def num_decays(self,fit_accepted):
-#        ''' Sets the number of decays in each of the organ based on the accepted fit (e.g. exponential or bi-exponential) '''
-#        self.fit_accepted=fit_accepted
-#        self.disintegrations=pd.DataFrame(index=self.biodi.index,columns=['%ID/g*h'])
-#        for key in self.fit_accepted:
-#            self.disintegrations.loc[key,'%ID/g*h']=self.fit_results[key][self.fit_accepted[key]*2-1][0]
-#       
-#        self.disintegrations.loc["Remainder Body"] = np.nan
+            self.fitting_parameters = pd.concat(dfs, ignore_index=True)
+        except Exception as e:
+            print(f"Error creating fitting parameters DataFrame: {e}")
+        
 
     def num_decays(self, fit_accepted):
         ''' Sets the number of decays in each of the organ based on the accepted fit (e.g. exponential or bi-exponential) '''
@@ -232,30 +290,26 @@ class BioDose():
             if pd.isna(self.disintegrations.loc['Red Marrow']).any():
                 self.disintegrations.loc['Red Marrow'] = self.disintegrations.loc['Heart Contents'] * 0.34
 
-
-
         self.disintegrations.loc["Remainder Body"] = np.nan
         
         
-    def tumor_sink_effect(self):
-        not_organ = ['Tumor']
-        
-        # Get the disintegration value for the 'Tumor'
+    def calculate_tumor_sink_effect(self):
         tumor_value = self.disintegrations['h']['Tumor']
-        
-        # Calculate the sum of disintegration values for all organs except 'Remainder Body' (Organs included in the ROB are added to WB, so we don't want to add them twice)
-        wb_value = self.disintegrations['h'].sum() - self.disintegrations['h']['Remainder Body'] 
 
-        # Update disintegration values for each organ considering the tumor sink effect
-        for organ in self.disintegrations['h'].index:
-            if organ not in not_organ:
-                self.disintegrations['h'][organ] = self.disintegrations['h'][organ] + (tumor_value * ((self.disintegrations['h'][organ]) / (wb_value - tumor_value)))
+        wb_value = self.disintegrations['h'].sum()  
+
+        self.tumor_sink_effect_factor = (1 + (tumor_value / (wb_value - tumor_value))) # represents a multiplicative adjustment to the organ's disintegration value to account for normalizing or redistributing activity after subtracting the tumor's share from the whole body
+        print(f'Tumor sink effect: {self.tumor_sink_effect_factor}')
+    
+    def tumor_sink_effect_correction(self, df):
+        df_corrected = df.copy()
+
+        for organ in df_corrected.columns:
+            if organ != 'Tumor':
+                df_corrected[organ] *= self.tumor_sink_effect_factor
         
-        # Create a deep copy of the disintegrations to avoid modifying the original data
-        new_disintegrations = deepcopy(self.disintegrations)
-        
-        return new_disintegrations
-        
+        return df_corrected
+
     def phantom_data(self):
         print(PHANTOM_PATH)
         if 'mouse' in self.phantom.lower():
@@ -285,22 +339,25 @@ class BioDose():
         self.phantom_mass.loc['Remainder Body']=self.phantom_mass.loc['Remainder Body']+self.phantom_mass.loc[self.not_inbiodi].sum()
     
     def remainder_body_uptake(self,tumor_name=None):
+        
         print("At this point we are ignoring the tumor")
         if tumor_name:
             self.not_inphantom_notumor=[org for org in self.not_inphantom if tumor_name not in org]
             tumortemp = self.biodi.loc[tumor_name]
         else:
             self.not_inphantom_notumor=self.not_inphantom
-        self.not_inphantom_notumor
-        print(self.phantom)
+        print(self.not_inphantom_notumor)
         print('Disintegrations\n')
 
         # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
         if 'mouse' in self.phantom.lower():
             self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'mouse_notinphantom_masses.csv'))  # TODO: CHANGE PATH
         
-#        elif 'human' in self.phantom.lower():
-#            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
+        elif 'human' in self.phantom.lower():
+            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
+            
+        print(self.phantom.lower())
+        print(self.literature_mass)
             
         self.literature_mass.set_index('Organ',inplace=True)
 
@@ -312,66 +369,46 @@ class BioDose():
         print('\nLiterature Mass (g)\n')
         print(self.literature_mass)
         print(self.phantom_mass)
-        self.not_inphantom_notumor.remove('Tail')
-        self.phantom_mass.loc['Residual'] = self.phantom_mass.loc['Remainder Body'] - self.literature_mass.sum()
+        try:
+            self.not_inphantom_notumor.remove('Tail')
+        except:
+            pass
+        
+        ## Residual is the remaining carcass of the mouse after removing the organs; not all biodi study measure its activity, but some does
+        if 'Residual' in self.disintegrations.index:
+            self.phantom_mass.loc['Residual'] = self.phantom_mass.loc['Remainder Body'] - self.literature_mass.sum()
+        else:
+            pass
+        
+        
         if 'mouse' in self.phantom.lower():
-            self.disintegrations['%ID*h']=self.disintegrations['%ID/g*h']*self.phantom_mass['25g']
+            self.disintegrations['%ID*h']=self.disintegrations['%ID/g*h']*self.phantom_mass[self.mouse_mass]
             if 'Residual' in self.disintegrations.index:
                 self.not_inphantom_notumor.remove('Residual')
-                self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g'].loc[self.not_inphantom_notumor]).sum()) + (self.disintegrations.loc['Residual', '%ID/g*h'] * (self.phantom_mass.loc['Residual', '25g']))
+                self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass[self.mouse_mass].loc[self.not_inphantom_notumor]).sum()) + (self.disintegrations.loc['Residual', '%ID/g*h'] * (self.phantom_mass.loc['Residual', self.mouse_mass]))
             else:    
-                self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g'].loc[self.not_inphantom_notumor]).sum())
+                self.disintegrations.loc['Remainder Body', '%ID*h'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass[self.mouse_mass].loc[self.not_inphantom_notumor]).sum())
             for org in self.not_inphantom_notumor:
                 if org != 'Tail':
-                    self.disintegrations.loc[org, '%ID*h'] = self.disintegrations.loc[org, '%ID/g*h'] * self.literature_mass.loc[org, '25g']
+                    self.disintegrations.loc[org, '%ID*h'] = self.disintegrations.loc[org, '%ID/g*h'] * self.literature_mass.loc[org, self.mouse_mass]
                 else:
                     pass
                 
                 
-#        elif 'human' in self.phantom.lower():
-#            self.disintegrations['%ID*h Female']=self.disintegrations['%ID/g*h']*self.phantom_mass['Female']
-#            self.disintegrations['%ID*h Male']=self.disintegrations['%ID/g*h']*self.phantom_mass['Male']
-#            
-#            self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Female']).sum())
-#            self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Male']).sum())
-#            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Female']).sum()
-#            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Male']).sum()
-        
-
-        #self.disintegrations.drop(not_inphantom_notumor,inplace=True)
-        self.disintegrations['h']=self.disintegrations['%ID*h']/100
-        
-        
-    def remainder_body_uptake_human(self,tumor_name=None):
-        print("At this point we are ignoring the tumor")
-        if tumor_name:
-            self.not_inphantom_notumor=[org for org in self.not_inphantom if tumor_name not in org]
-            tumortemp = self.biodi.loc[tumor_name]
-        else:
-            self.not_inphantom_notumor=self.not_inphantom
-        self.not_inphantom_notumor
-        #print(self.phantom)
-        #print('Disintegrations\n')
-
-        # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
-        #self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
+        elif 'human' in self.phantom.lower():
+            print('x')
+            self.disintegrations['%ID*h Female']=self.disintegrations['%ID/g*h']*self.phantom_mass['Female']
+            self.disintegrations['%ID*h Male']=self.disintegrations['%ID/g*h']*self.phantom_mass['Male']
             
-        #self.literature_mass.set_index('Organ',inplace=True)
+            self.disintegrations.loc['Remainder Body', '%ID*h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Female']).sum())
+            self.disintegrations.loc['Remainder Body', '%ID*h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Male']).sum())
 
-        #self.literature_mass=self.literature_mass.loc[self.disintegrations.index.intersection(self.literature_mass.index)]
-        #print('\nLiterature Mass (g)\n')
-        #print(self.literature_mass)
-
-        #print(self.phantom_mass)
-
-        #self.disintegrations.loc['Remainder Body', 'h Female'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Female']).sum())
-        #self.disintegrations.loc['Remainder Body', 'h Male'] = (self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor].mul(self.literature_mass['Male']).sum())
-            #self.disintegrations.loc['Remainder Body']['%ID*h Female']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Female']).sum()
-            #self.disintegrations.loc['Remainder Body']['%ID*h Male']=(self.disintegrations['%ID/g*h'].loc[self.not_inphantom_notumor]*self.literature_mass['Male']).sum()
         
-
-        #self.disintegrations.drop(not_inphantom_notumor,inplace=True)
-        #self.disintegrations['h']=self.disintegrations['%ID*h']/100
+        self.disintegrations['h']=self.disintegrations['%ID*h']/100
+        self.disintegrations_all_organs = self.disintegrations.copy()  # Store the original disintegrations before dropping organs
+        self.disintegrations.drop(self.not_inphantom_notumor,inplace=True) # Only organs that are in the phantom will be kept in the disintegrations dataframe and passed to olinda
+        
+        
             
     def not_inphantom_notumor_fun(self):
         self.disintegrations.drop(self.not_inphantom_notumor,inplace=True)
@@ -379,20 +416,108 @@ class BioDose():
     def add_tumor_mass(self,tumor_name,tumor_mass):
         self.phantom_mass.loc[tumor_name]=tumor_mass  #grams   Provided by average of biodi from Etienne
         
-            
-    def create_mouse25case(self, savefile=False,dirname='./',):
+    def calculate_absorbed_dose(self, model, disintegrations):
+        """
+        Calculate absorbed dose per target organ based on selected model and disintegration data.
         
-        '''This function creates a pandas dataframe that looks exactly as the case files generated by OLINDA for the 25g mouse.        
-           The result can be viewed under self.mouse25case, and the pandas methods can be used to finally save it if wanted.
-        '''
+        Args:
+            model (str): One of 'mouse25g', 'mouse30g', or 'mouse35g'
+            disintegrations (pd.DataFrame): DataFrame with source organ disintegrations in hours
+        
+        Returns:
+            pd.DataFrame: Absorbed dose in mGy and Gy for each target organ
+        """
+        
+        disintegrations = disintegrations.copy()
+        
+        model_files = {
+            'mouse25g': '177Lu_mouse_25g_sfactors_olinda.csv',
+            'mouse30g': '177Lu_mouse_30g_sfactors_olinda.csv',
+            'mouse35g': '177Lu_mouse_35g_sfactors_olinda.csv',
+            'Female': '177Lu_S_values_female_olinda.csv',
+            'Male': '177Lu_S_values_male_olinda.csv',
+        }
+        print(model)
+        if model not in model_files:
+            raise ValueError(f"Invalid model '{model}'. Expected one of: {list(model_files.keys())}")
 
-        template=pd.read_csv(path.join(TEMPLATE_PATH,'mouse25g.cas'))
+        svalues_path = path.join(SVALUES_PATH, model_files[model])
+        svalues_df = pd.read_csv(svalues_path, index_col=0)  # S-values in mSv/MBq-s
+        print(f"Loaded S-values from: {svalues_path}")
+        print("Target organs (S-value index):", svalues_df.index.tolist())
+        
+        organ_name_map_mouse_olinda = {'Large Intestine': 'Large Int','Small Intestine': 'Small Int','Bladder': 'Urin Blad','Remainder Body': 'Tot Body'}
+        organ_name_map_human_olinda = {'Gallbladder': 'GB Cont', 'Left Colon': 'LLI Cont', 'Right Colon': 'ULI Cont', 'Stomach': 'StomCont',
+                                       'Salivary Glands': 'Salivary', 'Red Marrow': 'Red Mar.', 'Bone Surfaces': 'CortBone',
+                                       'Heart': 'Hrt Wall', 'Heart Contents': 'HeartCon',
+                                       'Small Intestine': 'SI Cont','Bladder': 'UB Cont','Remainder Body': 'Tot Body'}
+
+        if 'mouse' in model:
+            disintegrations.index = disintegrations.index.to_series().replace(organ_name_map_mouse_olinda)
+        else:
+            disintegrations.index = disintegrations.index.to_series().replace(organ_name_map_human_olinda)
+        
+        print(disintegrations)
+        if 'mouse' in model:
+            disintegrations['s'] = disintegrations['h'] * 3600
+        else:
+            disintegrations['s'] = disintegrations[f'h {model}'] * 3600
+            
+        print(f"Disintegrations in seconds:\n{disintegrations['s']}")
+        # Apply S-values and compute dose
+        dose_matrix = self.apply_s_value(disintegrations, svalues_df)
+        total_dose_per_target = dose_matrix.sum(axis=1)  # Sum over source organs
+
+        # Format output
+        dose_df = total_dose_per_target.to_frame(name='Absorbed dose (mGy/MBq)')
+        dose_df.index.name = 'Target organ'
+        dose_df = dose_df.reset_index()
+        dose_df['Absorbed dose (Gy/MBq)'] = dose_df['Absorbed dose (mGy/MBq)'] / 1000
+
+        return dose_df
+        
+    def apply_s_value(self, tia_df, s_values):
+        """
+        Multiply S-values by TIA to compute dose matrix.
+        
+        Args:
+            tia_df (pd.DataFrame): Disintegration times in seconds
+            s_values (pd.DataFrame): S-values table (target organs as index, source organs as columns)
+        
+        Returns:
+            pd.DataFrame: Dose matrix (target organ x source organ)
+        """
+        
+        common_source_organs = tia_df.index.intersection(s_values.columns)
+        
+        print(f'{len(common_source_organs)} source organs: {common_source_organs}')
+        
+        if common_source_organs.empty:
+            raise ValueError("No common source organs between TIA and S-value table.")
+
+        # Subset both dataframes
+        tia_series = tia_df.loc[common_source_organs, 's']
+        s_values_subset = s_values[common_source_organs]
+
+        # Multiply S-values by corresponding TIA
+        dose_df = s_values_subset.multiply(tia_series, axis=1)
+
+        return dose_df        
+
+            
+    def create_mousecase(self, df, method, savefile=False,dirname='./',):
+        
+        '''This function creates a pandas dataframe that looks exactly as the case files generated by OLINDA for the g mouse.        
+           The result can be viewed under self.mousecase, and the pandas methods can be used to finally save it if wanted.
+        '''
+        filename = self.phantom.lower() + '.cas'
+        template=pd.read_csv(path.join(TEMPLATE_PATH, filename))
         template.columns=['Data']
 
         #modify the isotope in the template
         ind=template[template['Data']=='[BEGIN NUCLIDES]'].index
         template.loc[ind[0]+1,'Data']=self.isotope + '|'
-        input_organs = self.disintegrations.drop(set(self.not_inphantom).intersection(set(self.disintegrations.index))).index.to_list()
+        input_organs = df.drop(set(self.not_inphantom).intersection(set(df.index))).index.to_list()
         if 'Residual' in input_organs:
             input_organs.remove('Residual')
         else:
@@ -423,7 +548,7 @@ class BioDose():
             print(org)
             sourceorgan=template.iloc[ind[0]].str.split('|')[0][0]
             massorgan=template.iloc[ind[0]].str.split('|')[0][1]
-            kineticdata=self.disintegrations.loc[org]['h']
+            kineticdata=df.loc[org]['h']
 
             if np.isnan(kineticdata):
                 kineticdata=0
@@ -434,181 +559,131 @@ class BioDose():
         now = datetime.datetime.now()
         template.columns=['Saved on ' + now.strftime("%m.%d.%Y") +' at ' + now.strftime('%H:%M:%S')]
             
-        self.mouse25case=template
+        self.mousecase=template
 
         if savefile==True:
             if not path.exists(dirname):
                 makedirs(dirname)
 
-            self.mouse25case.to_csv(dirname+'/'+'mouse25g.cas',index=False)
+            self.mousecase.to_csv(dirname+'/'+method+filename,index=False)
         
-        print('The case file mouse25g.cas has been saved in\n{}'.format(dirname))
+        print(f'The case file {filename} has been saved in\n{format(dirname)}')
         
     def rename_organ(self,oldname,newname):
-        ind_list=self.disintegrations.index.tolist()
+        ind_list=self.disintegrations_all_organs.index.tolist()
         ind_pos = ind_list.index(oldname)
         ind_list[ind_pos] = newname
-        self.disintegrations.index = ind_list
+        self.disintegrations_all_organs.index = ind_list
         
         ind_list=self.biodi.index.tolist()
         ind_pos = ind_list.index(oldname)
         ind_list[ind_pos] = newname
         self.biodi.index = ind_list
-        
-#    def heart_contents(self):
-#        self.disintegrations.loc['Red Marrow'] = self.disintegrations.loc['Heart Contents']*0.34
-#        self.disintegrations.sort_index(inplace=True)
 
-    def humanize_tiac(self,small_intestine=False):
-        ''' small_intestine: False if it is already in the biodi.
-                            True to assume same as Large intestine '''
 
+    def create_human(self, tumor_name = None):
+        # We are mostly using the disintegrations_all_organs dataframe, but we adjust the biodi dataframe as well to match the human phantom structure
         human = deepcopy(self)
-
         human.phantom='AdultHuman'
+          
+        if 'Small Intestine' not in human.biodi.index:
+            human.biodi.loc['Small Intestine'] = human.biodi.loc['Large Intestine']
+            human.disintegrations_all_organs.loc['Small Intestine'] = human.disintegrations_all_organs.loc['Large Intestine']
+            print('Small Intestine added to the biodi')
+        else:
+            print('Small Intestine already in the biodi, no need to add it')
 
-        human.biodi.loc['Small Intestine'] = human.biodi.loc['Large Intestine']
-        human.biodi.sort_index(inplace=True)
+        if 'Skeleton' in human.biodi.index:
+            human.rename_organ('Skeleton','Bone Surfaces')
 
-        human.rename_organ('Skeleton','Bone Surfaces')
-        human.rename_organ('Blood','Heart Contents')
-        human.disintegrations = human.disintegrations.drop('Tail', axis=0)
+        if 'Blood' in human.biodi.index:
+            human.rename_organ('Blood','Heart Contents')
+            
+        if 'Red Marrow' not in human.disintegrations_all_organs.index:
+            try:
+                human.disintegrations_all_organs.loc['Red Marrow', 'h'] = human.disintegrations_all_organs.loc['Heart Contents', 'h'] * 0.34
+            except:
+                human.disintegrations_all_organs.loc['Red Marrow', 'h Female'] = human.disintegrations_all_organs.loc['Heart Contents', 'h Female'] * 0.34
+                human.disintegrations_all_organs.loc['Red Marrow', 'h Male'] = human.disintegrations_all_organs.loc['Heart Contents', 'h Male'] * 0.34
 
-        #human.heart_contents()
+        if 'Tail' in human.disintegrations_all_organs.index:
+            print('Tail is not modelled in the human phantom, removing it from the biodi')
+            human.biodi = human.biodi.drop('Tail', axis=0)
+            human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Tail', axis=0)
+            
+        if 'Tumor' in human.disintegrations_all_organs.index:
+            print('Tumor is not modelled in the human phantom, removing it from the biodi')
+            human.biodi = human.biodi.drop('Tumor', axis=0)
+            human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Tumor', axis=0)
+            
         human.phantom_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_phantom_masses.csv'))
         human.phantom_mass.set_index('Organ',inplace=True)
         human.phantom_mass.sort_index(inplace=True)
+        
+        human.literature_mass = pd.read_csv(path.join(PHANTOM_PATH, 'human_notinphantom_masses.csv')) 
+        human.literature_mass.set_index('Organ', inplace=True)
+
+        human.disintegrations_all_organs.sort_index(inplace=True)
+        print(human.disintegrations_all_organs)
+        if 'h Female' not in human.disintegrations_all_organs:
+            human.disintegrations_all_organs.rename(columns={'h': 'h Male'}, inplace=True)
+        if 'h Female' not in human.disintegrations_all_organs:
+            human.disintegrations_all_organs['h Female'] = human.disintegrations_all_organs['h Male']
+        human.disintegrations_all_organs.loc['Rectum', 'h Female'] = (70/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
+        human.disintegrations_all_organs.loc['Rectum', 'h Male'] = (70/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']    
+        human.disintegrations_all_organs.loc['Left Colon', 'h Female'] = (145/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
+        human.disintegrations_all_organs.loc['Left Colon', 'h Male'] = (150/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']
+        human.disintegrations_all_organs.loc['Right Colon', 'h Female'] = (145/360) * human.disintegrations_all_organs.loc['Large Intestine', 'h Female'] 
+        human.disintegrations_all_organs.loc['Right Colon', 'h Male'] = (150/370) * human.disintegrations_all_organs.loc['Large Intestine', 'h Male']
+        human.disintegrations_all_organs = human.disintegrations_all_organs.drop('Large Intestine', axis=0)
+        print(human.disintegrations_all_organs)
         human.not_inphantom=[]
-        for org in human.disintegrations.index: ########## for org in self.disinteggrations.index:
+        
+        for org in human.disintegrations_all_organs.index: ########## for org in self.disinteggrations.index:
             if org not in human.phantom_mass.index:            
                 human.not_inphantom.append(org)
-        rob = ['Remainder Body']
-        human.not_inphantom = list(set(human.not_inphantom) - set(rob))
-        print('These organs from the biodi are not modelled in the phantom\n{}'.format(human.not_inphantom))
-#        tempfitresults=deepcopy(human.fit_results)
-#        fit_results={}
-#        fit_accepted={}
-#        for key in human.fit_results:
-#            if key == 'Skeleton':
-#                fit_results['Bone Surfaces']=tempfitresults[key]
-#                fit_accepted['Bone Surfaces']=human.fit_accepted[key]
-#            elif key == 'Large Intestine':
-#                fit_results['Left Colon']=tempfitresults[key]
-#                fit_accepted['Left Colon']=human.fit_accepted[key]
-#
-#                fit_results['Right Colon']=tempfitresults[key]
-#                fit_accepted['Right Colon']=human.fit_accepted[key]
-#
-#                fit_results['Rectum']=tempfitresults[key]
-#                fit_accepted['Rectum']=human.fit_accepted[key]
-#
-#                if small_intestine:
-#                    fit_results['Small Intestine']=tempfitresults[key]
-#                    fit_accepted['Small Intestine']=human.fit_accepted[key]
-#
-#            elif key == 'Blood':
-#                fit_results['Heart Contents']=tempfitresults[key]
-#                fit_accepted['Heart Contents']=human.fit_accepted[key]
-#
-#                fit_results['Red Marrow']=deepcopy(tempfitresults[key])
-#                fit_results['Red Marrow'][0]=fit_results['Red Marrow'][0]*0.34
-#                fit_results['Red Marrow'][1]=tuple([0.34*x for x in list(fit_results['Red Marrow'][1])])
-#                fit_results['Red Marrow'][2]=fit_results['Red Marrow'][2]*0.34
-#                fit_results['Red Marrow'][3]=tuple([0.34*x for x in list(fit_results['Red Marrow'][3])])
-#                fit_accepted['Red Marrow']=human.fit_accepted[key]
-#
-#                
-#            else:
-#                fit_results[key]=tempfitresults[key]
-#                fit_accepted[key]=human.fit_accepted[key]
-#
-#        human.fit_results=fit_results
-#        human.fit_accepted=fit_accepted
-#
-#        human.area.index = human.area.index.str.replace('Skeleton','Bone Surfaces')
-#        human.area.index = human.area.index.str.replace('Large Intestine','Left Colon')
-#        human.area.index = human.area.index.str.replace('Blood','Heart Contents')
+                
+        human.not_inphantom = list(set(human.not_inphantom) - set(['Remainder Body']))
+        print('These organs from the biodi are not modelled in the phantom:\n{}'.format(human.not_inphantom))
+        if tumor_name:
+            human.not_inphantom_notumor=[org for org in human.not_inphantom if tumor_name not in org]
+        else:
+            human.not_inphantom_notumor=human.not_inphantom
+        
+        human.disintegrations_all_organs.loc['Remainder Body', 'h Female'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom_notumor, 'h Female'])
+        human.disintegrations_all_organs.loc['Remainder Body', 'h Male'] = sum(human.disintegrations_all_organs.loc[human.not_inphantom_notumor, 'h Male'])
+        
+        human.disintegrations_all_organs = human.disintegrations_all_organs[['h Female', 'h Male']]
+        human.disintegrations_all_organs.drop(human.not_inphantom, inplace=True)  # Only organs that are in the phantom will be kept in the disintegrations dataframe and passed to olinda
+        human.disintegrations_all_organs.sort_index(inplace=True)
         return human
     
-
+    def apply_relative_mass_scaling(self, mouse_mass = 25):
+        rMSF_data = pd.read_csv(path.join(PHANTOM_PATH,'rMSF_factor.csv'), index_col=0)  # TODO: CHANGE PATH
         
-    def interspecies_conversion(self,mouse_mass=25):
-        organs = self.disintegrations['%ID*h Male'].index
-        for organ in organs:
-            print(organ)
-            print(self.phantom_mass['Male'].loc[organ])
-            
+        female_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, 'Female'].sum()
+        male_mass_sum   = rMSF_data.loc[self.not_inphantom_notumor, 'Male'].sum()
+        mouse_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, f'{mouse_mass}g_mouse'].sum()
         
-        self.disintegrations['%ID*h Male']=self.disintegrations['%ID*h Male']*(mouse_mass/self.phantom_mass['Male'].loc['Body'])
-        self.disintegrations['%ID*h Female']=self.disintegrations['%ID*h Female']*(mouse_mass/self.phantom_mass['Female'].loc['Body'])
+        mouse_body_mass   = rMSF_data.loc['Body', f'{mouse_mass}g_mouse']
+        human_body_female = rMSF_data.loc['Body', 'Female']
+        human_body_male   = rMSF_data.loc['Body', 'Male']
+        
+        remainder_correction_female = (mouse_body_mass / human_body_female) * (female_mass_sum / mouse_mass_sum)
+        remainder_correction_male = (mouse_body_mass / human_body_male) * (male_mass_sum / mouse_mass_sum)
+        
+        for organ in self.disintegrations_all_organs.index:
+            if organ != 'Remainder Body':
+                rMSF_female = rMSF_data.loc[organ, f'rMSF_F_{mouse_mass}']
+                rMSF_male = rMSF_data.loc[organ, f'rMSF_M_{mouse_mass}']
 
-    def m1(self):
-
-        self.disintegrations_m1=self.disintegrations.copy()
-
-        self.disintegrations_m1.drop('%ID/g*h', axis=1, inplace=True)
-        self.disintegrations_m1.drop('%ID*h', axis=1, inplace=True)
-
-        self.disintegrations_m1.rename(columns={'h': 'h Male'}, inplace=True)
-        self.disintegrations_m1['h Female'] = self.disintegrations_m1['h Male']
-            
-        self.disintegrations_m1.loc['Rectum', 'h Female'] = (70/360) * self.disintegrations_m1.loc['Large Intestine', 'h Female'] 
-        self.disintegrations_m1.loc['Rectum', 'h Male'] = (70/370) * self.disintegrations_m1.loc['Large Intestine', 'h Male']    
-        self.disintegrations_m1.loc['Left Colon', 'h Female'] = (145/360) * self.disintegrations_m1.loc['Large Intestine', 'h Female'] 
-        self.disintegrations_m1.loc['Left Colon', 'h Male'] = (150/370) * self.disintegrations_m1.loc['Large Intestine', 'h Male']
-        self.disintegrations_m1.loc['Right Colon', 'h Female'] = (145/360) * self.disintegrations_m1.loc['Large Intestine', 'h Female'] 
-        self.disintegrations_m1.loc['Right Colon', 'h Male'] = (150/370) * self.disintegrations_m1.loc['Large Intestine', 'h Male']
-        self.disintegrations_m1 = self.disintegrations_m1.drop('Large Intestine', axis=0)
-        try:
-            self.disintegrations_m1 = self.disintegrations_m1.drop('Tumor', axis=0)
-        except:
-            print('No tumor')
-        #if 'Red Marrow' != self.disintegrations_m1.index:
-        #    self.disintegrations_m1.loc['Red Marrow'] = 0.34 * self.disintegrations_m1.loc['Heart Contents']       
-        if 'Red Marrow' in self.disintegrations.index:
-            if pd.isna(self.disintegrations.loc['Red Marrow']).any():
-                self.disintegrations.loc['Red Marrow'] = self.disintegrations.loc['Heart Contents'] * 0.34
+                self.disintegrations_all_organs.loc[organ, 'h Female'] *= rMSF_female
+                self.disintegrations_all_organs.loc[organ, 'h Male'] *= rMSF_male
+            elif organ == 'Remainder Body':
+                self.disintegrations_all_organs.loc[organ, 'h Female'] *= remainder_correction_female
+                self.disintegrations_all_organs.loc[organ, 'h Male'] *=  remainder_correction_male
                 
-        self.disintegrations_m1.sort_index(inplace=True)
-        
-        
-        return self.disintegrations_m1
-    
-    def m2(self, mouse_mass=25, tumor_name=None):
-        all_organ = list(self.disintegrations.index)
-        try:
-            all_organ.remove('Tumor')
-        except:
-            print('No tumor')
-        #all_organ.remove('Tail')
-        if tumor_name:
-            self.not_inphantom_notumor=[org for org in self.not_inphantom if tumor_name not in org]
-            tumortemp = self.biodi.loc[tumor_name]
-        else:
-            self.not_inphantom_notumor=self.not_inphantom
-        self.not_inphantom_notumor
-        try:
-            self.not_inphantom_notumor.remove('Tail')
-        except:
-            print('')
-        try:
-            self.not_inphantom_notumor.remove('Large Intestine')
-        except:
-            print('')
-        self.phantom_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_phantom_masses.csv'))
-        self.phantom_mass.set_index('Organ',inplace=True)
-        self.phantom_mass.sort_index(inplace=True)
-        
-        self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
-        self.literature_mass.set_index('Organ',inplace=True)
-        blood = ['Blood']
-        self.not_inphantom_notumor = list(set(self.not_inphantom_notumor) - set(self.phantom_mass.index) - set(blood))
 
-        
-        self.in_phantom_organs = [x for x in all_organ if x not in self.not_inphantom_notumor]
-        self.in_phantom_organs
-
-        
 
     def create_humancase(self, df, method, savefile=False,dirname='./'):
         
@@ -669,9 +744,62 @@ class BioDose():
             self.humancase.to_csv(dirname+'/'+self.sex+method+'.cas',index=False)
         
         print('The case file {} has been saved in\n{}'.format(self.sex+'.cas',dirname))
+        
 
-    def M3(self,human_not_inphantom_notumor, tumor_name=None):
-        #self.monoexp_parameters.set_index('Organ', inplace=True)
+    def scale_biexponential_tiac(self, row, biol_lambda_SF = 0.25):
+        
+        Cm_organ_t0_1 = row['bi_exp1:%ID'] / 100 
+        Cm_organ_t0_2 = row['bi_exp2:%ID'] / 100 
+       
+       
+        exp1 = row['bi_exp1:%ID']  / row['bi_exp:lambda_effective1_1/h']
+        exp2 = row['bi_exp2:%ID'] / row['bi_exp:lambda_effective2_1/h']
+        sum = exp1 + exp2
+
+        frac_exp1 = exp1/sum
+        frac_exp2 = exp2/sum
+        lambda_effective1 = row['bi_exp:lambda_effective1_1/h']
+        lambda_effective2 = row['bi_exp:lambda_effective2_1/h']
+        
+        
+        lambda_physical = log(2) / self.half_life #1/h
+        
+        lambda_biological1 = lambda_effective1 - lambda_physical
+        lambda_biological2 = lambda_effective2 - lambda_physical
+
+        wb_m = self.wb_m
+        k_b_male = (73000 / wb_m) ** biol_lambda_SF
+        k_b_female = (60000 / wb_m) ** biol_lambda_SF
+
+        TIAC_h_bi_male = ((Cm_organ_t0_1 ) / (((k_b_male)**(-1)*lambda_biological1 + lambda_physical)) ) + ( (Cm_organ_t0_2 ) / ((k_b_male)**(-1)*(lambda_biological2) + lambda_physical))
+        
+        TIAC_h_bi_female = ((Cm_organ_t0_1 ) / (((k_b_female)**(-1)*lambda_biological1 + lambda_physical)) ) + ( (Cm_organ_t0_2 ) / ((k_b_female)**(-1)*(lambda_biological2) + lambda_physical))
+        
+        return TIAC_h_bi_male, TIAC_h_bi_female
+
+
+    def scale_monoexponential_tiac(self, row, biol_lambda_SF = 0.25):
+
+        lambda_effective = row['mono_exp:lambda_effective_1/h']
+        lambda_physical = log(2) / self.half_life #1/h
+        
+        lambda_biological = lambda_effective - lambda_physical
+        
+        Cm_organ_t0 = row['mono_exp:%ID'] / 100 
+        
+        wb_m = self.wb_m
+        k_b_male = (73000 / wb_m) ** biol_lambda_SF
+        
+        k_b_female = (60000 / wb_m) ** biol_lambda_SF
+
+        TIAC_h_mono_male = Cm_organ_t0 / (k_b_male**(-1) * (lambda_biological) + lambda_physical)
+        TIAC_h_mono_female = Cm_organ_t0 / (k_b_female**(-1) * (lambda_biological) + lambda_physical)
+
+        return TIAC_h_mono_male, TIAC_h_mono_female
+
+
+    def lambda_biological_scaling(self, biol_lambda_SF = 0.25, tumor_name=None):
+        
         print("At this point we are ignoring the tumor")
         if tumor_name:
             self.not_inphantom_notumor=[org for org in self.not_inphantom if tumor_name not in org]
@@ -682,120 +810,50 @@ class BioDose():
         print(self.phantom)
         print('Disintegrations\n')
 
-        # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
-        if 'mouse' in self.phantom.lower():
-            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'mouse_notinphantom_masses.csv'))  # TODO: CHANGE PATH
-        
-#        elif 'human' in self.phantom.lower():
-#            self.literature_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_notinphantom_masses.csv'))  # TODO: CHANGE PATH
-            
-        self.literature_mass.set_index('Organ',inplace=True)
 
-        if 'mouse' in self.phantom.lower():
-            self.literature_mass.loc['Muscle'] = self.phantom_mass.loc['Remainder Body']-self.literature_mass.sum()
-        
+        fit_accepted_df = pd.DataFrame(list(self.fit_accepted.items()), columns=['Organ', 'fit_accepted'])
+        self.fitting_parameters = self.fitting_parameters.merge(fit_accepted_df, on="Organ")
+        self.fitting_parameters.set_index('Organ', inplace=True)
 
-        self.literature_mass=self.literature_mass.loc[self.monoexp_parameters.index.intersection(self.literature_mass.index)]
-        print('\nLiterature Mass (g)\n')
-        print(self.literature_mass)
-
-        print(self.phantom_mass)
+                
         if 'mouse' in self.phantom.lower():
-            self.monoexp_parameters['%ID']=self.monoexp_parameters['%ID/g']*self.phantom_mass['25g']
-            self.monoexp_parameters.loc['Remainder Body', '%ID'] = (self.monoexp_parameters['%ID/g'].loc[self.not_inphantom_notumor].mul(self.literature_mass['25g']).sum())
+            self.fitting_parameters['mono_exp:%ID']=self.fitting_parameters['mono_exp:%ID/g']*self.phantom_mass[self.mouse_mass]
+            self.fitting_parameters['bi_exp1:%ID']=self.fitting_parameters['bi_exp:1_%ID/g']*self.phantom_mass[self.mouse_mass]
+            self.fitting_parameters['bi_exp2:%ID']=self.fitting_parameters['bi_exp:2_%ID/g']*self.phantom_mass[self.mouse_mass]
+            if 'Residual' in self.fitting_parameters.index:
+                self.not_inphantom_notumor.remove('Residual')
+                self.fitting_parameters.loc['Remainder Body', 'mono_exp:%ID'] = (self.fitting_parameters['mono_exp:%ID/g'].loc[self.not_inphantom_notumor].mul(self.literature_mass[self.mouse_mass].loc[self.not_inphantom_notumor]).sum()) + (self.disintegrations.loc['Residual', '%ID/g*h'] * (self.phantom_mass.loc['Residual', self.mouse_mass]))
+            else:    
+                self.fitting_parameters.loc['Remainder Body', 'mono_exp:%ID'] = (self.fitting_parameters['mono_exp:%ID/g'].loc[self.not_inphantom_notumor].mul(self.literature_mass[self.mouse_mass]).sum())
+                self.fitting_parameters.loc['Remainder Body', 'bi_exp1:%ID'] = (self.fitting_parameters['bi_exp:1_%ID/g'].loc[self.not_inphantom_notumor].mul(self.literature_mass[self.mouse_mass]).sum())
+                self.fitting_parameters.loc['Remainder Body', 'bi_exp2:%ID'] = (self.fitting_parameters['bi_exp:2_%ID/g'].loc[self.not_inphantom_notumor].mul(self.literature_mass[self.mouse_mass]).sum())
+
             for org in self.not_inphantom_notumor:
                 if org != 'Tail':
-                    self.monoexp_parameters.loc[org, '%ID'] = self.monoexp_parameters.loc[org, '%ID/g'] * self.literature_mass.loc[org, '25g']
+                    print(org)
+                    self.fitting_parameters.loc[org, 'mono_exp:%ID'] = self.fitting_parameters.loc[org, 'mono_exp:%ID/g'] * self.literature_mass.loc[org, self.mouse_mass]
+                    self.fitting_parameters.loc[org, 'bi_exp1:%ID'] = self.fitting_parameters.loc[org, 'bi_exp:1_%ID/g'] * self.literature_mass.loc[org, self.mouse_mass]
+                    self.fitting_parameters.loc[org, 'bi_exp2:%ID'] = self.fitting_parameters.loc[org, 'bi_exp:2_%ID/g'] * self.literature_mass.loc[org, self.mouse_mass]
                 else:
                     pass
-        
-        self.monoexp_parameters['fraction'] = self.monoexp_parameters['%ID'] / 100 
-        self.monoexp_parameters['effective_halflife_h'] = log(2) / self.monoexp_parameters['lambda_effective_1/h']
-        self.monoexp_parameters['physical_halflife_h'] = 6.647*24
-        self.monoexp_parameters['biological_halflife_h'] = 1 / ((1 / self.monoexp_parameters['effective_halflife_h']) - (1 / self.monoexp_parameters['physical_halflife_h']))
-        self.monoexp_parameters['lambda_physical_1/h'] = log(2) / self.monoexp_parameters['physical_halflife_h'] 
-        self.monoexp_parameters['lambda_biological_1/h'] = log(2) / self.monoexp_parameters['biological_halflife_h']
-        k_female = (60000 / 25) ** (0.25)
-        k_male = (73000 / 25) ** (0.25)
-        self.monoexp_parameters['h Female'] = (self.monoexp_parameters['fraction'] / (k_female**(-1) * self.monoexp_parameters['lambda_biological_1/h'] + self.monoexp_parameters['lambda_physical_1/h'])) 
-        self.monoexp_parameters['h Male'] = (self.monoexp_parameters['fraction'] / (k_male**(-1) * self.monoexp_parameters['lambda_biological_1/h'] + self.monoexp_parameters['lambda_physical_1/h']))       
-
-        self.monoexp_parameters.rename({'Skeleton': 'Bone Surfaces'}, inplace=True)
-        self.monoexp_parameters.rename({'Blood': 'Heart Contents'}, inplace=True)
-
-        self.monoexp_parameters.loc['Rectum', 'h Female'] = (70/360) * self.monoexp_parameters.loc['Large Intestine', 'h Female'] 
-        self.monoexp_parameters.loc['Rectum', 'h Male'] = (70/370) * self.monoexp_parameters.loc['Large Intestine', 'h Male']    
-        self.monoexp_parameters.loc['Left Colon', 'h Female'] = (145/360) * self.monoexp_parameters.loc['Large Intestine', 'h Female'] 
-        self.monoexp_parameters.loc['Left Colon', 'h Male'] = (150/370) * self.monoexp_parameters.loc['Large Intestine', 'h Male']
-        self.monoexp_parameters.loc['Right Colon', 'h Female'] = (145/360) * self.monoexp_parameters.loc['Large Intestine', 'h Female'] 
-        self.monoexp_parameters.loc['Right Colon', 'h Male'] = (150/370) * self.monoexp_parameters.loc['Large Intestine', 'h Male']
-        self.monoexp_parameters = self.monoexp_parameters.drop('Large Intestine', axis=0)
-        self.monoexp_parameters = self.monoexp_parameters.drop('Tail', axis=0)
-        self.monoexp_parameters = self.monoexp_parameters.drop('Tumor', axis=0)
-        self.monoexp_parameters.loc['Red Marrow'] = 0.34 * self.monoexp_parameters.loc['Heart Contents']  
-
-        self.monoexp_parameters.loc['Remainder Body', 'h Female'] = self.monoexp_parameters['h Female'].loc[human_not_inphantom_notumor].sum()
-        self.monoexp_parameters.loc['Remainder Body', 'h Male'] =  self.monoexp_parameters['h Male'].loc[human_not_inphantom_notumor].sum()
-        
-        for org in human_not_inphantom_notumor:
-            self.monoexp_parameters = self.monoexp_parameters.drop(org, axis=0)
-        
-        self.monoexp_parameters.sort_index(inplace=True)
+        print(self.fitting_parameters)
+        if 'Tail' in self.fitting_parameters.index:
+            self.fitting_parameters = self.fitting_parameters.drop('Tail', axis=0)
             
-def m2(human, mouse):
-    try:
-        mouse.not_inphantom_notumor.remove('Tail')
-    except:
-        print("")
-    mouse.not_inphantom_notumor
-    mouse_mass = 25
-    human.disintegrations_m2=pd.DataFrame(index=human.in_phantom_organs,columns=['h Female', 'h Male'])
-    if 'Residual' in human.not_inphantom_notumor:
-        human.not_inphantom_notumor.remove('Residual')
-    for org in human.in_phantom_organs:
+        if 'Tumor' in self.fitting_parameters.index:
+            self.fitting_parameters = self.fitting_parameters.drop('Tumor', axis=0)
         
-        if org == 'Remainder Body':
-            mouse_rof = mouse.literature_mass['25g'].loc[human.not_inphantom_notumor].sum() #we use only organs which constitute for ROB in human. for example Adrenals were ROB in mouse, but not in humans
-        elif org == 'Bone Surfaces':
-            mouse_mass_org = mouse.phantom_mass.loc['Skeleton', '25g']
-        elif org == 'Heart Contents':
-            mouse_mass_org = mouse.literature_mass.loc['Blood', '25g']
-        elif org in mouse.phantom_mass.index:
-            mouse_mass_org = mouse.phantom_mass.loc[org, '25g']
-        elif org in mouse.literature_mass.index:
-            mouse_mass_org = mouse.literature_mass.loc[org, '25g']
-        else:
-            print(f'Dont have a mass for {org}')
+        for i, organ in enumerate(self.fitting_parameters.index):
+            if self.fitting_parameters.loc[organ, 'fit_accepted'] == 1.0:
+                TIAC_h_mono_male, TIAC_h_mono_female = self.scale_monoexponential_tiac(self.fitting_parameters.iloc[i], biol_lambda_SF)
+                self.fitting_parameters.loc[organ, 'h Male'] = TIAC_h_mono_male
+                self.fitting_parameters.loc[organ, 'h Female'] = TIAC_h_mono_female
 
-        if org == 'Remainder Body':
-            human_rof_female = human.literature_mass['Female'].loc[human.not_inphantom_notumor].sum()
-            human_rof_male = human.literature_mass['Male'].loc[human.not_inphantom_notumor].sum()
-        elif org == 'Large Intestine':
-            human_mass_org_female = 360
-            human_mass_org_male = 370
-        elif org in human.phantom_mass.index and org != 'Large Intestine':
-            human_mass_org_female = human.phantom_mass['Female'].loc[org]
-            human_mass_org_male = human.phantom_mass['Male'].loc[org]
-        else:
-            print(f'Dont have a mass for {org}')
+            elif self.fitting_parameters.loc[organ, 'fit_accepted'] == 2.0:
+                TIAC_h_bi_male, TIAC_h_bi_female = self.scale_biexponential_tiac(self.fitting_parameters.iloc[i], biol_lambda_SF)
+                self.fitting_parameters.loc[organ, 'h Male'] = TIAC_h_bi_male
+                self.fitting_parameters.loc[organ, 'h Female'] = TIAC_h_bi_female
+                
+        self.disintegrations_all_organs = self.fitting_parameters[['h Female', 'h Male']]
+                
 
-        human.disintegrations_m2.loc[org, 'h Female']=human.disintegrations.loc[org, 'h']*(mouse_mass/human.phantom_mass['Female'].loc['Body'])*(human_mass_org_female/mouse_mass_org)
-        human.disintegrations_m2.loc[org, 'h Male']=human.disintegrations.loc[org, 'h']*(mouse_mass/human.phantom_mass['Male'].loc['Body'])*(human_mass_org_male/mouse_mass_org)
-        if org == 'Remainder Body':
-            human.disintegrations_m2.loc['Remainder Body', 'h Female'] = human.disintegrations['h'].loc[human.not_inphantom_notumor].sum()*(mouse_mass/human.phantom_mass['Female'].loc['Body'])*(human_rof_female/mouse_rof)
-            human.disintegrations_m2.loc['Remainder Body', 'h Male'] = human.disintegrations['h'].loc[human.not_inphantom_notumor].sum()*(mouse_mass/human.phantom_mass['Male'].loc['Body'])*(human_rof_female/mouse_rof)
-
-    human.disintegrations_m2.loc['Rectum', 'h Female'] = (70/360) * human.disintegrations_m2.loc['Large Intestine', 'h Female'] 
-    human.disintegrations_m2.loc['Rectum', 'h Male'] = (70/370) * human.disintegrations_m2.loc['Large Intestine', 'h Male']    
-    human.disintegrations_m2.loc['Left Colon', 'h Female'] = (145/360) * human.disintegrations_m2.loc['Large Intestine', 'h Female'] 
-    human.disintegrations_m2.loc['Left Colon', 'h Male'] = (150/370) * human.disintegrations_m2.loc['Large Intestine', 'h Male']
-    human.disintegrations_m2.loc['Right Colon', 'h Female'] = (145/360) * human.disintegrations_m2.loc['Large Intestine', 'h Female'] 
-    human.disintegrations_m2.loc['Right Colon', 'h Male'] = (150/370) * human.disintegrations_m2.loc['Large Intestine', 'h Male']
-    human.disintegrations_m2 = human.disintegrations_m2.drop('Large Intestine', axis=0)
-
-    human.disintegrations_m2.loc['Red Marrow'] = 0.34 * human.disintegrations_m2.loc['Heart Contents']       
-    
-    human.disintegrations_m2.sort_index(inplace=True)
-    
-
-    return human.disintegrations_m2
