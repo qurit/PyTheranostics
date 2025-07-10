@@ -47,7 +47,7 @@ class VoxelSDosimetry(BaseDosimetry):
         """
 
         ref_time_id = int(self.config["ReferenceTimePoint"])
-        tia_map = numpy.zeros_like(self.nm_data.array_at(time_id=ref_time_id))
+        tia_map = numpy.zeros_like(self.nm_data.array_at(time_id=ref_time_id), dtype=numpy.float64)
         
         # Check we're not having overlapping regions:
         masks = numpy.zeros_like(tia_map, dtype=numpy.int8)
@@ -74,7 +74,7 @@ class VoxelSDosimetry(BaseDosimetry):
             ref_time = region_data["Time_hr"][self.config["ReferenceTimePoint"]]  # In hours, post injection.
             f_to = region_fit(ref_time, *tuple(region_fit_params))
 
-            tia_map += region_mask * region_tia * act_map_at_ref / f_to  # MBq_h
+            tia_map += region_mask.astype(numpy.float64) * region_tia * act_map_at_ref / f_to  # MBq_h
 
         # Create ITK Image Object and embed it into a LongStudy.  #TODO: modularize, repeated code downwards.
         tia_image = itk_image_from_array(array=numpy.transpose(tia_map, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])
@@ -193,6 +193,9 @@ class VoxelSDosimetry(BaseDosimetry):
             self.apply_voxel_s()
         elif self.config["Method"] == "Monte-Carlo":
             self.run_MC()
+        else:
+            raise ValueError(f"Dosimetry Method {self.config['Method']} not implemented.")
+        
         # Save dose-map to .nii -> use integer version
         self.dose_map.save_image_to_nii_at(time_id=0, out_path=self.db_dir, name="DoseMap.nii.gz")
         
