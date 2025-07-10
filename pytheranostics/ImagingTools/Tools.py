@@ -47,18 +47,19 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
             raise ValueError(f"Wrong modality. User specified CT, howere dicom indicates {dicom_slices[0].Modality}.")
         
     else:
-        # Should only be a single DICOM file for SPECT Reconstruction
-        if len(dicom_slices) > 1:
-            raise AssertionError(f"Found more than one potential SPECT dicom dataset")
-        
-        if dicom_slices[0].Modality != "NM":
-            raise ValueError(f"Wrong modality. User specified NM, however dicom indicates {dicom_slices[0].Modality}.")
+        if dicom_slices[0].Modality not in ["NM", "PT"]:
+            raise ValueError(f"Wrong modality. User specified NM/PT, however dicom indicates {dicom_slices[0].Modality}.")
 
         radionuclide = modality.split("_")[0]
         
         # This only applies to Q-SPECT TODO: replace for something more generic.
         try:
             injected_activity = dicom_slices[0].RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
+            
+            # Currently we don't have a way to know the units ... so we use common sense.
+            if injected_activity > 20000:  # Activity likely in Bq instead of MBq
+                injected_activity /= 1e6 
+            print(f"Injected activity found in DICOM Header: {injected_activity:2.1f} MBq. Please verify.")
             
         except AttributeError:
             print("Injected activity not found in DICOM header. Using default: 7400 MBq")
@@ -159,7 +160,9 @@ def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tupl
     return itk_image_from_array(array=image_array, ref_image=image)
 
 def apply_qspect_dcm_origin(image: Image, dir: str) -> Image:
-    """Apply Origin and Direction from dicom header if needed.
+    """Apply Origin and Direction from dicom header if needed. This could happen when SPECT data is stored
+    as a single .dcm file (i.e., stored as "NM" modality), ITKSnap sometimes fails to read the Position and Direction correctly, so we pull it
+    from pydicom.
 
     Parameters
     ----------
@@ -177,11 +180,19 @@ def apply_qspect_dcm_origin(image: Image, dir: str) -> Image:
     # First, find the SPECT dicom file:
     path_dir = Path(dir)
     nm_files = [files for files in path_dir.glob("*.dcm")]
-    
-    if len(nm_files) != 1:
-        raise AssertionError(f"Found more than 1 .dcm file inside {path_dir.name}, not sure which is is SPECT.")
-    
+        
     dcm_data = pydicom.dcmread(str(nm_files[0]))
+    modality = dcm_data.Modality
+    
+    if modality == "PT":  # PET modality stores individual dicom files for each slice, as CT. 
+                          # Therefore nothing to do here.
+        return image
+    elif modality != "NM":
+        raise AssertionError(f"Data is not SPECT. Modality found: {modality}")
+    
+    if len(nm_files) > 1:
+        raise AssertionError("Found more than 1 dicom file inside the folder but loaded sample is stored as NM."
+                             " There should only be a single dicome file.")
     
     if getattr(dcm_data, "ImagePositionPatient", None) is None:
         
@@ -271,7 +282,7 @@ def load_from_dicom_dir(
         # Remove redundant dimension
         image = squeeze_sitk_image_dimension(img=image)
         image = apply_qspect_dcm_origin(image=image, dir=dir)
-        
+              
         if calibration_factor is None:
             scale_factor = None
             
@@ -291,6 +302,9 @@ def load_from_dicom_dir(
     # Force Orthogonality of Patient Orientation
     image = force_orthogonality(image=image)
 
+    # Display Origin and Orientation.
+    print(f"Modality: {modality} -> Origin: {image.GetOrigin()}; Direction: {image.GetDirection()}")
+    
     return image, meta
 
 def are_vectors_orthogonal(origin: List[float], tol: float=1e-24):
@@ -346,7 +360,7 @@ def force_orthogonality(image: SimpleITK.Image) -> SimpleITK.Image:
     else:
         prev_origin = image.GetDirection()
         new_origin = [round(vec_element) for vec_element in prev_origin]
-        print(f">> Original Orientation: {prev_origin}")
+        
     return image
 
 def load_RTStruct(ref_dicom_ct_dir: str,
@@ -595,7 +609,7 @@ def extract_masks(time_id: int, mask_dataset: Dict[int, Dict[str, numpy.ndarray]
     corrected_masks.update(tumors_masks)
     
     # Generate Remainder of Body Mask:
-    remainder = numpy.ones(tumor_burden_mask.shape, dtype=numpy.astype(numpy.int8)) if "WholeBody" not in mask_dataset[time_id].keys() else mask_dataset[time_id]["WholeBody"].astype(numpy.int8)
+    remainder = numpy.ones(tumor_burden_mask.shape, dtype=numpy.int8) if "WholeBody" not in mask_dataset[time_id].keys() else mask_dataset[time_id]["WholeBody"].astype(numpy.int8)
         
     for _, mask in corrected_masks.items():
         remainder -= mask
