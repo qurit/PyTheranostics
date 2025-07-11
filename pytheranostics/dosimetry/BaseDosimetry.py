@@ -8,7 +8,6 @@ from os import path
 import numpy
 import pandas
 from pytheranostics.fits.fits import exponential_fit_lmfit
-from pytheranostics.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
 from pytheranostics.plots.plots import plot_tac_residuals
 from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
@@ -106,6 +105,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # DataFrame storing results
         self.results = self.initialize()
         self.results_lesions = pandas.DataFrame()
+        self.results_salivaryglands = pandas.DataFrame()
+        self.df_ad = pandas.DataFrame()
         
         # Sanity Checks:
         self.sanity_checks(metric="Volume_CT_mL")
@@ -450,21 +451,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return all_fits[best_model_idx]
             
-    def numerical_integrate(self, exp_params: List[float]) -> float:
-        """Perform numerical integration of exponential function"""
-        if len(exp_params) < 3:
-            exp_func = monoexp_fun 
-        elif len(exp_params) < 4:
-            exp_func = biexp_fun_uptake      
-        elif len(exp_params) < 5:
-            exp_func = biexp_fun
-        elif len(exp_params) < 7:
-            exp_func = triexp_fun
-        else:
-            raise ValueError("Too many parameters to define a function. Only supported mono, bi or tri-exponentials")
-
-        return quad(exp_func, 0, numpy.inf, args=tuple(exp_params))
-    
     def analytical_integrate(self, result: lmfit.model.ModelResult) -> float:
         """Compute the analytical integral of a fitted exponential function.
 
@@ -599,8 +585,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
-    def update_json_data(self, file_path):
-        with open(file_path, 'r') as file:
+    def write_json_data(self, file_path):
+        
+        # Open empty json to load its structure:
+        empty_json_path = path.dirname(__file__) + f"/../data/output.json"
+        with open(empty_json_path, 'r') as file:
             data = json.load(file)
             
         data["PatientID"] = self.config["PatientID"]
@@ -612,7 +601,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         if cycle_key not in data:
             data[cycle_key] = [{}]
         else:
-            print(f"WARNING: Overwiting existing data. {cycle_key} in Patient {data['PatientID']} already exists in {file_path}")
+            print(f"WARNING: Might be Overwiting existing data. {cycle_key} in Patient {data['PatientID']} already exists.")
 
         cycle = data[cycle_key][0]
         cycle["CycleNumber"] = self.config["Cycle"]
@@ -730,9 +719,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ]["volumes_mL"]["different_tps"] = 1170
                 cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
                 cycle["rois"][organ]["volumes_mL"]["mean"] = 1170
-            
-                
-                
+                     
             if 'Gland' in organ:
                 cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
                 cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
