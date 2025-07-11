@@ -9,6 +9,7 @@ import shutil
 import os
 from pytheranostics.dosimetry.dvk import DoseVoxelKernel
 import SimpleITK
+import pandas
 
 class VoxelSDosimetry(BaseDosimetry):
     """Voxel S Dosimetry class: Computes parameters of fit for time activity curves at the region (organ/lesion) level, and
@@ -196,6 +197,21 @@ class VoxelSDosimetry(BaseDosimetry):
         else:
             raise ValueError(f"Dosimetry Method {self.config['Method']} not implemented.")
         
+        # Generate DataFrame.
+        dose_Gy = []
+        dose_Gy_GBq = []
+        for region in self.results.index:
+            
+            tmp_Gy = self.dose_map.average_of(region=region, time_id=0)/1000
+            
+            dose_Gy.append(tmp_Gy)
+            dose_Gy_GBq.append(tmp_Gy / (float(self.config["InjectedActivity"]) / 1000))
+        
+        self.df_ad = pandas.DataFrame({
+                            "AD[Gy]": dose_Gy,
+                            "AD[Gy/GBq]": dose_Gy_GBq
+                        }, index=[region for region in self.results.index])
+                    
         # Save dose-map to .nii -> use integer version
         self.dose_map.save_image_to_nii_at(time_id=0, out_path=self.db_dir, name="DoseMap.nii.gz")
         
