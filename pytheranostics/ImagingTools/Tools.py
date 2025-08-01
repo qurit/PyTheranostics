@@ -282,19 +282,18 @@ def load_from_dicom_dir(
         # Remove redundant dimension
         image = squeeze_sitk_image_dimension(img=image)
         image = apply_qspect_dcm_origin(image=image, dir=dir)
-              
-        if calibration_factor is None:
-            scale_factor = None
+        
+        # QSPECT - Uses scale_factor provided by user, or attempts to get it from DICOM (if QSPECT)
+        scale_factor = None
             
-        else:
+        if calibration_factor is not None:
             scale_factor = (calibration_factor, 0)
             
-            try:
-                # QSPECT - Uses scale_factor provided by user, or attempts to get it from DICOM (if QSPECT)
-                image = apply_qspect_dcm_scaling(image=image, dir=dir, scale_factor=scale_factor)
-                
-            except:
-                print("No calibration factor provided, Data might not be in BQ/ML ...")
+        try:
+            image = apply_qspect_dcm_scaling(image=image, dir=dir, scale_factor=scale_factor)
+            
+        except AttributeError:
+            print("No calibration factor provided, Data might not be in BQ/ML ...")
 
     # Load Meta Data using pydicom.
     meta = load_metadata(dir=dir, modality=modality)
