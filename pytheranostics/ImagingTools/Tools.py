@@ -428,6 +428,13 @@ def resample_mask_to_target(mask_img: SimpleITK.Image,
         A NumPy array of shape (z, y, x) aligned exactly with
         the SimpleITK target image.
     """
+    # Quick geometry check: if mask and target already match, skip resampling
+    if (mask_img.GetSize() == target_img.GetSize() and
+        mask_img.GetSpacing() == target_img.GetSpacing() and
+        mask_img.GetOrigin() == target_img.GetOrigin() and
+        mask_img.GetDirection() == target_img.GetDirection()):
+        return mask_img
+    
     # ensure mask is of an integer type suitable for NN interpolation
     mask_cast = SimpleITK.Cast(mask_img, SimpleITK.sitkUInt8)
 
