@@ -389,7 +389,7 @@ def load_RTStruct(ref_dicom_ct_dir: str,
         raise FileNotFoundError(f"Folder {CT_folder.name} does not exists.")
 
     CT_sitk = force_orthogonality(image=sitk_load_dcm_series(dcm_dir=CT_folder))
-    
+
     RT = RTStructBuilder.create_from(
         dicom_series_path=ref_dicom_ct_dir,
         rt_struct_path=rt_struct_file
@@ -408,9 +408,9 @@ def load_RTStruct(ref_dicom_ct_dir: str,
 
 def resample_mask_to_target(mask_img: SimpleITK.Image,
                             target_img: SimpleITK.Image
-                           ) -> Tuple[SimpleITK.Image, numpy.ndarray]:
+                           ) -> SimpleITK.Image:
     """
-    Resample a binary mask (originally from CT) to match a target SPECT image in physical space (location/voxel spacing).
+    Resample a binary mask (originally from CT) to match a target ITK image in physical space (location/voxel spacing).
 
     Parameters
     ----------
@@ -462,7 +462,7 @@ def load_and_resample_RT_to_target(
         Reference (CT) and Resampleda (SPECT) Masks from RTStruct.
     """
     ref_masks = load_RTStruct(ref_dicom_ct_dir=ref_dicom_ct_dir, rt_struct_file=rt_struct_file)
-
+    
     resampled_masks: Dict[str, SimpleITK.Image] = {}
     
     for mask_name, mask_image in ref_masks.items():
