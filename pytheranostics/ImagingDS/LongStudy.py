@@ -276,7 +276,7 @@ def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT",
     # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
     mod_supported = ["CT", "Lu177_SPECT"]
     if modality not in mod_supported:
-        raise NotImplemented(f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}")
+        raise NotImplementedError(f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}")
 
     images: Dict[int, Image] = {}
     metadata: Dict[int, MetaDataType] = {}
