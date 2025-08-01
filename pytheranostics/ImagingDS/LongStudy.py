@@ -6,7 +6,7 @@ import os
 import numpy
 from pytheranostics.ImagingTools.Tools import itk_image_from_array, load_from_dicom_dir
 from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
-from pytheranostics.ImagingTools.Tools import jaccard_index
+from pytheranostics.ImagingTools.Tools import jaccard_index, resample_mask_to_target
 
 MetaDataType = Dict[int, Dict[str, Any]]
 
@@ -95,7 +95,11 @@ class LongitudinalStudy:
             if mask_target in self.masks[time_id]:
                 print(f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!")
                 
-            self.masks[time_id][mask_target] = numpy.transpose(SimpleITK.GetArrayFromImage(masks[mask_source]), axes=(1, 2, 0))
+            # Masks are in the right orientation and spacing, however there could be discrepancies in array
+            # shapes (reason, unknown). We resample to ensure shapes between image and masks are consistent TODO: Fix.
+            mask_ = resample_mask_to_target(mask_img=masks[mask_source], target_img=self.images[time_id])
+            
+            self.masks[time_id][mask_target] = numpy.transpose(SimpleITK.GetArrayFromImage(mask_), axes=(1, 2, 0))
             
         return None
     
