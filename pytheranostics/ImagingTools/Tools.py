@@ -141,10 +141,19 @@ def apply_qspect_dcm_scaling(image: Image, dir: str, scale_factor: Optional[Tupl
         # First, find the SPECT dicom file:
         path_dir = Path(dir)
         nm_files = [files for files in path_dir.glob("*.dcm")]
-        if len(nm_files) != 1:
-            raise AssertionError(f"Found more than 1 .dcm file inside {path_dir.name}, not sure which is is SPECT.")
-        
         dcm_data = pydicom.dcmread(str(nm_files[0]))
+        
+        if dcm_data.Modality == "PT":# PET modality stores individual dicom files for each slice, similar to CT. 
+                                     # Its scaling is readed correctly from SimpleITK, so nothing to do here.
+            return image
+        
+        if dcm_data.Modality != "NM":
+            raise AssertionError(f"Wrong Modality, expecting NM for SPECT data, but got {dcm_data.Modality}")
+        
+        if len(nm_files) != 1:
+            raise AssertionError(f"Found more than 1 .dcm file inside {path_dir.name}, not sure which one is the right SPECT.")
+        
+        # If scale_factor is not provided by the user, we assume it is a Q-SPECT file.
         slope = dcm_data.RealWorldValueMappingSequence[0].RealWorldValueSlope
         intercept = dcm_data.RealWorldValueMappingSequence[0].RealWorldValueIntercept
     else:
