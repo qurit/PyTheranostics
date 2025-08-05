@@ -6,7 +6,7 @@ import os
 import numpy
 from pytheranostics.ImagingTools.Tools import itk_image_from_array, load_from_dicom_dir
 from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
-from pytheranostics.ImagingTools.Tools import jaccard_index
+from pytheranostics.ImagingTools.Tools import jaccard_index, resample_mask_to_target
 
 MetaDataType = Dict[int, Dict[str, Any]]
 
@@ -32,6 +32,7 @@ class LongitudinalStudy:
         self.modality = modality
         self.images = images
         self.masks:  Dict[int, Dict[str, numpy.ndarray]] = {}  # {time_id: {mask_name: array}}
+        
         self.meta = meta
         
         # Mask mapping format:
@@ -63,12 +64,12 @@ class LongitudinalStudy:
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
-    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, numpy.ndarray], mask_mapping: Optional[Dict[str, str]] = None) -> None:
+    def add_masks_to_time_point(self, time_id: int, masks: Dict[str, SimpleITK.Image], mask_mapping: Optional[Dict[str, str]] = None) -> None:
         """Add Masks to time point.
 
         Args:
             time_id (int): Index of time-point ID.
-            masks (Dict[str, numpy.ndarray]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_array}
+            masks (Dict[str, SimpleITK.Image]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_image (simpleITK)}
             mask_mapping (Optional[Dict[str, str]], optional): Mapping between masks names in input masks dictionary, and standard mask names in pyTheranostics. Defaults to None. If None, takes each name as is.
             
         Raises:
@@ -94,8 +95,12 @@ class LongitudinalStudy:
             if mask_target in self.masks[time_id]:
                 print(f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!")
                 
-            self.masks[time_id][mask_target] = masks[mask_source]
-        
+            # Masks are in the right orientation and spacing, however there could be discrepancies in array
+            # shapes (reason, unknown). We resample to ensure shapes between image and masks are consistent TODO: Fix.
+            mask_ = resample_mask_to_target(mask_img=masks[mask_source], target_img=self.images[time_id])
+            
+            self.masks[time_id][mask_target] = numpy.transpose(SimpleITK.GetArrayFromImage(mask_), axes=(1, 2, 0))
+            
         return None
     
     def volume_of(self, region: str, time_id: int) -> float:
@@ -245,9 +250,9 @@ class LongitudinalStudy:
         
         for mask_id, region_name in enumerate(mask_names):
             all_masks += (mask_id + 1) * (self.masks[time_id][region_name]).astype(numpy.int16)
-
+                
         mask_image = itk_image_from_array(array=numpy.transpose(all_masks, axes=(2, 0, 1)), ref_image=self.images[time_id])
-        
+                
         print(f"Writing Masks ({mask_names}) into nifty file.")
         
         SimpleITK.WriteImage(image=mask_image, fileName=out_path / f"Masks_{time_id}.nii.gz")
@@ -256,27 +261,28 @@ class LongitudinalStudy:
     
     
 # TODO: Find the proper placement. Currently here to avoid circular imports. Consider making it part of the init class.
-def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT") -> LongitudinalStudy:
+def create_logitudinal_from_dicom(dicom_dirs: List[str], modality: str = "CT",
+                                  calibration_factor: Optional[float] = None) -> LongitudinalStudy:
     """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
     corresponds to the order of the time points.
 
     Args:
         dicom_dirs (List[str]): _description_
         modality (str, optional): _description_. Defaults to "CT".
-
+        calibration_factor (float, optional): Converts reconstructed SPECT image (raw counts * num_proj) to units of Bq / mL. Defatuls to 1.
     Returns:
         LongitudinalStudy: _description_
     """
     # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
     mod_supported = ["CT", "Lu177_SPECT"]
     if modality not in mod_supported:
-        raise NotImplemented(f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}")
+        raise NotImplementedError(f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}")
 
     images: Dict[int, Image] = {}
     metadata: Dict[int, MetaDataType] = {}
 
     for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(dir=dir, modality=modality)
+        image, meta = load_from_dicom_dir(dir=dir, modality=modality, calibration_factor=calibration_factor)
         images[time_id] = image
         metadata[time_id] = meta
 

@@ -2,7 +2,6 @@ from typing import Any, Callable, Optional, Tuple, Dict
 
 import numpy
 from pytheranostics.fits.functions import biexp_fun, monoexp_fun, triexp_fun, biexp_fun_uptake
-from scipy.optimize import curve_fit
 import lmfit
 from lmfit import Model
 
@@ -64,7 +63,7 @@ def exponential_fit_lmfit(x_data: numpy.ndarray, y_data: numpy.ndarray,
     """
 
     if num_exponentials not in [1, 2, 3]:
-        raise ValueError("num_exponentials must be 1, 2, or 3.")
+        raise ValueError(f"num_exponentials must be 1, 2, or 3., found {num_exponentials}")
 
     if fixed_params is None:
         fixed_params = {}

@@ -2,13 +2,12 @@ import json
 import math
 import abc
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from os import path
 
 import numpy
 import pandas
 from pytheranostics.fits.fits import exponential_fit_lmfit
-from pytheranostics.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
 from pytheranostics.plots.plots import plot_tac_residuals
 from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
@@ -106,6 +105,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         # DataFrame storing results
         self.results = self.initialize()
         self.results_lesions = pandas.DataFrame()
+        self.results_salivaryglands = pandas.DataFrame()
+        self.df_ad = pandas.DataFrame()
         
         # Sanity Checks:
         self.sanity_checks(metric="Volume_CT_mL")
@@ -331,17 +332,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         for region, region_data in self.results.iterrows():
 
-            fit_results, _ = exponential_fit_lmfit(
-                x_data=numpy.array(region_data["Time_hr"]),
-                y_data=numpy.array(region_data["Activity_MBq"]), 
-                fixed_params=self.config["rois"][region]["fixed_parameters"],
-                num_exponentials=self.config["rois"][region]["fit_order"],
-                bounds=self.config["rois"][region]["bounds"],
-                params_init=self.config["rois"][region]["param_init"],
-                with_uptake=self.config["rois"][region]["with_uptake"]
-                )
+            
+            fit_results = self.smart_fit_selection(region_data=region_data, region=region)
 
-            plot_tac_residuals(result=fit_results, region=region)
+            plot_tac_residuals(result=fit_results, region=region, output_dir=self.db_dir)
             
             # Parameters for sum of exponential functions:
             fit_params = [fit_results.params[param].value for param in fit_results.params.keys()]  # A1, B1, A2, B2, ...
@@ -371,21 +365,92 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         return None
 
-    def numerical_integrate(self, exp_params: List[float]) -> float:
-        """Perform numerical integration of exponential function"""
-        if len(exp_params) < 3:
-            exp_func = monoexp_fun 
-        elif len(exp_params) < 4:
-            exp_func = biexp_fun_uptake      
-        elif len(exp_params) < 5:
-            exp_func = biexp_fun
-        elif len(exp_params) < 7:
-            exp_func = triexp_fun
-        else:
-            raise ValueError("Too many parameters to define a function. Only supported mono, bi or tri-exponentials")
+    def smart_fit_selection(self, region_data: pandas.Series, region: str) -> lmfit.model.ModelResult:
+        """If enabled in self.config, iterates through different valid fits orders and select best fit based on Akaike Information Criterion.
+        If a fit order is specified by the user, then the method will just perform fit following user's selected order and configuration.
+        
+        Parameters
+        ----------
+        region_data : pandas.Series
+            Series containing Time and Activity.
+        region : str
+            Region of Interest
 
-        return quad(exp_func, 0, numpy.inf, args=tuple(exp_params))
-    
+        Returns
+        -------
+        lmfit.model.ModelResult
+            The best fit model based on Akaike Information Criterion.
+        """
+        
+        # If fit_order is defined by user:
+        if self.config["rois"][region]["fit_order"] != None:
+            fit_results, _ = exponential_fit_lmfit(
+                x_data=numpy.array(region_data["Time_hr"]),
+                y_data=numpy.array(region_data["Activity_MBq"]), 
+                fixed_params=self.config["rois"][region]["fixed_parameters"],
+                num_exponentials=self.config["rois"][region]["fit_order"],
+                bounds=self.config["rois"][region]["bounds"],
+                params_init=self.config["rois"][region]["param_init"],
+                with_uptake=self.config["rois"][region]["with_uptake"]
+                )
+            
+            return fit_results
+        
+        print(f"WARNING: 'fit_order' for {region} was not specified, finding the best fit from Akaike Information Criteria...")
+        
+        # Determine maximum fit order based on avialable data.
+        n_samples = numpy.array(region_data["Time_hr"]).shape[0]
+        activity_init = region_data["Activity_MBq"][0]
+        
+        max_order = min(n_samples // 2, 3)  # Don't use more than tri-exponential.
+
+        all_fits: List[lmfit.model.ModelResult] = [] 
+        fit_config: List[Tuple[bool, int]] = []
+        
+        for order in range(1, max_order + 1):
+            for with_uptake in [True, False]:
+                
+                if order == 1 and with_uptake:
+                    continue
+                
+                fit_results, _ = exponential_fit_lmfit(
+                    x_data=numpy.array(region_data["Time_hr"]),
+                    y_data=numpy.array(region_data["Activity_MBq"]), 
+                    fixed_params=None,
+                    num_exponentials=order,
+                    bounds=self.config["rois"][region]["bounds"],
+                    params_init={"A1": activity_init},
+                    with_uptake=with_uptake
+                    )
+                
+                all_fits.append(fit_results)
+                fit_config.append((with_uptake, order))
+
+        # Apply Criterion
+        aic_results = [(idx, fit.aic) for idx, fit in enumerate(all_fits)]
+        aic_results = sorted(aic_results, key=lambda x: x[1]) # Sort
+                
+        # If only one model fit, that is the winner.
+        if len(aic_results) == 1:
+            self.config["rois"][region]["with_uptake"] = fit_config[0][0]
+            self.config["rois"][region]["fit_order"] = fit_config[0][1]
+            return all_fits[0]
+        
+        # If there are two more models, we check the top two models and compare their AIC. If the difference
+        # in AIC is less than 2, we pick the model with the lowest number of parameters.
+        
+        best_model_idx = aic_results[0][0]
+        
+        if aic_results[1][1] - aic_results[0][1] <= 2 and all_fits[aic_results[0][0]].nvarys > all_fits[aic_results[1][0]].nvarys:
+            best_model_idx = aic_results[1][0]
+
+        
+        
+        self.config["rois"][region]["with_uptake"] = fit_config[best_model_idx][0]
+        self.config["rois"][region]["fit_order"] = fit_config[best_model_idx][1]
+        
+        return all_fits[best_model_idx]
+            
     def analytical_integrate(self, result: lmfit.model.ModelResult) -> float:
         """Compute the analytical integral of a fitted exponential function.
 
@@ -520,8 +585,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
-    def update_json_data(self, file_path):
-        with open(file_path, 'r') as file:
+    def write_json_data(self, file_path):
+        
+        # Open empty json to load its structure:
+        empty_json_path = path.dirname(__file__) + f"/../data/output.json"
+        with open(empty_json_path, 'r') as file:
             data = json.load(file)
             
         data["PatientID"] = self.config["PatientID"]
@@ -533,7 +601,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         if cycle_key not in data:
             data[cycle_key] = [{}]
         else:
-            print(f"WARNING: Overwiting existing data. {cycle_key} in Patient {data['PatientID']} already exists in {file_path}")
+            print(f"WARNING: Might be Overwiting existing data. {cycle_key} in Patient {data['PatientID']} already exists.")
 
         cycle = data[cycle_key][0]
         cycle["CycleNumber"] = self.config["Cycle"]
@@ -651,9 +719,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ]["volumes_mL"]["different_tps"] = 1170
                 cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
                 cycle["rois"][organ]["volumes_mL"]["mean"] = 1170
-            
-                
-                
+                     
             if 'Gland' in organ:
                 cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
                 cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"

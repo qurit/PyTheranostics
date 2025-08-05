@@ -18,7 +18,7 @@ def bm_scaling_factor(gender: str = "Male",
     if mass_bm is None:
             mass_bm = load_phantom_mass(gender=gender, organ="Red Marrow")  # in Grams.
 
-    print(f"Phantom BM Mass (in grams): {mass_bm}")
-    print(f"RMBLR = {RMBLR}")
+    print(f"Phantom Bone Marrow Mass (in grams): {mass_bm}")
+    print(f"Red Marrow to Blood Ratio: RMBLR = {RMBLR}")
 
     return RMBLR * mass_bm
