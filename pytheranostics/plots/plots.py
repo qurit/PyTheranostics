@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy
-from pytheranostics.fits.functions import monoexp_fun, biexp_fun, triexp_fun, biexp_fun_uptake
-from typing import Tuple
+from typing import Optional
 import lmfit
+from pathlib import Path
 from typing import Optional
 
 def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
@@ -50,11 +50,8 @@ def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
 
     plt.tight_layout()
 
-def plot_tac_residuals(result: lmfit.model.ModelResult, 
-                       region: str,
-                       x_label: Optional[str] = "Time [hr]",
-                       y_label: Optional[str] = "Activity [MBq]"
-                       ) -> None:
+def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, x_label: str = "Time [hr]",
+                       y_label: str = "Activity [MBq]", output_dir: Optional[Path] = None) -> None:
     """Plot Time activity curve and residuals.
 
     Parameters
@@ -63,10 +60,16 @@ def plot_tac_residuals(result: lmfit.model.ModelResult,
         The fitted lmfit model results.
     region : str
         The region (e.g., organ, tumor) where fit happened.
+    x_label: str
+        The label in X Axis. Defaults to "Time [hr]"
+    y_label: str
+        The label in Y Axis. Defaults to "Activity [MBq]"
+    output_dir: Optional[str]
+        A path to a directory where figure will be saved.
     """
     
     # Create a figure with 3 subplots
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
+    _, axs = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
 
     # Extract fitted parameters and format them
     params = result.params.valuesdict()
@@ -137,4 +140,9 @@ def plot_tac_residuals(result: lmfit.model.ModelResult,
     ax3.set_xlabel(x_label)
     ax3.set_ylabel("Residuals")
 
+    if output_dir is not None:
+        plt.savefig(output_dir / f"{region}_fit.pdf", format="pdf", bbox_inches="tight")
+
     plt.show()
+        
+    return None

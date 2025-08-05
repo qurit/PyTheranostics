@@ -1,0 +1,104 @@
+{
+    "Type": "DosimetryResults",
+    "InstitutionName": "MyInstitution",
+    "ClinicalTrial": "MyClinicalTrial",
+    "Radionuclide": "Lu177",
+    "PatientID": "NA",
+    "Gender": "NA",
+    "No_of_completed_cycles": "NA",
+    "Cycle_01": [
+        {
+            "CycleNumber": 1,
+            "Operator": "NA",
+            "DatabaseDir": "NA",
+            "InjectionDate": "NA",
+            "InjectionTime": "NA",
+            "InjectedActivity": "NA",
+            "ApplyBiokineticsFromPreviousCycle": "NA",
+            "Level": "NA",
+            "Method": "NA",
+            "OutputFormat": "NA",
+            "ScaleDoseByDensity": "NA",
+            "ReferenceTimePoint": "NA",
+            "TimePoints_h": "NA",
+            "rois": {},
+            "Organ-level_AD": {}
+        }
+    ],
+    "Cycle_02": [
+        {
+            "CycleNumber": "NA",
+            "Operator": "NA",
+            "DatabaseDir": "NA",
+            "InjectionDate": "NA",
+            "InjectionTime": "NA",
+            "InjectedActivity": "NA",
+            "ApplyBiokineticsFromPreviousCycle": "NA",
+            "Level": "NA",
+            "Method": "NA",
+            "OutputFormat": "NA",
+            "ScaleDoseByDensity": "NA",
+            "ReferenceTimePoint": "NA",
+            "TimePoints_h": "NA",
+            "rois": {},
+            "Organ-level_AD": {}
+        }
+    ],
+    "Cycle_03": [
+        {
+            "CycleNumber": "NA",
+            "Operator": "NA",
+            "DatabaseDir": "NA",
+            "InjectionDate": "NA",
+            "InjectionTime": "NA",
+            "InjectedActivity": "NA",
+            "ApplyBiokineticsFromPreviousCycle": "NA",
+            "Level": "NA",
+            "Method": "NA",
+            "OutputFormat": "NA",
+            "ScaleDoseByDensity": "NA",
+            "ReferenceTimePoint": "NA",
+            "TimePoints_h": "NA",
+            "rois": {},
+            "Organ-level_AD": {}
+        }
+    ],
+    "Cycle_04": [
+        {
+            "CycleNumber": "NA",
+            "Operator": "NA",
+            "DatabaseDir": "NA",
+            "InjectionDate": "NA",
+            "InjectionTime": "NA",
+            "InjectedActivity": "NA",
+            "ApplyBiokineticsFromPreviousCycle": "NA",
+            "Level": "NA",
+            "Method": "NA",
+            "OutputFormat": "NA",
+            "ScaleDoseByDensity": "NA",
+            "ReferenceTimePoint": "NA",
+            "TimePoints_h": "NA",
+            "rois": {},
+            "Organ-level_AD": {}
+        }
+    ],
+    "Cycle_05": [
+        {
+            "CycleNumber": "NA",
+            "Operator": "NA",
+            "DatabaseDir": "NA",
+            "InjectionDate": "NA",
+            "InjectionTime": "NA",
+            "InjectedActivity": "NA",
+            "ApplyBiokineticsFromPreviousCycle": "NA",
+            "Level": "NA",
+            "Method": "NA",
+            "OutputFormat": "NA",
+            "ScaleDoseByDensity": "NA",
+            "ReferenceTimePoint": "NA",
+            "TimePoints_h": "NA",
+            "rois": {},
+            "Organ-level_AD": {}
+        }
+    ]
+}

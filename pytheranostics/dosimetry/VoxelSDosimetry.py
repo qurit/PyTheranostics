@@ -2,13 +2,14 @@ from typing import Any, Dict, Optional
 from pandas import DataFrame
 from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
 from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
-from pytheranostics.ImagingTools.Tools import itk_image_from_array
+from pytheranostics.ImagingTools.Tools import itk_image_from_array, resample_to_target
 from pytheranostics.fits.fits import get_exponential
 import numpy
 import shutil
 import os
 from pytheranostics.dosimetry.dvk import DoseVoxelKernel
-
+import SimpleITK
+import pandas
 
 class VoxelSDosimetry(BaseDosimetry):
     """Voxel S Dosimetry class: Computes parameters of fit for time activity curves at the region (organ/lesion) level, and
@@ -46,8 +47,8 @@ class VoxelSDosimetry(BaseDosimetry):
             If overlapping structures are found when adding regions to calculate voxel-TIA.
         """
 
-        ref_time_id = self.config["ReferenceTimePoint"]
-        tia_map = numpy.zeros_like(self.nm_data.array_at(time_id=ref_time_id))
+        ref_time_id = int(self.config["ReferenceTimePoint"])
+        tia_map = numpy.zeros_like(self.nm_data.array_at(time_id=ref_time_id), dtype=numpy.float64)
         
         # Check we're not having overlapping regions:
         masks = numpy.zeros_like(tia_map, dtype=numpy.int8)
@@ -74,13 +75,13 @@ class VoxelSDosimetry(BaseDosimetry):
             ref_time = region_data["Time_hr"][self.config["ReferenceTimePoint"]]  # In hours, post injection.
             f_to = region_fit(ref_time, *tuple(region_fit_params))
 
-            tia_map += region_mask * region_tia * act_map_at_ref / f_to  # MBq_h
+            tia_map += region_mask.astype(numpy.float64) * region_tia * act_map_at_ref / f_to  # MBq_h
 
         # Create ITK Image Object and embed it into a LongStudy.  #TODO: modularize, repeated code downwards.
         tia_image = itk_image_from_array(array=numpy.transpose(tia_map, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])
-        self.tia_map = LongitudinalStudy(images={0: tia_image}, meta={0: self.nm_data.meta[ref_time_id]}, modality="NM")
-        self.tia_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
-
+        self.tia_map = LongitudinalStudy(images={0: tia_image}, meta={0: self.nm_data.meta[ref_time_id]}, modality="NM")   
+        self.tia_map.masks[0] = self.nm_data.masks[0].copy()  # Copy masks.
+        
         return None
 
     def apply_voxel_s(self) -> None:
@@ -91,9 +92,15 @@ class VoxelSDosimetry(BaseDosimetry):
         
         dose_kernel = DoseVoxelKernel(isotope=self.nm_data.meta[0]["Radionuclide"], voxel_size_mm=nm_voxel_mm)
         
+        # Resample CT to NM (Default using linear interpolator)
+        resampled_ct = resample_to_target(source_img=self.ct_data.images[ref_time_id], 
+                                          target_img=self.nm_data.images[ref_time_id])
+        
         dose_map_array = dose_kernel.tia_to_dose(
             tia_mbq_s=self.tia_map.array_at(0) * self.toMBqs, 
-            ct=self.ct_data.array_at(time_id=ref_time_id) if self.config["ScaleDoseByDensity"] else None
+            ct=numpy.transpose(
+                SimpleITK.GetArrayFromImage(resampled_ct), axes=(1, 2, 0)
+                ) if self.config["ScaleDoseByDensity"] else None
             )
         
         # Create ITK Image Object and embed it into a LongStudy
@@ -105,8 +112,8 @@ class VoxelSDosimetry(BaseDosimetry):
                 0: itk_image_from_array(array=numpy.transpose(dose_map_array, axes=(2, 0, 1)), ref_image=self.nm_data.images[ref_time_id])},
             meta={0: self.nm_data.meta[ref_time_id]}
             )
-        
-        self.dose_map.add_masks_to_time_point(time_id=0, masks=self.nm_data.masks[0].copy())        
+  
+        self.dose_map.masks[0] = self.nm_data.masks[0].copy()
         
         return None
     
@@ -187,6 +194,24 @@ class VoxelSDosimetry(BaseDosimetry):
             self.apply_voxel_s()
         elif self.config["Method"] == "Monte-Carlo":
             self.run_MC()
+        else:
+            raise ValueError(f"Dosimetry Method {self.config['Method']} not implemented.")
+        
+        # Generate DataFrame.
+        dose_Gy = []
+        dose_Gy_GBq = []
+        for region in self.results.index:
+            
+            tmp_Gy = self.dose_map.average_of(region=region, time_id=0)/1000
+            
+            dose_Gy.append(tmp_Gy)
+            dose_Gy_GBq.append(tmp_Gy / (float(self.config["InjectedActivity"]) / 1000))
+        
+        self.df_ad = pandas.DataFrame({
+                            "AD[Gy]": dose_Gy,
+                            "AD[Gy/GBq]": dose_Gy_GBq
+                        }, index=[region for region in self.results.index])
+                    
         # Save dose-map to .nii -> use integer version
         self.dose_map.save_image_to_nii_at(time_id=0, out_path=self.db_dir, name="DoseMap.nii.gz")
         

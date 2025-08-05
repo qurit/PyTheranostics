@@ -13,12 +13,19 @@ class DoseVoxelKernel:
             isotope (str): _description_
             voxel_size_mm (float): _description_
         """
-
-        self.kernel = numpy.fromfile(
-            os.path.dirname(__file__) + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:1.2f}-mm-mGyperMBqs-SoftICRP.img",
-            dtype=numpy.float32
-            )
-        
+        try:
+            self.kernel = numpy.fromfile(
+                os.path.dirname(__file__) + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:1.2f}-mm-mGyperMBqs-SoftICRP.img",
+                dtype=numpy.float32
+                )
+        except FileNotFoundError:
+            print(f" >> Voxel Kernel for SPECT voxel size ({voxel_size_mm:2.2f} mm) not found. Using default kernel for 4.8 mm voxels...")
+            
+            self.kernel = numpy.fromfile(
+                os.path.dirname(__file__) + f"/../data/voxel_kernels/{isotope}-4.80-mm-mGyperMBqs-SoftICRP.img",
+                dtype=numpy.float32
+                )
+            
         self.kernel = self.kernel.reshape((51, 51, 51)).astype(numpy.float64)
             
     def tia_to_dose(self, tia_mbq_s: numpy.ndarray, ct: Optional[numpy.ndarray] = None) -> numpy.ndarray:

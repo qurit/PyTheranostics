@@ -16,7 +16,7 @@ from pytheranostics.shared.radioactive_decay import get_activity_at_injection
 class DicomModify():
 
     def __init__(self,fname,CF):
-        self.ds=pydicom.read_file(fname)
+        self.ds=pydicom.dcmread(fname)
         self.CF=CF
         self.fname = fname
 
@@ -276,7 +276,7 @@ def numpy_to_dcm_basic(array: np.ndarray, voxel_spacing: Tuple[float, float, flo
     return None
 
 
-def sitk_load_dcm_series(dcm_dir: Path) -> SimpleITK.SimpleITK.Image:
+def sitk_load_dcm_series(dcm_dir: Path) -> SimpleITK.Image:
     """Load Series from DICOM folder, and return SITK image
     
     Parameters
