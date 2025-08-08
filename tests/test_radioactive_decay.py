@@ -1,8 +1,10 @@
 """Tests for the radioactive decay module."""
 
-import pytest
 import numpy as np
-from pytheranostics.shared.radioactive_decay import decay_act, get_activity_at_injection
+import pytest
+
+from pytheranostics.shared.radioactive_decay import (decay_act,
+                                                     get_activity_at_injection)
 
 
 def test_decay_act():
