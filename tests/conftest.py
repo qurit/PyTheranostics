@@ -1,8 +1,9 @@
 """Test configuration and fixtures for PyTheranostics."""
 
-import pytest
-import numpy as np
 import os
+
+import numpy as np
+import pytest
 
 
 @pytest.fixture
