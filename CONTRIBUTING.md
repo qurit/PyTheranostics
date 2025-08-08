@@ -8,6 +8,63 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
 - Proposing new features
 - Becoming a maintainer
 
+## Development Setup
+
+### Prerequisites
+
+- Python 3.8 or higher
+- Git
+
+### Setting Up Your Development Environment
+
+1. **Fork and clone the repository:**
+   ```bash
+   git clone https://github.com/qurit/PyTheranostics.git
+   cd PyTheranostics
+   ```
+
+2. **Create a virtual environment:**
+   ```bash
+   # Windows
+   python -m venv .venv
+   .venv\Scripts\activate
+
+   # Linux/Mac
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. **Install development dependencies:**
+   ```bash
+   python setup_dev.py
+   ```
+
+   This script will:
+   - Verify you're in a virtual environment
+   - Install the package in editable mode
+   - Install all development dependencies (pytest, black, flake8, mypy, etc.)
+
+### Development Workflow
+
+Once your environment is set up, you can use these commands:
+
+```bash
+# Run tests
+pytest
+
+# Format code
+black .
+
+# Lint code  
+flake8
+
+# Type check
+mypy pytheranostics
+
+# Run all quality checks
+pytest && black --check . && flake8 && mypy pytheranostics
+```
+
 ## Development Process
 
 We use GitHub to host code, to track issues and feature requests, as well as accept pull requests.
