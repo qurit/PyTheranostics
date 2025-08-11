@@ -9,6 +9,10 @@ import pandas
 import re
 from os import path, makedirs
 
+parent_dir = path.dirname(path.dirname(__file__))
+SVALUES_PATH = path.join(parent_dir, 'data', 's-values')
+MASSES_PATH = path.join(parent_dir, 'data', 'ICRP_phantom_masses')
+
 class OrganSDosimetry(BaseDosimetry):
     """Organ S Value Dosimetry Class. Takes Nuclear Medicine Data to perform Organ-level 
     patient-specific dosimetry by computing organ time-integrated activity curves and
@@ -175,6 +179,180 @@ class OrganSDosimetry(BaseDosimetry):
             self.create_Olinda_file(dirname, savefile)
         else:
             print("In the current version, we only support Olinda as external organ S-value software.") # TODO: other software case files
+            
+    
+    def calculate_absorbed_dose(self, source_of_S_values: str,
+                                gender: str
+                                ) -> pandas.DataFrame:
+        """
+        Calculate absorbed dose per target organ based on selected model and disintegration data.
+        
+        Args:
+            source_of_S_values (str): Source of S-values, e.g., 'Olinda', 'MirdCalc', etc.
+            gender (str): gender of the patient
+        
+        Returns:
+            pd.DataFrame: Absorbed dose in mGy and Gy for each target organ
+        """
+        
+        df = self.results_olinda.copy()
+        print("Calculating absorbed dose for the following source organs:", df.index.tolist())
+        model_files = {
+            'Female': f'177Lu_S_values_female_{source_of_S_values.lower()}.csv',
+            'Male': f'177Lu_S_values_male_{source_of_S_values.lower()}.csv',
+        }
+        
+        if gender not in model_files:
+            raise ValueError(f"Invalid model '{gender}'. Expected one of: {list(model_files.keys())}")
+
+        svalues_path = path.join(SVALUES_PATH, model_files[gender])
+        svalues_df = pandas.read_csv(svalues_path, index_col=0)  # S-values in mSv/MBq-s
+        print(f"Loaded S-values from: {svalues_path}")
+        print("Target organs (S-value index):", svalues_df.index.tolist())
+         
+        olinda_to_human_source_organ_map = {
+            'GB Cont': 'Gallbladder Contents',
+            'LLI Cont': 'Left colon',
+            'ULI Cont': 'Right colon',
+            'StomCont': 'Stomach Contents',
+            'Salivary': 'Salivary Glands',
+            'Red Mar.': 'Red Marrow',
+            'CortBone': 'Cortical Bone',
+            'Hrt Wall': 'Heart Wall',
+            'TrabBone': 'Trabecular Bone', 
+            'HeartCon': 'Heart Contents',
+            'SI Cont': 'Small Intestine',
+            'UB Cont': 'Urinary Bladder Contents',
+            'Tot Body': 'Total Body'
+        }
+        
+        svalues_df = svalues_df.rename(columns=olinda_to_human_source_organ_map)
+        print("Source organs present (S-values index):", svalues_df.columns.tolist())
+
+        print("Source organs present (DataFrame index):", df.index.tolist())
+                
+        self.source_organs_missing = set(svalues_df.columns) - set(df.index)
+        print(f"Source organs missing in DataFrame: {self.source_organs_missing}")
+        
+        df['s'] = df[f'TIA_h'] * 3600
+            
+        # Apply S-values and compute dose
+        dose_matrix = self.apply_s_value(df, svalues_df)
+        total_dose_per_target = dose_matrix.sum(axis=1)  # Sum over 
+        
+        #print(f"Total dose per target organ (mGy/MBq):\n{total_dose_per_target}")
+        
+        # Format output
+        dose_df = total_dose_per_target.to_frame(name='AD[Gy/GBq]')
+        dose_df = self.perform_mass_scaling(dose_df, gender)
+        
+        dose_df.index.name = 'Target organ'
+        dose_df = dose_df.reset_index()
+        dose_df['AD[Gy]'] = dose_df['AD[Gy/GBq]'] / 1000 * float(self.config['InjectedActivity']) 
+        self.df_ad = dose_df.copy()  # Store for later use if needed
+        self.df_ad.index = self.df_ad['Target organ']
+        return dose_df
+
+    def redistribute_total_body_into_source_organs_missing(self, 
+                                                           tia_series: pandas.Series) -> pandas.Series: 
+        """
+        If only Total Body TIA is present, we leave it as is, because according to Olinda it represents the Total Body TIA.
+        
+        If organs other than Total Body are present, we redistribute the Total Body TIA into missing source organs as it represents the Remainder of the Body.
+        
+        This method redistributes the Remainder TIA into source organs that were not segmented and so represent Remainder of the Body.
+        
+        Args:
+            tia_series (pandas.Series): Series with TIA values indexed by source organs.
+        
+        Returns:
+            pandas.Series: Updated TIA series with redistributed Remainder TIA.
+        """
+        
+        if 'Total Body' not in tia_series.index:
+            return tia_series  
+
+        total_body_tia_s = tia_series["s"]["Total Body"]
+
+        # Path to organ masses
+        masses_path = path.join(MASSES_PATH, f'ICRP_mass_male.csv')
+        organ_masses = pandas.read_csv(masses_path, index_col=0).squeeze()  # Series: organ -> mass
+
+        missing_organs_df = organ_masses.loc[
+            organ_masses.index.isin(self.source_organs_missing)
+        ]
+
+        total_missing_mass = missing_organs_df['Mass_g'].sum()
+        print(f"Total mass of missing organs: {total_missing_mass} g")
+
+        missing_organs_df['s'] = (
+            missing_organs_df['Mass_g'] / total_missing_mass
+            ) * total_body_tia_s
+        
+        missing_organs_df = missing_organs_df.rename(columns={'Mass_g': 'Volume_CT_mL'})
+        
+        print(f"Redistributed TIA values for missing organs: {missing_organs_df}")
+        print(f"TIA series before redistribution:\n{tia_series}")
+        tia_series = tia_series.drop(index="Total Body")
+        tia_series = pandas.concat([tia_series, missing_organs_df])
+        tia_series['h'] = tia_series['s'] / 3600  # Convert seconds to hours
+        print(f"NEW:\n{tia_series}")
+
+        return tia_series
+        
+    def apply_s_value(self, tia_df, s_values):
+        """
+        Multiply S-values by TIA to compute dose matrix.
+        
+        Args:
+            tia_df (pd.DataFrame): Disintegration times in seconds
+            s_values (pd.DataFrame): S-values table (target organs as index, source organs as columns)
+        
+        Returns:
+            pd.DataFrame: Dose matrix (target organ x source organ)
+        """
+        #s_values.drop(columns='Total Body', inplace=True)
+        tia_df = self.redistribute_total_body_into_source_organs_missing(tia_df)
+        
+        common_source_organs = tia_df.index.intersection(s_values.columns)
+        
+        print(f'{len(common_source_organs)} source organs: {common_source_organs}')
+        
+        if common_source_organs.empty:
+            raise ValueError("No common source organs between TIA and S-value table.")
+
+        # Subset both dataframes
+        tia_series = tia_df.loc[common_source_organs, 's']
+        s_values_subset = s_values[common_source_organs]
+
+        print(f"Selected source organs for dose calculation: {tia_series.index.tolist()}")
+        print(f"Selected target organs for dose calculation: {s_values_subset.index.tolist()}")
+        
+        # Multiply S-values by corresponding TIA
+        dose_df = s_values_subset.multiply(tia_series, axis=1)
+        
+        return dose_df  
+
+    def perform_mass_scaling(self,
+                             df: pandas.DataFrame,
+                             gender: str
+                             ) -> pandas.DataFrame:  
+        
+
+        masses_path = path.join(MASSES_PATH, f'ICRP_mass_{gender.lower()}.csv')
+        model_masses_df = pandas.read_csv(masses_path, index_col=0)  # S-values in mSv/MBq-s
+    
+        print("Performing mass scaling...")
+        for organ in df.index:
+            if organ in model_masses_df.index and organ in self.results_olinda.index:
+                print(f"Scaling organ: {organ}")
+                model_mass = model_masses_df.loc[organ, "Mass_g"]
+                patient_mass = self.results_olinda.loc[organ, "Volume_CT_mL"]  # assuming 1 mL ≈ 1 g
+                if pandas.notna(patient_mass) and pandas.notna(model_mass) and model_mass > 0:
+                    scaling_factor =  model_mass / patient_mass 
+                    df.loc[organ, "AD[Gy/GBq]"] *= scaling_factor
+        return df    
+
                 
     def create_Olinda_file(self, 
                            dirname: str, 
