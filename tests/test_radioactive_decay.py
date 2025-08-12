@@ -3,8 +3,7 @@
 import numpy as np
 import pytest
 
-from pytheranostics.shared.radioactive_decay import (decay_act,
-                                                     get_activity_at_injection)
+from pytheranostics.shared.radioactive_decay import decay_act
 
 
 def test_decay_act():
@@ -52,6 +51,8 @@ def test_invalid_inputs():
 
 #     expected = current_activity * np.exp(np.log(2) * time_since_injection / half_life)
 #     result = decay_act(current_activity, time_since_injection, half_life)
-#     result = get_activity_at_injection(current_activity, half_life, time_since_injection)
+#     result = get_activity_at_injection(
+#         current_activity, half_life, time_since_injection
+#     )
 
 #     assert np.isclose(result, expected, rtol=1e-10)
