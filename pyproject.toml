@@ -63,6 +63,10 @@ packages = [
 ] 
 
 [tool.pytest.ini_options]
+markers = [
+    "smoke: marks tests as smoke tests (quick functionality checks)",
+    "slow: marks tests as slow (heavy computation or large data)",
+]
 filterwarnings = [
     "ignore:.*SwigPy.*:DeprecationWarning",
     "ignore:.*swigvar.*:DeprecationWarning",
