@@ -43,14 +43,45 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
    - Verify you're in a virtual environment
    - Install the package in editable mode
    - Install all development dependencies (pytest, black, flake8, mypy, etc.)
+   - Set up pre-commit hooks for automated code quality checks
+
+### Pre-commit Hooks
+
+Pre-commit hooks automatically run quality checks when you commit code. They only check **files you've modified**, making them non-disruptive to existing code:
+
+- **Code formatting** (black, isort)
+- **Linting** (flake8) 
+- **Type checking** (mypy)
+- **Basic file hygiene** (trailing whitespace, end-of-file)
+- **Smoke tests** (quick functionality checks)
+
+**Manual run:** `pre-commit run --all-files` (checks entire codebase)
+
+### Test Categories
+
+We use pytest markers to categorize tests:
+
+```python
+# Smoke test (critical test, fails fast if system is not correctly configured)
+@pytest.mark.smoke
+def test_basic_case():
+    # Fast test
+
+# No marker = regular tests
+def test_detailed_calculation():
+    # Standard or slow test
+```
 
 ### Development Workflow
 
 Once your environment is set up, you can use these commands:
 
 ```bash
-# Run tests
+# Run all tests
 pytest
+
+# Run only smoke tests (fast)
+pytest -m smoke
 
 # Format code
 black .
@@ -61,8 +92,11 @@ flake8
 # Type check
 mypy pytheranostics
 
-# Run all quality checks
-pytest && black --check . && flake8 && mypy pytheranostics
+# Run all pre-commit checks manually
+pre-commit run --all-files
+
+# Run quality checks (combination)
+pytest -m smoke && black --check . && flake8 && mypy pytheranostics
 ```
 
 ## Development Process
