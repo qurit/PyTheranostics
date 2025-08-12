@@ -65,6 +65,9 @@ def main():
     print("  flake8                 # Lint code")
     print("  mypy pytheranostics    # Type check")
     print("  pre-commit run --all-files  # Run all pre-commit checks")
+    print("\n🪝 Pre-commit hooks are now active and will run on every commit")
+    print("    To disable pre-commit hooks, run:")
+    print("      pre-commit uninstall")
 
 
 if __name__ == "__main__":
