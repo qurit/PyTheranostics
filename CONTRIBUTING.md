@@ -70,6 +70,11 @@ def test_basic_case():
 # No marker = regular tests
 def test_detailed_calculation():
     # Standard or slow test
+
+# Slow tests should only be run occasionally, during merges
+@pytest.mark.slow
+def test_big_simulation():
+    # Slow test
 ```
 
 ### Development Workflow
