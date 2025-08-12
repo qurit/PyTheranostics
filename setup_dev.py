@@ -42,12 +42,21 @@ def main():
     print("\n🔧 Installing PyTheranostics in editable mode with dev dependencies...")
     subprocess.run([sys.executable, "-m", "pip", "install", "-e", ".[dev]"], check=True)
     
+    # Install and setup pre-commit hooks
+    print("\n🪝 Installing pre-commit...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "pre-commit"], check=True)
+    
+    print("🪝 Setting up pre-commit hooks...")
+    subprocess.run(["pre-commit", "install"], check=True)
+    
     print("\n✅ Development environment setup complete!")
     print("\nYou can now run:")
     print("  pytest                 # Run tests")
+    print("  pytest -m smoke        # Run smoke tests only")
     print("  black .                # Format code")
     print("  flake8                 # Lint code")
     print("  mypy pytheranostics    # Type check")
+    print("  pre-commit run --all-files  # Run all pre-commit checks")
 
 
 if __name__ == "__main__":
