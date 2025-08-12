@@ -62,6 +62,24 @@ packages = [
     "pytheranostics.shared"
 ] 
 
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | build
+  | dist
+)/
+'''
+
 [tool.pytest.ini_options]
 markers = [
     "smoke: marks tests as smoke tests (quick functionality checks)",
