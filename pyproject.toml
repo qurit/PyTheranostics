@@ -41,6 +41,8 @@ dev = [
     "black>=23.0",
     "mypy>=1.0",
     "pandas-stubs>=2.0.0",
+    "scipy-stubs",
+    "types-requests",
     "pre-commit>=3.0.0",
     "sphinx>=7.0",
     "sphinx-rtd-theme>=1.0"

@@ -49,6 +49,14 @@ def main():
     print("🪝 Setting up pre-commit hooks...")
     subprocess.run(["pre-commit", "install"], check=True)
     
+    # Install missing mypy stubs (optional - requires internet)
+    print("\n🎯 Installing missing mypy type stubs...")
+    try:
+        subprocess.run(["mypy", "--install-types", "--non-interactive"], check=True)
+        print("✅ Type stubs installed successfully")
+    except subprocess.CalledProcessError:
+        print("⚠️  Could not install some type stubs (this is usually OK)")
+    
     print("\n✅ Development environment setup complete!")
     print("\nYou can now run:")
     print("  pytest                 # Run tests")
