@@ -30,7 +30,7 @@ class TestDataLoader:
         return test_data_dir / "patient_test" / "tp1" / "RTstructs"
 
     @pytest.mark.smoke
-    def test_data_files_exist(self, ct_dicom_path: Path, rt_struct_path: Path):
+    def test_data_files_exist(self, ct_dicom_path: Path, rt_struct_path: Path) -> None:
         """Smoke test: verify test data files exist."""
         assert ct_dicom_path.exists(), f"CT data directory not found: {ct_dicom_path}"
         assert (
@@ -46,7 +46,7 @@ class TestDataLoader:
         assert len(ct_files) > 0, "No CT DICOM files found"
         assert len(rt_files) > 0, "No RT structure files found"
 
-    def test_create_longitudinal_ct_data(self, ct_dicom_path: Path):
+    def test_create_longitudinal_ct_data(self, ct_dicom_path: Path) -> None:
         """Test creating longitudinal CT data from DICOM."""
         # This might take a while, so we'll mark it appropriately
         long_ct = create_logitudinal_from_dicom(
@@ -78,7 +78,7 @@ class TestDosimetryCalculations:
     """Test dosimetry calculation functionality."""
 
     @pytest.fixture
-    def mock_longitudinal_data(self):
+    def mock_longitudinal_data(self) -> None:
         """Create minimal mock longitudinal data for testing."""
         # This would create synthetic data structures that match
         # the expected LongitudinalStudy interface without requiring
@@ -87,15 +87,15 @@ class TestDosimetryCalculations:
             "Mock data not implemented yet - requires understanding data structures"
         )
 
-    def test_base_dosimetry_initialization(self):
+    def test_base_dosimetry_initialization(self) -> None:
         """Test BaseDosimetry class initialization."""
         pytest.skip("Requires understanding of BaseDosimetry constructor parameters")
 
-    def test_time_activity_curve_calculation(self):
+    def test_time_activity_curve_calculation(self) -> None:
         """Test calculation of time-activity curves."""
         pytest.skip("Need to understand expected input/output formats")
 
-    def test_dose_calculation(self):
+    def test_dose_calculation(self) -> None:
         """Test absorbed dose calculation."""
         pytest.skip("Need to understand S-value integration")
 
@@ -103,18 +103,18 @@ class TestDosimetryCalculations:
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_missing_dicom_files(self):
+    def test_missing_dicom_files(self) -> None:
         """Test behavior when DICOM files are missing."""
         with pytest.raises(RuntimeError, match="File names information is empty"):
             create_logitudinal_from_dicom(
                 dicom_dirs=["/nonexistent/path"], modality="CT"
             )
 
-    def test_invalid_modality(self):
+    def test_invalid_modality(self) -> None:
         """Test behavior with invalid modality specification."""
         pytest.skip("Need to understand valid modality options")
 
-    def test_malformed_config(self):
+    def test_malformed_config(self) -> None:
         """Test behavior with malformed configuration."""
         pytest.skip("Need to understand required config parameters")
 
@@ -123,6 +123,6 @@ class TestEdgeCases:
 class TestIntegration:
     """Integration tests using real anonymized patient data."""
 
-    def test_full_dosimetry_pipeline(self):
+    def test_full_dosimetry_pipeline(self) -> None:
         """Test complete dosimetry pipeline from DICOM to dose."""
         pytest.skip("Full integration test - implement after unit tests are working")
