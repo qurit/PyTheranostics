@@ -8,8 +8,8 @@ from rt_utils import RTStructBuilder
 from pathlib import Path
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
 from pytheranostics.registration.CTtoSPECT import register_ct_to_spect, transform_ct_mask_to_spect
+from pytheranostics.ImagingDS.metadata import MetaDataType
 
-MetaDataType = Dict[str, Any]  # This could be improved ...
 
 # TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
 # the code below)
@@ -36,8 +36,8 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     if len(dicom_slices) == 0:
         raise AssertionError(f"No Dicom data was found under {dir}")
     
-    radionuclide = "N/A"
-    injected_activity = "N/A"
+    radionuclide = None
+    injected_activity = None
 
     if modality == "CT": 
         dicom_slices = [f for f in dicom_slices if hasattr(f, "SliceLocation")]
@@ -63,17 +63,19 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
             
         except AttributeError:
             print("Injected activity not found in DICOM header. Using default: 7400 MBq")
-            injected_activity = 7400
+            injected_activity = 7400.0
             
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
-    meta = {"AcquisitionDate": slice_.AcquisitionDate,
-            "AcquisitionTime": slice_.AcquisitionTime,
-            "PatientID": slice_.PatientID,
-            "Radionuclide": radionuclide,
-            "Injected_Activity_MBq": injected_activity
-            }
+    meta = MetaDataType(
+        PatientID=slice_.PatientID,
+        AcquisitionDate=slice_.AcquisitionDate,
+        AcquisitionTime=slice_.AcquisitionTime,
+        HoursAfterInjection=None,
+        Radionuclide=radionuclide,
+        Injected_Activity_MBq=injected_activity
+    )
 
     return meta
 
