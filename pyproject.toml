@@ -80,6 +80,10 @@ exclude = '''
 )/
 '''
 
+# Note: Flake8 configuration is in setup.cfg (not here)
+# Flake8 does not support pyproject.toml natively as of 2025
+# See: https://github.com/PyCQA/flake8/issues/234
+
 [tool.pytest.ini_options]
 markers = [
     "smoke: marks tests as smoke tests (quick functionality checks)",
