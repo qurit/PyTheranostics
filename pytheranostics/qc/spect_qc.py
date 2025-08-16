@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import pydicom
 
 from pytheranostics.qc.qc import QC
@@ -34,20 +33,20 @@ class SPECTQC(QC):
         modality = ds.Modality
         try:
             duration = ds.RotationInformationSequence[0].ActualFrameDuration / 1000
-        except:
+        except (AttributeError, IndexError):
             duration = np.nan
         rows = ds.Rows
         cols = ds.Columns
         try:
             zoom = ds.DetectorInformationSequence[0].ZoomFactor
-        except:
+        except (AttributeError, IndexError):
             zoom = None
         try:
             number_projections = (
                 ds.RotationInformationSequence[0].NumberOfFramesInRotation
                 * ds.NumberOfDetectors
             )
-        except:
+        except (AttributeError, IndexError):
             number_projections = np.nan
 
         if projs:
@@ -56,9 +55,9 @@ class SPECTQC(QC):
             self.append_to_summary(
                 f"Scan performed on: {acquisition_date} at {acquisition_time}\t \n\n"
             )
-            self.append_to_summary(f" \t \n\n")
+            self.append_to_summary(" \t \n\n")
 
-            self.append_to_summary(f"PROJECTIONS:\t \n")
+            self.append_to_summary("PROJECTIONS:\t \n")
 
             # check number of projections
             if (
@@ -107,9 +106,9 @@ class SPECTQC(QC):
                     len(set(self.proj_ds.DetectorInformationSequence[0].RadialPosition))
                     > 1
                 ):
-                    self.append_to_summary(f"ORBIT: Non-circular\t      OK\n\n")
-            except:
-                self.append_to_summary(f"ORBIT: Circular\t       VERIFY\n\n")
+                    self.append_to_summary("ORBIT: Non-circular\t      OK\n\n")
+            except (AttributeError, IndexError, TypeError):
+                self.append_to_summary("ORBIT: Circular\t       VERIFY\n\n")
 
             # check zoom
             if zoom == self.isotope_dic["spect"]["zoom"]:
@@ -138,8 +137,8 @@ class SPECTQC(QC):
                 )
 
         else:
-            self.append_to_summary(f" \t \n\n")
-            self.append_to_summary(f"\nRECONSTRUCTED IMAGE:\t \n")
+            self.append_to_summary(" \t \n\n")
+            self.append_to_summary("\nRECONSTRUCTED IMAGE:\t \n")
 
             # check energy windows
             self.window_check_df["reconstructed_image"] = self.window_check(
@@ -160,7 +159,7 @@ class SPECTQC(QC):
                     self.append_to_summary(
                         f"CORRECTIONS APPLIED: {ds.CorrectedImage}. This image is not quantitative. Is missing {set(self.isotope_dic['spect']['corrections']) - set(list(ds.CorrectedImage))} correction.\t         FAIL\n\n"
                     )
-            except:
+            except AttributeError:
                 if set(self.isotope_dic["spect"]["corrections"]).issubset(
                     set(list(ds.CorrectedImage)).intersection(
                         set(self.isotope_dic["spect"]["corrections"])

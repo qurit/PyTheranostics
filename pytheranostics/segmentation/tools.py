@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from rt_utils import RTStructBuilder
 
 

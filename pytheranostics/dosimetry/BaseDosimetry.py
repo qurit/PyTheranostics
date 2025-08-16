@@ -1,6 +1,5 @@
 import abc
 import json
-import math
 from os import path
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -8,7 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import lmfit
 import numpy
 import pandas
-from scipy.integrate import quad
 
 from pytheranostics.dosimetry.BoneMarrow import bm_scaling_factor
 from pytheranostics.fits.fits import exponential_fit_lmfit
@@ -103,7 +101,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             and self.clinical_data["PatientID"].unique()[0] != self.patient_id
         ):
             raise AssertionError(
-                f"Clinical Data does not correspond to patient specified by user."
+                "Clinical Data does not correspond to patient specified by user."
             )
 
         # Verify radionuclide information is present in nm_data.
@@ -209,7 +207,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
     def check_mandatory_fields(self) -> None:
         if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
-            raise ValueError(f"Incomplete Configuration file.")
+            raise ValueError("Incomplete Configuration file.")
 
         if "ReferenceTimePoint" not in self.config:
             print("No Reference Time point was given. Assigning time ID = 0")
@@ -371,9 +369,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
     def compute_tia(self) -> None:
         """Computes Time-Integrated Activity over each source-organ."""
-        decay_constant = math.log(2) / (
-            self.radionuclide["half_life"]
-        )  # 1/h  # TODO: Check how to incorporate into bounds?
+        # decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h  # TODO: Check how to incorporate into bounds? (flake8)
 
         if self.radionuclide["half_life_units"] != "hours":
             raise AssertionError(
@@ -457,7 +453,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """
 
         # If fit_order is defined by user:
-        if self.config["rois"][region]["fit_order"] != None:
+        if self.config["rois"][region]["fit_order"] is not None:
             fit_results, _ = exponential_fit_lmfit(
                 x_data=numpy.array(region_data["Time_hr"]),
                 y_data=numpy.array(region_data["Activity_MBq"]),
@@ -626,12 +622,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 * float(self.config["InjectedActivity"])
                 / 1000
             )  # Gy
-            if (
-                self.config["rois"]["Kidney_Left"][
-                    "apply_biokinetics_from_previous_cycle"
-                ]
-                == False
-            ):
+            if not self.config["rois"]["Kidney_Left"][
+                "apply_biokinetics_from_previous_cycle"
+            ]:
                 if kinetic == "monoexp":
                     t_eff = numpy.log(2) / (
                         (
@@ -685,12 +678,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     )
                 print(f"{organ}", bed[organ])
 
-            elif (
-                self.config["rois"]["Kidney_Left"][
-                    "apply_biokinetics_from_previous_cycle"
-                ]
-                == True
-            ):
+            elif self.config["rois"]["Kidney_Left"][
+                "apply_biokinetics_from_previous_cycle"
+            ]:
                 if kinetic == "monoexp":
                     t_eff = numpy.log(2) / (
                         (
@@ -768,7 +758,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def write_json_data(self, file_path):
 
         # Open empty json to load its structure:
-        empty_json_path = path.dirname(__file__) + f"/../data/output.json"
+        empty_json_path = path.dirname(__file__) + "/../data/output.json"
         with open(empty_json_path, "r") as file:
             data = json.load(file)
 
@@ -860,14 +850,14 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ]["density_HU"]["different_tps"] = self.results.loc[
                     organ, "Density_HU"
                 ]
-            except:
+            except (KeyError, AttributeError):  # TODO: Handle errors explicitly
                 pass
             cycle["rois"][organ]["density_HU"]["uncertainty"] = "NA"
             try:
                 cycle["rois"][organ]["density_HU"]["mean"] = numpy.mean(
                     self.results.loc[organ, "Density_HU"]
                 )
-            except:
+            except (KeyError, AttributeError, TypeError):  # TODO: Handle errors explicitly
                 pass
             cycle["rois"][organ]["density_HU"]["mean_uncertainty"] = "NA"
             cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"

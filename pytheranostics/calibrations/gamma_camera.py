@@ -25,13 +25,12 @@ class GammaCamera(PlanarQC):
         # ser_date = self.ds.SeriesDate
         # ser_time = self.ds.SeriesTime
 
-        pix_space = self.ds.PixelSpacing
+        # pix_space = self.ds.PixelSpacing  # TODO: Use this variable or remove (flake8)
 
         # duration of scan in seconds
         acq_duration = self.ds.ActualFrameDuration / 1000
 
-        # number of Detectors
-        ndet = self.ds.NumberOfDetectors
+        # ndet = self.ds.NumberOfDetectors  # TODO: Use this variable or remove (flake8)
 
         # find camera model
         if "site_id" in kwargs:
