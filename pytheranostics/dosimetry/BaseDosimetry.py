@@ -857,7 +857,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ]["density_HU"]["mean"] = numpy.mean(
                     self.results.loc[organ, "Density_HU"]
                 )
-            except (KeyError, AttributeError, TypeError):  # TODO: Handle errors explicitly
+            except (
+                KeyError,
+                AttributeError,
+                TypeError,
+            ):  # TODO: Handle errors explicitly
                 pass
             cycle["rois"][organ]["density_HU"]["mean_uncertainty"] = "NA"
             cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
