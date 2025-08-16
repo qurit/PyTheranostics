@@ -1,8 +1,10 @@
 import SimpleITK
 from typing import Tuple
 
-def register_ct_to_spect(ct_image: SimpleITK.Image, spect_image: SimpleITK.Image
-                         ) -> Tuple[SimpleITK.Image, SimpleITK.Transform]:
+
+def register_ct_to_spect(
+    ct_image: SimpleITK.Image, spect_image: SimpleITK.Image
+) -> Tuple[SimpleITK.Image, SimpleITK.Transform]:
     """
     Registers a CT image to a SPECT image and applies the resulting transformation to a CT-derived mask.
 
@@ -28,8 +30,10 @@ def register_ct_to_spect(ct_image: SimpleITK.Image, spect_image: SimpleITK.Image
 
     # Optimizer settings
     registration_method.SetOptimizerAsRegularStepGradientDescent(
-        learningRate=2.0, minStep=1e-4, numberOfIterations=200,
-        gradientMagnitudeTolerance=1e-8
+        learningRate=2.0,
+        minStep=1e-4,
+        numberOfIterations=200,
+        gradientMagnitudeTolerance=1e-8,
     )
     registration_method.SetOptimizerScalesFromPhysicalShift()
 
@@ -41,19 +45,19 @@ def register_ct_to_spect(ct_image: SimpleITK.Image, spect_image: SimpleITK.Image
         spect_image,
         ct_image,
         SimpleITK.Euler3DTransform(),
-        SimpleITK.CenteredTransformInitializerFilter.GEOMETRY
+        SimpleITK.CenteredTransformInitializerFilter.GEOMETRY,
     )
     registration_method.SetInitialTransform(initial_transform, inPlace=False)
 
     # Multi-resolution framework
-    registration_method.SetShrinkFactorsPerLevel(shrinkFactors=[4,2,1])
-    registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[2,1,0])
+    registration_method.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
+    registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
     registration_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
 
     # Execute registration
     final_transform = registration_method.Execute(
         SimpleITK.Cast(spect_image, SimpleITK.sitkFloat32),
-        SimpleITK.Cast(ct_image, SimpleITK.sitkFloat32)
+        SimpleITK.Cast(ct_image, SimpleITK.sitkFloat32),
     )
 
     # Resample CT into SPECT space
@@ -63,12 +67,15 @@ def register_ct_to_spect(ct_image: SimpleITK.Image, spect_image: SimpleITK.Image
         final_transform,
         SimpleITK.sitkLinear,
         0.0,
-        ct_image.GetPixelID()
+        ct_image.GetPixelID(),
     )
 
-    return registered_ct,  final_transform
+    return registered_ct, final_transform
 
-def transform_ct_mask_to_spect(mask: SimpleITK.Image, spect: SimpleITK.Image, transform: SimpleITK.Transform) -> SimpleITK.Image:
+
+def transform_ct_mask_to_spect(
+    mask: SimpleITK.Image, spect: SimpleITK.Image, transform: SimpleITK.Transform
+) -> SimpleITK.Image:
     """_summary_
 
     Parameters
@@ -86,12 +93,5 @@ def transform_ct_mask_to_spect(mask: SimpleITK.Image, spect: SimpleITK.Image, tr
         _description_
     """
     return SimpleITK.Resample(
-        mask,
-        spect,
-        transform,
-        SimpleITK.sitkNearestNeighbor,
-        0,
-        mask.GetPixelID()
+        mask, spect, transform, SimpleITK.sitkNearestNeighbor, 0, mask.GetPixelID()
     )
-    
-    
