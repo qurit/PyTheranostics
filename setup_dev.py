@@ -4,17 +4,16 @@ Development environment setup script.
 Activate a virtual environment before running.
 """
 
-import sys
 import subprocess
-from pathlib import Path
+import sys
 
 
 def is_virtual_env():
     """Check if we're running in a virtual environment."""
     return (
-        hasattr(sys, 'real_prefix') or  # virtualenv
-        (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix) or  # venv
-        'VIRTUAL_ENV' in os.environ  # environment variable
+        hasattr(sys, "real_prefix")  # virtualenv
+        or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)  # venv
+        or "VIRTUAL_ENV" in os.environ  # environment variable
     )
 
 
@@ -22,7 +21,7 @@ def main():
     """Set up the development environment."""
     print("PyTheranostics Development Setup")
     print("=" * 35)
-    
+
     # Check if we're in a virtual environment
     if not is_virtual_env():
         print("❌ ERROR: Not running in a virtual environment!")
@@ -30,25 +29,27 @@ def main():
         print("  Windows: .venv\\Scripts\\activate")
         print("  Linux/Mac: source .venv/bin/activate")
         sys.exit(1)
-    
+
     print("✅ Virtual environment detected")
     print(f"Python executable: {sys.executable}")
-    
+
     # Upgrade pip first
     print("\n📦 Upgrading pip...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-    
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True
+    )
+
     # Install package in editable mode with dev dependencies
     print("\n🔧 Installing PyTheranostics in editable mode with dev dependencies...")
     subprocess.run([sys.executable, "-m", "pip", "install", "-e", ".[dev]"], check=True)
-    
+
     # Install and setup pre-commit hooks
     print("\n🪝 Installing pre-commit...")
     subprocess.run([sys.executable, "-m", "pip", "install", "pre-commit"], check=True)
-    
+
     print("🪝 Setting up pre-commit hooks...")
     subprocess.run(["pre-commit", "install"], check=True)
-    
+
     # Install missing mypy stubs (optional - requires internet)
     print("\n🎯 Installing missing mypy type stubs...")
     try:
@@ -56,7 +57,7 @@ def main():
         print("✅ Type stubs installed successfully")
     except subprocess.CalledProcessError:
         print("⚠️  Could not install some type stubs (this is usually OK)")
-    
+
     print("\n✅ Development environment setup complete!")
     print("\nYou can now run:")
     print("  pytest                 # Run tests")
@@ -72,4 +73,5 @@ def main():
 
 if __name__ == "__main__":
     import os  # Import here to avoid issues if script fails early
+
     main()
