@@ -1,11 +1,11 @@
 from rt_utils import RTStructBuilder
 import matplotlib.pyplot as plt
 
-def rtst_to_mask(dicom_series_path,rt_struct_path):
+
+def rtst_to_mask(dicom_series_path, rt_struct_path):
     # Load existing RT Struct. Requires the series path and existing RT Struct path
     rtstruct = RTStructBuilder.create_from(
-    dicom_series_path=dicom_series_path, 
-    rt_struct_path=rt_struct_path
+        dicom_series_path=dicom_series_path, rt_struct_path=rt_struct_path
     )
 
     # View all of the ROI names from within the image
