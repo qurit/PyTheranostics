@@ -52,7 +52,7 @@ Pre-commit hooks automatically run quality checks when you commit code. They onl
 - **Code formatting** (black) - Automatic Python code formatting
 - **Import organization** (isort) - Sorts imports into standard → third-party → local
 - **Linting** (flake8) - Style violations, unused imports, code issues
-- **Type checking** (mypy) - Static type analysis  
+- **Type checking** (mypy) - Static type analysis
 - **Basic file hygiene** - Trailing whitespace, end-of-file, large files
 - **Smoke tests** (pytest) - Quick functionality checks
 
@@ -147,4 +147,4 @@ We use GitHub issues to track public bugs. Report a bug by [opening a new issue]
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under its MIT License. 
+By contributing, you agree that your contributions will be licensed under its MIT License.

@@ -32,6 +32,6 @@ python:
     - requirements: requirements.txt
     - requirements: pytheranostics/docs/requirements.txt
     - method: pip
-      path: . 
-    # - method: pip 
+      path: .
+    # - method: pip
     #  requirements: -r pytheranostics/docs/requirements.txt

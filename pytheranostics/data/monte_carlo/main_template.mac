@@ -1,5 +1,5 @@
 #========================================================================================
-# Verbosity            
+# Verbosity
 #========================================================================================
 
 /gate/verbose Physic    1
@@ -17,7 +17,7 @@
 /gate/verbose Geometry  2
 
 #========================================================================================
-# Geometry             
+# Geometry
 #========================================================================================
 # Material database
 /gate/geometry/setMaterialDatabase data/GateMaterials.db
@@ -37,7 +37,7 @@
 /gate/HounsfieldMaterialGenerator/SetOutputHUMaterialFilename       data/patient-HU2mat.txt
 /gate/HounsfieldMaterialGenerator/Generate
 
-# Voxelized geometry 
+# Voxelized geometry
 /gate/world/daughters/name                      phantom
 /gate/world/daughters/insert                    ImageNestedParametrisedVolume
 /gate/geometry/setMaterialDatabase              data/patient-HUmaterials.db
@@ -47,9 +47,9 @@
 
 
 #========================================================================================
-# PHYSICS              
+# PHYSICS
 #========================================================================================
-#emstandard_opt3 is recommended for medical, space 
+#emstandard_opt3 is recommended for medical, space
 # http://geant4.in2p3.fr/IMG/pdf_PhysicsLists.pdf
 /gate/physics/addPhysicsList emstandard_opt3
 /gate/physics/addProcess Decay
@@ -65,7 +65,7 @@
 
 
 #========================================================================================
-# DOSE ACTOR           
+# DOSE ACTOR
 #========================================================================================
 
 /gate/actor/addActor                     DoseActor  dose3D
@@ -88,14 +88,14 @@
 /gate/actor/stat/saveEveryNSeconds 3600
 
 #========================================================================================
-# INITIALIZE           
+# INITIALIZE
 #========================================================================================
 
 /gate/run/initialize
 /gate/physics/displayCuts
 
 #========================================================================================
-# SOURCE               
+# SOURCE
 #========================================================================================
 
 
@@ -104,7 +104,7 @@
 
 /gate/source/Lu177Source/imageReader/translator/insert linear
 # Input image is normalized accumulated activity image - to make sure GATE is reading in the image correctly, set scale to 1
-# then check verbose output for source - is there the total activity in 1 Bq? Then it was read correctly. 
+# then check verbose output for source - is there the total activity in 1 Bq? Then it was read correctly.
 # In any way, GATE is simulating the number of primaries!
 /gate/source/Lu177Source/imageReader/linearTranslator/setScale 1 Bq
 /gate/source/Lu177Source/imageReader/readFile data/Source_normalized.mhd
@@ -117,15 +117,15 @@
 /gate/source/Lu177Source/gps/ion 71 177 0 0
 /gate/source/Lu177Source/gps/angtype   iso
 /gate/source/Lu177Source/setForcedUnstableFlag 	true
-/gate/source/Lu177Source/setForcedHalfLife 574300.8 s  
+/gate/source/Lu177Source/setForcedHalfLife 574300.8 s
 /gate/source/Lu177Source/gps/energytype Mono
 /gate/source/Lu177Source/gps/monoenergy 0. keV
 
 # source is now relative to phantom instead of relative to world
-/gate/source/Lu177Source/attachTo phantom 
+/gate/source/Lu177Source/attachTo phantom
 
 
-# To enable information output of source 
+# To enable information output of source
 /gate/source/Lu177Source/dump 1
 
 # Gives a list of all defined sources. In this example only 1 source
