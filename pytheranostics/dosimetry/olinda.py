@@ -9,8 +9,10 @@ def load_s_values(gender: str, radionuclide: str) -> pandas.DataFrame:
     """Load S-values Dataframes"""
     path_to_sv = Path(f"./phantomdata/{radionuclide}-{gender}-Svalues.csv")
     if not path_to_sv.exists():
-        raise FileExistsError(f"S-values for {gender}, {radionuclide} not found. Please make sure"
-                              " gender is ['Male', 'Female'] and radionuclide SymbolMass e.g., Lu177")
+        raise FileExistsError(
+            f"S-values for {gender}, {radionuclide} not found. Please make sure"
+            " gender is ['Male', 'Female'] and radionuclide SymbolMass e.g., Lu177"
+        )
 
     s_df = pandas.read_csv(path_to_sv)
     s_df.set_index(keys=["Target"], drop=True, inplace=True)
@@ -28,4 +30,3 @@ def load_phantom_mass(gender: str, organ: str) -> float:
         raise ValueError(f"Organ {organ} not found in phantom data.")
 
     return masses.loc[masses["Organ"] == organ].iloc[0][gender]
-
