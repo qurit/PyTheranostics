@@ -60,7 +60,7 @@ packages = [
     "pytheranostics.segmentation",
     "pytheranostics.registration",
     "pytheranostics.shared"
-] 
+]
 
 [tool.black]
 line-length = 88
