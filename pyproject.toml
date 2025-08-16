@@ -88,6 +88,27 @@ exclude = '''
 # Flake8 does not support pyproject.toml natively as of 2025
 # See: https://github.com/PyCQA/flake8/issues/234
 
+[tool.mypy]
+# Development-friendly mypy configuration
+# For focused development, use: mypy --ignore-missing-imports file.py
+python_version = "3.8"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false  # Set to true once codebase has more type annotations
+ignore_missing_imports = true  # Ignore third-party libraries without types
+follow_imports = "normal"      # Change to "skip" for faster, focused checking
+show_error_codes = true
+pretty = true
+
+# Exclude data and build directories
+exclude = [
+    "pytheranostics/data/",
+    "build/",
+    "dist/",
+    ".venv/",
+    ".mypy_cache/",
+]
+
 [tool.pytest.ini_options]
 markers = [
     "smoke: marks tests as smoke tests (quick functionality checks)",
