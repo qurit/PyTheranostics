@@ -17,6 +17,3 @@ for number_splits in $( eval echo {1..$ncpu}); do
 done
 
 cd $currentPath
-
-
-

@@ -35,4 +35,3 @@ python:
       path: . 
     # - method: pip 
     #  requirements: -r pytheranostics/docs/requirements.txt
-
