@@ -98,8 +98,8 @@ isort .
 # Lint code (style violations, unused imports, etc.)
 flake8
 
-# Type check
-mypy pytheranostics
+# Type check (configured to ignore import issues by default)
+mypy pytheranostics/calibrations/gamma_camera.py
 
 # Run all pre-commit checks manually
 pre-commit run --all-files
@@ -107,6 +107,23 @@ pre-commit run --all-files
 # Run quality checks (combination)
 pytest -m smoke && black --check . && isort --check-only . && flake8 && mypy pytheranostics
 ```
+
+### Type Checking with Mypy
+
+Mypy is configured in `pyproject.toml` to be development-friendly (ignores missing imports by default). For focused development:
+
+```bash
+# Check single file (uses project config)
+mypy pytheranostics/calibrations/gamma_camera.py
+
+# Skip imports entirely (fastest, most focused)
+mypy --follow-imports=skip pytheranostics/dosimetry/BaseDosimetry.py
+
+# Check entire package
+mypy pytheranostics/
+```
+
+**Note**: Mypy is disabled in pre-commit hooks during incremental type annotation adoption.
 
 ## Development Process
 
