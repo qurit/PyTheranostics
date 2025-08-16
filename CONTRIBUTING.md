@@ -49,11 +49,12 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
 
 Pre-commit hooks automatically run quality checks when you commit code. They only check **files you've modified**, making them non-disruptive to existing code:
 
-- **Code formatting** (black, isort)
-- **Linting** (flake8) 
-- **Type checking** (mypy)
-- **Basic file hygiene** (trailing whitespace, end-of-file)
-- **Smoke tests** (quick functionality checks)
+- **Code formatting** (black) - Automatic Python code formatting
+- **Import organization** (isort) - Sorts imports into standard → third-party → local
+- **Linting** (flake8) - Style violations, unused imports, code issues
+- **Type checking** (mypy) - Static type analysis  
+- **Basic file hygiene** - Trailing whitespace, end-of-file, large files
+- **Smoke tests** (pytest) - Quick functionality checks
 
 **Manual run:** `pre-commit run --all-files` (checks entire codebase)
 
@@ -88,10 +89,13 @@ pytest
 # Run only smoke tests (fast)
 pytest -m smoke
 
-# Format code
+# Format code (line length, spacing, quotes)
 black .
 
-# Lint code  
+# Sort and organize imports
+isort .
+
+# Lint code (style violations, unused imports, etc.)
 flake8
 
 # Type check
@@ -101,7 +105,7 @@ mypy pytheranostics
 pre-commit run --all-files
 
 # Run quality checks (combination)
-pytest -m smoke && black --check . && flake8 && mypy pytheranostics
+pytest -m smoke && black --check . && isort --check-only . && flake8 && mypy pytheranostics
 ```
 
 ## Development Process
