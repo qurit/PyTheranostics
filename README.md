@@ -63,4 +63,3 @@ If you use PyTheranostics in your research, please cite:
   url = {https://github.com/qurit/PyTheranostics}
 }
 ```
-
