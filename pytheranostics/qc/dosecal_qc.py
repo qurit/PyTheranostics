@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 from pytheranostics.qc.qc import QC
 from pytheranostics.shared.evaluation_metrics import perc_diff
@@ -52,7 +51,7 @@ class DosecalQC(QC):
                 self.append_to_summary(
                     f"The reported recovery matches the calculated recovery but is out of the acceptable range of {accepted_recovery[0]} % to {accepted_recovery[1]} %.\t             FAIL\n"
                 )
-                self.append_to_summary(f"\nPlease see below:\t \n\n")
+                self.append_to_summary("\nPlease see below:\t \n\n")
                 mismatch_df = self.db_df["cal_data"][
                     self.db_df["cal_data"]["recovery_calculated"]
                     != self.db_df["cal_data"]["reported_recovery"]
@@ -219,12 +218,12 @@ class DosecalQC(QC):
 
         if (syr_df.syringe_activity_calculated == syr_df.As_syr_MBq).all(axis=None):
             self.append_to_summary(
-                f"The reported activity expected in the syringe matches the calculation.\t                           OK\n\n"
+                "The reported activity expected in the syringe matches the calculation.\t                           OK\n\n"
             )
         else:
             self.accepted_calibration = 2
             self.append_to_summary(
-                f"The reported activity expected in the syringe does not match the calculation.\t                MISMATCH\n\n"
+                "The reported activity expected in the syringe does not match the calculation.\t                MISMATCH\n\n"
             )
             # mismatch_df = syr_df[syr_df['syringe_activity_calculated'] != syr_df['As_syr_MBq']]
             # cols_show = ['performed_by','manufacturer','model','source_id','Ai_syr_MBq','Af_syr_MBq','As_syr_MBq','syringe_activity_calculated']

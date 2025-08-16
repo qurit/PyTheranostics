@@ -1,10 +1,8 @@
 from __future__ import print_function
 
 import os
-import sys
 
 import pandas as pd
-import radiomics
 import SimpleITK as sitk
 import six
 from radiomics import featureextractor

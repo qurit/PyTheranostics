@@ -411,7 +411,7 @@ def force_orthogonality(image: SimpleITK.Image) -> SimpleITK.Image:
         _description_
     """
     if not are_vectors_orthogonal(image.GetDirection()):
-        print(f"Patient Orientation Vectors are NOT orthogonal. Forcing...")
+        print("Patient Orientation Vectors are NOT orthogonal. Forcing...")
         prev_origin = image.GetDirection()
         new_origin = [round(vec_element) for vec_element in prev_origin]
         print(f">> Original Orientation: {prev_origin}, New Orientation: {new_origin} ")

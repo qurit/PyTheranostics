@@ -1,25 +1,17 @@
 import datetime
 from copy import deepcopy
 from os import makedirs, path
-from typing import Any, Callable, Dict, Optional, Tuple
 
-import lmfit
-import matplotlib.pylab as plt
 import numpy as np
 import pandas as pd
-from lmfit import Model
 from numpy import exp, log
 from scipy import integrate
-from scipy.optimize import curve_fit
 
 from pytheranostics.fits.fits import (
     biexp_fun,
     biexp_fun_uptake,
-    calculate_r_squared,
     exponential_fit_lmfit,
-    get_exponential,
     monoexp_fun,
-    triexp_fun,
 )
 from pytheranostics.plots.plots import plot_tac_residuals
 
@@ -434,7 +426,7 @@ class BioDose:
         self.phantom_mass.set_index("Organ", inplace=True)
         self.phantom_mass.sort_index(inplace=True)
         self.not_inphantom = []
-        for org in self.biodi.index:  ########## for org in self.disinteggrations.index:
+        for org in self.biodi.index:  # for org in self.disinteggrations.index:
             if org not in self.phantom_mass.index:
                 self.not_inphantom.append(org)
         rob = ["Remainder Body"]
@@ -477,7 +469,7 @@ class BioDose:
             self.not_inphantom_notumor = [
                 org for org in self.not_inphantom if tumor_name not in org
             ]
-            tumortemp = self.biodi.loc[tumor_name]
+            # tumortemp = self.biodi.loc[tumor_name]  # TODO: Use this variable or remove (flake8)
         else:
             self.not_inphantom_notumor = self.not_inphantom
         print(self.not_inphantom_notumor)
@@ -512,10 +504,10 @@ class BioDose:
         print(self.phantom_mass)
         try:
             self.not_inphantom_notumor.remove("Tail")
-        except:
+        except ValueError:
             pass
 
-        ## Residual is the remaining carcass of the mouse after removing the organs; not all biodi study measure its activity, but some does
+        # Residual is the remaining carcass of the mouse after removing the organs; not all biodi study measure its activity, but some does
         if "Residual" in self.disintegrations.index:
             self.phantom_mass.loc["Residual"] = (
                 self.phantom_mass.loc["Remainder Body"] - self.literature_mass.sum()
@@ -778,7 +770,7 @@ class BioDose:
 
         self.mousecase = template
 
-        if savefile == True:
+        if savefile is True:
             if not path.exists(dirname):
                 makedirs(dirname)
 
@@ -822,7 +814,7 @@ class BioDose:
                 human.disintegrations_all_organs.loc["Red Marrow", "h"] = (
                     human.disintegrations_all_organs.loc["Heart Contents", "h"] * 0.34
                 )
-            except:
+            except KeyError:
                 human.disintegrations_all_organs.loc["Red Marrow", "h Female"] = (
                     human.disintegrations_all_organs.loc["Heart Contents", "h Female"]
                     * 0.34
@@ -899,7 +891,7 @@ class BioDose:
             org
         ) in (
             human.disintegrations_all_organs.index
-        ):  ########## for org in self.disinteggrations.index:
+        ):  # for org in self.disinteggrations.index:
             if org not in human.phantom_mass.index:
                 human.not_inphantom.append(org)
 
@@ -1030,7 +1022,7 @@ class BioDose:
 
         self.humancase = template
 
-        if savefile == True:
+        if savefile is True:
             if not path.exists(dirname):
                 makedirs(dirname)
 
@@ -1047,12 +1039,12 @@ class BioDose:
         Cm_organ_t0_1 = row["bi_exp1:%ID"] / 100
         Cm_organ_t0_2 = row["bi_exp2:%ID"] / 100
 
-        exp1 = row["bi_exp1:%ID"] / row["bi_exp:lambda_effective1_1/h"]
-        exp2 = row["bi_exp2:%ID"] / row["bi_exp:lambda_effective2_1/h"]
-        sum = exp1 + exp2
+        # exp1 = row["bi_exp1:%ID"] / row["bi_exp:lambda_effective1_1/h"]  # TODO: Use this variable or remove (flake8)
+        # exp2 = row["bi_exp2:%ID"] / row["bi_exp:lambda_effective2_1/h"]  # TODO: Use this variable or remove (flake8)
+        # sum = exp1 + exp2  # TODO: Use this variable or remove (flake8)
+        # frac_exp1 = exp1 / sum  # TODO: Use this variable or remove (flake8)
+        # frac_exp2 = exp2 / sum  # TODO: Use this variable or remove (flake8)
 
-        frac_exp1 = exp1 / sum
-        frac_exp2 = exp2 / sum
         lambda_effective1 = row["bi_exp:lambda_effective1_1/h"]
         lambda_effective2 = row["bi_exp:lambda_effective2_1/h"]
 
@@ -1113,7 +1105,7 @@ class BioDose:
             self.not_inphantom_notumor = [
                 org for org in self.not_inphantom if tumor_name not in org
             ]
-            tumortemp = self.biodi.loc[tumor_name]
+            # tumortemp = self.biodi.loc[tumor_name]  # TODO: Use this variable or remove (flake8)
         else:
             self.not_inphantom_notumor = self.not_inphantom
         self.not_inphantom_notumor

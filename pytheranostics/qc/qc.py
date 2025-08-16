@@ -187,12 +187,12 @@ class QC:
                 # self.append_to_summary(f'{self.window_check_df.to_string()}')
             elif (perc_diff_df.abs() != 0).any(axis=None):
                 self.append_to_summary(
-                    f"There are differences in the energy window settings but are minimal and acceptable.\t       VERIFY\n\n"
+                    "There are differences in the energy window settings but are minimal and acceptable.\t       VERIFY\n\n"
                 )
                 # self.append_to_summary(f'{self.window_check_df.to_string()}')
             else:
                 self.append_to_summary(
-                    f"The energy window settings are set as expected.\t       OK\n\n"
+                    "The energy window settings are set as expected.\t       OK\n\n"
                 )
                 # self.append_to_summary(f'{self.window_check_df.to_string()}')
 

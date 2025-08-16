@@ -269,7 +269,7 @@ class LongitudinalStudy:
                 )
 
         # Final Results:
-        print(f" >>> Final Jaccard Indices:")
+        print(" >>> Final Jaccard Indices:")
         for time_id in self.masks.keys():
             print(f" >>> Time point {time_id}: {best_index[time_id]}")
 

@@ -158,14 +158,16 @@ class VoxelSDosimetry(BaseDosimetry):
 
         return None
 
-    def run_MC(self) -> None:  #### TODO: finish the code!!!!!
+    def run_MC(self) -> None:  # TODO: finish the code!!!!!
         """Run MC."""
         raise NotImplementedError("MC is not implemmented yet.")
         n_cpu = self.config["#CPU"]
         n_primaries = self.config["#primaries"]
         output_dir = self.config["results_path"]
 
-        ##### SPLIT SIMULATIONS #####
+        # =============================================================================
+        # Split Simulations
+        # =============================================================================
         n_primaries_per_mac = int(n_primaries / n_cpu)
 
         file_path = os.path.join(
@@ -187,7 +189,9 @@ class VoxelSDosimetry(BaseDosimetry):
             with open(f"{output_dir}/main_normalized_{i+1}.mac", "w") as output_mac:
                 output_mac.write(new_mac)
 
-        ##### CREATE FOLDERS WITH DATA #####
+        # =============================================================================
+        # Create Folders with Data
+        # =============================================================================
         os.makedirs(os.path.join(output_dir, "data"), exist_ok=True)
         os.makedirs(os.path.join(output_dir, "output"), exist_ok=True)
 
@@ -203,7 +207,7 @@ class VoxelSDosimetry(BaseDosimetry):
         # List the files in the destination directory to confirm the copy operation
         os.listdir(os.path.join(output_dir, "data"))
 
-        ##### below is still work in progress
+        # TODO: Below is still work in progress
 
         # total_acc_A = np.sum(np.sum(np.sum(self.tia_map[0])))
         # self.source_normalized = self.TIAp / self.total_acc_A
@@ -223,7 +227,9 @@ class VoxelSDosimetry(BaseDosimetry):
         ) as fileID:
             fileID.write("%.2f" % self.total_acc_A)
 
-        ##### RUN MC #####
+        # =============================================================================
+        # Run Monte Carlo
+        # =============================================================================
 
         return None
 
