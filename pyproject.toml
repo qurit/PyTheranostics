@@ -77,6 +77,10 @@ exclude = '''
   | _build
   | build
   | dist
+  | data
+  | \.json$
+  | \.yaml$
+  | \.yml$
 )/
 '''
 
