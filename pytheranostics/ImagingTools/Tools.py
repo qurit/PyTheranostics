@@ -1,11 +1,13 @@
-import numpy
-from typing import Any, Tuple, Dict, List, Optional
-import SimpleITK
-from SimpleITK import Image
-import pydicom
 import glob
-from rt_utils import RTStructBuilder
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy
+import pydicom
+import SimpleITK
+from rt_utils import RTStructBuilder
+from SimpleITK import Image
+
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
 from pytheranostics.registration.CTtoSPECT import (
     register_ct_to_spect,

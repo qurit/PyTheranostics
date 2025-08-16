@@ -1,12 +1,18 @@
-from typing import Any, Dict, Optional, List
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import numpy
 import SimpleITK
 from SimpleITK import Image
-from pathlib import Path
-import os
-import numpy
-from pytheranostics.ImagingTools.Tools import itk_image_from_array, load_from_dicom_dir
+
+from pytheranostics.ImagingTools.Tools import (
+    itk_image_from_array,
+    jaccard_index,
+    load_from_dicom_dir,
+    resample_mask_to_target,
+)
 from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
-from pytheranostics.ImagingTools.Tools import jaccard_index, resample_mask_to_target
 
 MetaDataType = Dict[int, Dict[str, Any]]
 

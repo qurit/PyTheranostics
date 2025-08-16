@@ -1,10 +1,11 @@
-import matplotlib.pyplot as plt
-import gatetools as gt
-import itk
-import numpy as np
-import SimpleITK as sitk
 import argparse
 from pathlib import Path
+
+import gatetools as gt
+import itk
+import matplotlib.pyplot as plt
+import numpy as np
+import SimpleITK as sitk
 
 
 class Image:

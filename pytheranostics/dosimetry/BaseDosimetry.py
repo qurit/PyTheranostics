@@ -1,20 +1,21 @@
+import abc
 import json
 import math
-import abc
+from os import path
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from os import path
 
+import lmfit
 import numpy
 import pandas
-from pytheranostics.fits.fits import exponential_fit_lmfit
-from pytheranostics.plots.plots import plot_tac_residuals
-from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
 from scipy.integrate import quad
-from pytheranostics.MiscTools.Tools import calculate_time_difference
+
 from pytheranostics.dosimetry.BoneMarrow import bm_scaling_factor
+from pytheranostics.fits.fits import exponential_fit_lmfit
+from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
 from pytheranostics.ImagingTools.Tools import extract_masks
-import lmfit
+from pytheranostics.MiscTools.Tools import calculate_time_difference
+from pytheranostics.plots.plots import plot_tac_residuals
 
 
 class BaseDosimetry(metaclass=abc.ABCMeta):

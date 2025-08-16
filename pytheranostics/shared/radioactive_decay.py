@@ -1,5 +1,6 @@
-import numpy as np
 from datetime import datetime
+
+import numpy as np
 
 
 def decay_act(a_initial, delta_t, half_life):

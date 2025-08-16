@@ -1,5 +1,6 @@
-import SimpleITK
 from typing import Tuple
+
+import SimpleITK
 
 
 def register_ct_to_spect(

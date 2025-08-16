@@ -1,5 +1,5 @@
-from rt_utils import RTStructBuilder
 import matplotlib.pyplot as plt
+from rt_utils import RTStructBuilder
 
 
 def rtst_to_mask(dicom_series_path, rt_struct_path):

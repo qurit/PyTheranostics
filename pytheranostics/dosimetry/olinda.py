@@ -1,6 +1,7 @@
+import datetime
 from os import path
 from pathlib import Path
-import datetime
+
 import numpy
 import pandas
 

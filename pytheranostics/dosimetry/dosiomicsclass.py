@@ -1,11 +1,13 @@
 from __future__ import print_function
-import sys
+
 import os
-import six
-from radiomics import featureextractor
+import sys
+
+import pandas as pd
 import radiomics
 import SimpleITK as sitk
-import pandas as pd
+import six
+from radiomics import featureextractor
 
 
 class Radiomics:
