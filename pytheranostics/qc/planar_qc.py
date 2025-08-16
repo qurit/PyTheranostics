@@ -1,7 +1,8 @@
-from pytheranostics.qc.qc import QC
-import pydicom
 import numpy as np
 import pandas as pd
+import pydicom
+
+from pytheranostics.qc.qc import QC
 
 
 class PlanarQC(QC):

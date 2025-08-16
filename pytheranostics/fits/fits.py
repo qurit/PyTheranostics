@@ -1,14 +1,15 @@
-from typing import Any, Callable, Optional, Tuple, Dict
+from typing import Any, Callable, Dict, Optional, Tuple
 
+import lmfit
 import numpy
+from lmfit import Model
+
 from pytheranostics.fits.functions import (
     biexp_fun,
+    biexp_fun_uptake,
     monoexp_fun,
     triexp_fun,
-    biexp_fun_uptake,
 )
-import lmfit
-from lmfit import Model
 
 
 def exponential_fit_lmfit(

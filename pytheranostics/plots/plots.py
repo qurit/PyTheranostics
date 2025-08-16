@@ -1,9 +1,9 @@
-import matplotlib.pyplot as plt
-import numpy
-from typing import Optional
-import lmfit
 from pathlib import Path
 from typing import Optional
+
+import lmfit
+import matplotlib.pyplot as plt
+import numpy
 
 
 def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:

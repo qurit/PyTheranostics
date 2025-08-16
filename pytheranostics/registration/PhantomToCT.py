@@ -1,7 +1,9 @@
-import SimpleITK
 from pathlib import Path
 from typing import Optional
+
+import SimpleITK
 from SimpleITK.SimpleITK import Transform
+
 from pytheranostics.registration.demons import multiscale_demons
 
 

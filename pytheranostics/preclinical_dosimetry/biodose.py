@@ -1,32 +1,27 @@
-import pandas as pd
-import numpy as np
-
-from numpy import exp, log
-from os import path, makedirs
 import datetime
 from copy import deepcopy
-from scipy import integrate
+from os import makedirs, path
+from typing import Any, Callable, Dict, Optional, Tuple
 
-
-### Importing necessary libraries for plotting and fitting
-
-
+import lmfit
 import matplotlib.pylab as plt
-from pytheranostics.fits.fits import (
-    exponential_fit_lmfit,
-    calculate_r_squared,
-    get_exponential,
-    monoexp_fun,
-    biexp_fun,
-    biexp_fun_uptake,
-    triexp_fun,
-)
-from typing import Any, Callable, Optional, Tuple, Dict
-from pytheranostics.plots.plots import plot_tac_residuals
+import numpy as np
+import pandas as pd
+from lmfit import Model
+from numpy import exp, log
 from scipy import integrate
 from scipy.optimize import curve_fit
-import lmfit
-from lmfit import Model
+
+from pytheranostics.fits.fits import (
+    biexp_fun,
+    biexp_fun_uptake,
+    calculate_r_squared,
+    exponential_fit_lmfit,
+    get_exponential,
+    monoexp_fun,
+    triexp_fun,
+)
+from pytheranostics.plots.plots import plot_tac_residuals
 
 this_dir = path.dirname(__file__)
 parent_dir = path.dirname(this_dir)

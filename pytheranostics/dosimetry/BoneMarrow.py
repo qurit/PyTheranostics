@@ -1,6 +1,7 @@
-from typing import Optional
-from pytheranostics.dosimetry.olinda import load_phantom_mass
 import os
+from typing import Optional
+
+from pytheranostics.dosimetry.olinda import load_phantom_mass
 
 
 def bm_scaling_factor(

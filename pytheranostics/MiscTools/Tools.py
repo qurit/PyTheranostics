@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Dict, Tuple
+
 import numpy
 from scipy.ndimage import median_filter
-from typing import Dict, Tuple
 
 
 def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
