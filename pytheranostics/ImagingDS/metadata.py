@@ -3,7 +3,7 @@ from typing import Optional
 
 
 @dataclass
-class MetaDataType:
+class ImagingMetadata:
     """Metadata information for medical imaging datasets."""
 
     PatientID: str
