@@ -41,8 +41,10 @@ repos:
     hooks:
       - id: pytest-smoke
         name: pytest (smoke tests only)
-        entry: bash run_pytest.sh
-        language: system
-        args: ["-m", "smoke", "--tb=short"]
+        entry: python
+        language: python
+        args: ["-m", "pytest", "-m", "smoke", "--tb=short"]
         pass_filenames: false
         stages: [pre-commit]
+        # NOTE: Keep these dependencies in sync with pyproject.toml [project.dependencies]
+        additional_dependencies: ["pytest>=7.0", "numpy", "matplotlib", "pandas", "pydicom", "openpyxl", "rt-utils", "scikit-image", "simpleitk", "lmfit"]
