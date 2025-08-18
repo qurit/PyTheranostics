@@ -1,6 +1,6 @@
 import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy
 import pydicom
@@ -9,12 +9,11 @@ from rt_utils import RTStructBuilder
 from SimpleITK import Image
 
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
+from pytheranostics.ImagingDS.metadata import MetaDataType
 from pytheranostics.registration.CTtoSPECT import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
 )
-from pytheranostics.ImagingDS.metadata import MetaDataType
-
 
 # TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
 # the code below)
@@ -89,12 +88,12 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     slice_ = dicom_slices[0]
 
     meta = MetaDataType(
-        PatientID = slice_.PatientID,
-        AcquisitionDate = slice_.AcquisitionDate,
-        AcquisitionTime = slice_.AcquisitionTime,
-        HoursAfterInjection = None,
-        Radionuclide = radionuclide,
-        Injected_Activity_MBq = injected_activity
+        PatientID=slice_.PatientID,
+        AcquisitionDate=slice_.AcquisitionDate,
+        AcquisitionTime=slice_.AcquisitionTime,
+        HoursAfterInjection=None,
+        Radionuclide=radionuclide,
+        Injected_Activity_MBq=injected_activity,
     )
 
     return meta

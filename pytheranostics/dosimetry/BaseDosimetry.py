@@ -241,9 +241,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
             # Time (relative to time of injection, in hours)
             tmp_results[roi_name].append(
-                [self.nm_data.meta[time_id].HoursAfterInjection
-                  for time_id in time_ids]
-                )
+                [self.nm_data.meta[time_id].HoursAfterInjection for time_id in time_ids]
+            )
 
             # Volume (from CT, in mL)
             tmp_results[roi_name].append(
@@ -313,12 +312,14 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         if self.nm_data.meta[0].Radionuclide is None:
             raise ValueError("Nuclear Medicine Data missing radionuclide")
-        
+
         if self.nm_data.meta[0].Radionuclide not in radionuclide_data:
-            raise ValueError(f"Data for {self.nm_data.meta['Radionuclide']} is not available.")  # TODO (Jason): What is this supposed to print?
-        
+            raise ValueError(
+                f"Data for {self.nm_data.meta['Radionuclide']} is not available."
+            )  # TODO (Jason): What is this supposed to print?
+
         return radionuclide_data[self.nm_data.meta[0].Radionuclide]
-    
+
     def check_patient_in_db(self) -> None:
         """Check if prior dosimetry exists for this patient"""
         # TODO: handle logging: error/warnings/prints.
@@ -584,7 +585,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         acq_time = f"{self.nm_data.meta[time_id].AcquisitionDate} {self.nm_data.meta[time_id].AcquisitionTime}"
         inj_time = f"{self.config['InjectionDate']} {self.config['InjectionTime']}"
 
-        self.nm_data.meta[time_id].HoursAfterInjection = calculate_time_difference(date_str1=acq_time, date_str2=inj_time)
+        self.nm_data.meta[time_id].HoursAfterInjection = calculate_time_difference(
+            date_str1=acq_time, date_str2=inj_time
+        )
 
         return None
 
