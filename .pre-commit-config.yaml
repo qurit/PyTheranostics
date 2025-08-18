@@ -41,7 +41,7 @@ repos:
     hooks:
       - id: pytest-smoke
         name: pytest (smoke tests only)
-        entry: pytest
+        entry: bash run_pytest.sh
         language: system
         args: ["-m", "smoke", "--tb=short"]
         pass_filenames: false
