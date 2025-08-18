@@ -315,8 +315,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         if self.nm_data.meta[0].Radionuclide not in radionuclide_data:
             raise ValueError(
-                f"Data for {self.nm_data.meta['Radionuclide']} is not available."
-            )  # TODO (Jason): What is this supposed to print?
+                f"Data for {self.nm_data.meta[0].Radionuclide} is not available."
+            )
 
         return radionuclide_data[self.nm_data.meta[0].Radionuclide]
 
