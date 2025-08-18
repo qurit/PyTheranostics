@@ -10,6 +10,3 @@ PyTheranostics is a library of tools to process nuclear medicine scans and take 
    :alt: dosimetry_workflow
 
    The dosimetry workflow involves quantitative imaging, followed by segmentation of volumes of interest, and finally the calculation of absorbed dose in target organs.
-
-
-

@@ -1,5 +1,5 @@
 [Elements]
-Hydrogen:   S= H   ; Z=  1. ; A=   1.01  g/mole  
+Hydrogen:   S= H   ; Z=  1. ; A=   1.01  g/mole
 Helium:     S= He  ; Z=  2. ; A=   4.003 g/mole
 Lithium:    S= Li  ; Z=  3. ; A=   6.941 g/mole
 Beryllium:  S= Be  ; Z=  4. ; A=   9.012 g/mole
@@ -49,7 +49,7 @@ Silver:     S= Ag  ; Z= 47. ; A= 107.87  g/mole
 Tin:        S=Sn   ; Z= 50. ; A= 118.71  g/mole
 
 [Materials]
-Vacuum: d=0.000001 mg/cm3 ; n=1 
+Vacuum: d=0.000001 mg/cm3 ; n=1
 	+el: name=Hydrogen ; n=1
 
 Aluminium: d=2.7 g/cm3 ; n=1 ; state=solid
@@ -112,7 +112,7 @@ Plexiglass: d=1.19 g/cm3; n=3; state=solid
         +el: name=Carbon;     f=0.599848
         +el: name=Oxygen;     f=0.319614
 
-	
+
 GSO: d=6.7 g/cm3; n=3 ; state=Solid
 	+el: name=Gadolinium ; n=2
 	+el: name=Silicon; n=1
@@ -195,7 +195,7 @@ CorticalBoneICRP: d=1.85 g/cm3 ; n=9
 	+el: name=Sulfur;	  f=0.003150
 	+el: name=Calcium;	  f=0.209930
 	+el: name=Zinc;		  f=0.000100
-	
+
 RibsICRP: d=1.165 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.089
 	+el: name=Carbon;	  f=0.292
@@ -223,7 +223,7 @@ HumeriUpperICRP: d=1.205 g/cm3 ; n=12
 	+el: name=Potassium;  f=0
 	+el: name=Calcium;	  f=0.061
 	+el: name=Iron;		  f=0
-	
+
 FemoraUpperICRP: d=1.124 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.094
 	+el: name=Carbon;	  f=0.385
@@ -251,7 +251,7 @@ SacrumICRP: d=1.031 g/cm3 ; n=12
 	+el: name=Potassium;  f=0.001
 	+el: name=Calcium;	  f=0.006
 	+el: name=Iron;		  f=0.001
-	
+
 LumbarVertebraeICRP: d=1.112 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.095
 	+el: name=Carbon;	  f=0.340
@@ -265,7 +265,7 @@ LumbarVertebraeICRP: d=1.112 g/cm3 ; n=12
 	+el: name=Potassium;  f=0.001
 	+el: name=Calcium;	  f=0.032
 	+el: name=Iron;		  f=0
-	
+
 ThoracicVertebraeICRP: d=1.074 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.099
 	+el: name=Carbon;	  f=0.376
@@ -279,7 +279,7 @@ ThoracicVertebraeICRP: d=1.074 g/cm3 ; n=12
 	+el: name=Potassium;  f=0.001
 	+el: name=Calcium;	  f=0.020
 	+el: name=Iron;		  f=0.001
-	
+
 CervicalVertebraeICRP: d=1.05 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.103
 	+el: name=Carbon;	  f=0.400
@@ -293,7 +293,7 @@ CervicalVertebraeICRP: d=1.05 g/cm3 ; n=12
 	+el: name=Potassium;  f=0.001
 	+el: name=Calcium;	  f=0.012
 	+el: name=Iron;		  f=0.001
-	
+
 PelvisICRP: d=1.123 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.094
 	+el: name=Carbon;	  f=0.360
@@ -307,7 +307,7 @@ PelvisICRP: d=1.123 g/cm3 ; n=12
 	+el: name=Potassium;  f=0.001
 	+el: name=Calcium;	  f=0.038
 	+el: name=Iron;		  f=0
-	
+
 ClaviclesICRP: d=1.151 g/cm3 ; n=12
 	+el: name=Hydrogen;	  f=0.091
 	+el: name=Carbon;	  f=0.348
@@ -377,7 +377,7 @@ CraniumICRP: d=1.157 g/cm3 ; n=12
 	+el: name=Potassium;  f=0.001
 	+el: name=Calcium;	  f=0.049
 	+el: name=Iron;		  f=0
-	
+
 Breast: d=1.020 g/cm3 ; n = 8
 	+el: name=Oxygen;     f=0.5270
 	+el: name=Carbon;     f=0.3320
@@ -409,19 +409,19 @@ LuYAP-70: d=7.1 g/cm3 ; n=4
 	+el: name=Yttrium ;  n= 3
 	+el: name=Aluminium; n=10
 	+el: name=Oxygen;    n=30
-	
+
 LuYAP-80: d=7.5 g/cm3 ; n=4
 	+el: name=Lutetium ; n= 8
 	+el: name=Yttrium ;  n= 2
 	+el: name=Aluminium; n=10
 	+el: name=Oxygen;    n=30
-	
+
 Plastic:  d=1.18 g/cm3 ; n=3; state=solid
         +el: name=Carbon ; n=5
         +el: name=Hydrogen ; n=8
         +el: name=Oxygen ; n=2
 
-CZT:  d=5.68 g/cm3 ; n=3; state=solid  
+CZT:  d=5.68 g/cm3 ; n=3; state=solid
         +el: name=Cadmium   ; n=9
         +el: name=Zinc      ; n=1
         +el: name=Tellurium ; n=10
@@ -466,7 +466,7 @@ LYSO:   d=5.37 g/cm3; n=4 ; state=Solid
 Body:   d=1.00 g/cm3 ; n=2
         +el: name=Hydrogen  ; f=0.112
         +el: name=Oxygen    ; f=0.888
-                                                                                                                                         
+
 Muscle: d=1.05 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.102
         +el: name=Carbon    ; f=0.143
@@ -479,7 +479,7 @@ Muscle: d=1.05 g/cm3 ; n=11
         +el: name=Potassium ; f=0.004
         +el: name=Calcium   ; f=0.0
         +el: name=Scandium  ; f=0.0
-                                                                                                                                            
+
 LungMoby: d=0.30 g/cm3 ; n=6
         +el: name=Hydrogen  ; f=0.099
         +el: name=Carbon    ; f=0.100
@@ -487,7 +487,7 @@ LungMoby: d=0.30 g/cm3 ; n=6
         +el: name=Oxygen    ; f=0.740
         +el: name=Phosphor  ; f=0.001
         +el: name=Calcium   ; f=0.032
-                                                                                                                                       
+
 SpineBone: d=1.42 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.063
         +el: name=Carbon    ; f=0.261
@@ -500,7 +500,7 @@ SpineBone: d=1.42 g/cm3 ; n=11
         +el: name=Chlorine  ; f=0.001
         +el: name=Potassium ; f=0.001
         +el: name=Calcium   ; f=0.133
-                                                                                                                                          
+
 RibBone: d=1.92 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.034
         +el: name=Carbon    ; f=0.155
@@ -526,7 +526,7 @@ Adipose: d=0.92 g/cm3 ; n=11
         +el: name=Vandium   ; f=0.0
         +el: name=Chromium  ; f=0.0
         +el: name=Manganese ; f=0.0
- 
+
 Blood:  d=1.06 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.102
         +el: name=Carbon    ; f=0.11
@@ -552,7 +552,7 @@ Heart:  d=1.05 g/cm3 ; n=11
         +el: name=Potassium ; f=0.003
         +el: name=Calcium   ; f=0.0
         +el: name=Scandium  ; f=0.0
- 
+
 Kidney: d=1.05 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.103
         +el: name=Carbon    ; f=0.132
@@ -565,7 +565,7 @@ Kidney: d=1.05 g/cm3 ; n=11
         +el: name=Potassium ; f=0.002
         +el: name=Calcium   ; f=0.001
         +el: name=Scandium  ; f=0.0
- 
+
 Liver:  d=1.06 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.102
         +el: name=Carbon    ; f=0.139
@@ -604,7 +604,7 @@ Pancreas: d=1.04 g/cm3 ; n=11
         +el: name=Potassium ; f=0.002
         +el: name=Calcium   ; f=0.0
         +el: name=Scandium  ; f=0.0
- 
+
 Intestine: d=1.03 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.106
         +el: name=Carbon    ; f=0.115
@@ -617,7 +617,7 @@ Intestine: d=1.03 g/cm3 ; n=11
         +el: name=Potassium ; f=0.001
         +el: name=Calcium   ; f=0.0
         +el: name=Scandium  ; f=0.0
- 
+
 Skull:  d=1.61 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.05
         +el: name=Carbon    ; f=0.212
@@ -643,7 +643,7 @@ Cartilage: d=1.10 g/cm3 ; n=11
         +el: name=Argon     ; f=0.0
         +el: name=Potassium ; f=0.0
         +el: name=Calcium   ; f=0.0
- 
+
 Brain:  d=1.04 g/cm3 ; n=11
         +el: name=Hydrogen  ; f=0.107
         +el: name=Carbon    ; f=0.145
