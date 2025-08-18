@@ -1,0 +1,48 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        files: '^(pytheranostics/|tests/)|^[^/]+\.py$'
+
+  - repo: https://github.com/pre-commit/mirrors-isort
+    rev: v5.10.1
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+        files: '^(pytheranostics/|tests/)|^[^/]+\.py$'
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.3.0
+    hooks:
+      - id: flake8
+        files: '^(pytheranostics/|tests/)|^[^/]+\.py$'
+
+  # Temporarily disabled - mypy follows imports to legacy code with type issues
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.16.1
+  #   hooks:
+  #     - id: mypy
+  #       files: '^(tests/).*\.py$'
+  #       additional_dependencies: [pandas-stubs>=2.0.0, types-requests]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+        files: '^(pytheranostics/|tests/)|^[^/]+\.(py|md|yml|yaml|toml)$'
+      - id: trailing-whitespace
+        files: '^(pytheranostics/|tests/)|^[^/]+\.(py|md|yml|yaml|toml)$'
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  - repo: local
+    hooks:
+      - id: pytest-smoke
+        name: pytest (smoke tests only)
+        entry: pytest
+        language: system
+        args: ["-m", "smoke", "--tb=short"]
+        pass_filenames: false
+        stages: [pre-commit]

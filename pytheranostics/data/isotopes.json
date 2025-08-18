@@ -7,7 +7,7 @@
             "photopeak":[187.2,208,228.8],
             "low_scatter":[166.4,176.8,187.2],
             "upper_scatter":[228.8,239.2,249.6],
-            "general_scatter":[55,110,165] 
+            "general_scatter":[55,110,165]
         },
         "accepted_collimators":["MELP","MEGP","MEGL"],
         "planar":{

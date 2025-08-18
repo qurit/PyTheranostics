@@ -8,6 +8,123 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
 - Proposing new features
 - Becoming a maintainer
 
+## Development Setup
+
+### Prerequisites
+
+- Python 3.8 or higher
+- Git
+
+### Setting Up Your Development Environment
+
+1. **Fork and clone the repository:**
+   ```bash
+   git clone https://github.com/qurit/PyTheranostics.git
+   cd PyTheranostics
+   ```
+
+2. **Create a virtual environment:**
+   ```bash
+   # Windows
+   python -m venv .venv
+   .venv\Scripts\activate
+
+   # Linux/Mac
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. **Install development dependencies:**
+   ```bash
+   python setup_dev.py
+   ```
+
+   This script will:
+   - Verify you're in a virtual environment
+   - Install the package in editable mode
+   - Install all development dependencies (pytest, black, flake8, mypy, etc.)
+   - Set up pre-commit hooks for automated code quality checks
+
+### Pre-commit Hooks
+
+Pre-commit hooks automatically run quality checks when you commit code. They only check **files you've modified**, making them non-disruptive to existing code:
+
+- **Code formatting** (black) - Automatic Python code formatting
+- **Import organization** (isort) - Sorts imports into standard → third-party → local
+- **Linting** (flake8) - Style violations, unused imports, code issues
+- **Type checking** (mypy) - Static type analysis
+- **Basic file hygiene** - Trailing whitespace, end-of-file, large files
+- **Smoke tests** (pytest) - Quick functionality checks
+
+**Manual run:** `pre-commit run --all-files` (checks entire codebase)
+
+### Test Categories
+
+We use pytest markers to categorize tests:
+
+```python
+# Smoke test (critical test, fails fast if system is not correctly configured)
+@pytest.mark.smoke
+def test_basic_case():
+    # Fast test
+
+# No marker = regular tests
+def test_detailed_calculation():
+    # Standard or slow test
+
+# Slow tests should only be run occasionally, during merges
+@pytest.mark.slow
+def test_big_simulation():
+    # Slow test
+```
+
+### Development Workflow
+
+Once your environment is set up, you can use these commands:
+
+```bash
+# Run all tests
+pytest
+
+# Run only smoke tests (fast)
+pytest -m smoke
+
+# Format code (line length, spacing, quotes)
+black .
+
+# Sort and organize imports
+isort .
+
+# Lint code (style violations, unused imports, etc.)
+flake8
+
+# Type check (configured to ignore import issues by default)
+mypy pytheranostics/calibrations/gamma_camera.py
+
+# Run all pre-commit checks manually
+pre-commit run --all-files
+
+# Run quality checks (combination)
+pytest -m smoke && black --check . && isort --check-only . && flake8 && mypy pytheranostics
+```
+
+### Type Checking with Mypy
+
+Mypy is configured in `pyproject.toml` to be development-friendly (ignores missing imports by default). For focused development:
+
+```bash
+# Check single file (uses project config)
+mypy pytheranostics/calibrations/gamma_camera.py
+
+# Skip imports entirely (fastest, most focused)
+mypy --follow-imports=skip pytheranostics/dosimetry/BaseDosimetry.py
+
+# Check entire package
+mypy pytheranostics/
+```
+
+**Note**: Mypy is disabled in pre-commit hooks during incremental type annotation adoption.
+
 ## Development Process
 
 We use GitHub to host code, to track issues and feature requests, as well as accept pull requests.
@@ -47,4 +164,4 @@ We use GitHub issues to track public bugs. Report a bug by [opening a new issue]
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under its MIT License. 
+By contributing, you agree that your contributions will be licensed under its MIT License.
