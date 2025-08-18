@@ -40,6 +40,10 @@ dev = [
     "flake8>=6.0",
     "black>=23.0",
     "mypy>=1.0",
+    "pandas-stubs>=2.0.0",
+    "scipy-stubs",
+    "types-requests",
+    "pre-commit>=3.0.0",
     "sphinx>=7.0",
     "sphinx-rtd-theme>=1.0"
 ]
@@ -56,9 +60,60 @@ packages = [
     "pytheranostics.segmentation",
     "pytheranostics.registration",
     "pytheranostics.shared"
-] 
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | build
+  | dist
+  | data
+  | \.json$
+  | \.yaml$
+  | \.yml$
+)/
+'''
+
+# Note: Flake8 configuration is in setup.cfg (not here)
+# Flake8 does not support pyproject.toml natively as of 2025
+# See: https://github.com/PyCQA/flake8/issues/234
+
+[tool.mypy]
+# Development-friendly mypy configuration
+# For focused development, use: mypy --ignore-missing-imports file.py
+python_version = "3.8"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false  # Set to true once codebase has more type annotations
+ignore_missing_imports = true  # Ignore third-party libraries without types
+follow_imports = "normal"      # Change to "skip" for faster, focused checking
+show_error_codes = true
+pretty = true
+
+# Exclude data and build directories
+exclude = [
+    "pytheranostics/data/",
+    "build/",
+    "dist/",
+    ".venv/",
+    ".mypy_cache/",
+]
 
 [tool.pytest.ini_options]
+markers = [
+    "smoke: marks tests as smoke tests (quick functionality checks)",
+    "slow: marks tests as slow (heavy computation or large data)",
+]
 filterwarnings = [
     "ignore:.*SwigPy.*:DeprecationWarning",
     "ignore:.*swigvar.*:DeprecationWarning",
