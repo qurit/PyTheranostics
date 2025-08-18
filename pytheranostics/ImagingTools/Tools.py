@@ -9,7 +9,7 @@ from rt_utils import RTStructBuilder
 from SimpleITK import Image
 
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
-from pytheranostics.ImagingDS.metadata import MetaDataType
+from pytheranostics.ImagingDS.metadata import ImagingMetadata
 from pytheranostics.registration.CTtoSPECT import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
@@ -19,7 +19,7 @@ from pytheranostics.registration.CTtoSPECT import (
 # the code below)
 
 
-def load_metadata(dir: str, modality: str) -> MetaDataType:
+def load_metadata(dir: str, modality: str) -> ImagingMetadata:
     """Loads relevant meta-data from a dicom dataset.
 
     Args:
@@ -33,7 +33,7 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
         ValueError: _description_
 
     Returns:
-        MetaDataType: _description_
+        ImagingMetaData: _description_
     """
 
     dicom_slices = [
@@ -87,7 +87,7 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
-    meta = MetaDataType(
+    meta = ImagingMetadata(
         PatientID=slice_.PatientID,
         AcquisitionDate=slice_.AcquisitionDate,
         AcquisitionTime=slice_.AcquisitionTime,
@@ -320,7 +320,7 @@ def squeeze_sitk_image_dimension(
 
 def load_from_dicom_dir(
     dir: str, modality: str, calibration_factor: Optional[float] = None
-) -> Tuple[Image, MetaDataType]:
+) -> Tuple[Image, ImagingMetadata]:
     """Load CT or SPECT data from DICOM files in the specified folder.
     Returns the Image object and some relevant metadata.
 
@@ -329,7 +329,7 @@ def load_from_dicom_dir(
         modality (str): _description_
         calibration_factor (str, optional): Factor to scale SPECT voxel values (e.g., could be SPECT calibration Factor in BQ/CPS or dimensionless factor)
     Returns:
-        Tuple[Image, MetaDataType]: _description_
+        Tuple[Image, ImagingMetadata]: _description_
     """
     # Read image content and spatial information using SimpleITK
     image = sitk_load_dcm_series(dcm_dir=Path(dir))
