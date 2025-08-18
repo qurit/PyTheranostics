@@ -1,12 +1,12 @@
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 import numpy
 import SimpleITK
 from SimpleITK import Image
 
+from pytheranostics.ImagingDS.metadata import MetaDataType
 from pytheranostics.ImagingTools.Tools import (
     itk_image_from_array,
     jaccard_index,
@@ -14,8 +14,7 @@ from pytheranostics.ImagingTools.Tools import (
     resample_mask_to_target,
 )
 from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
-from pytheranostics.ImagingTools.Tools import jaccard_index, resample_mask_to_target
-from pytheranostics.ImagingDS.metadata import MetaDataType
+
 
 class LongitudinalStudy:
     """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs
@@ -28,10 +27,10 @@ class LongitudinalStudy:
         modality: str = "NM",
     ) -> None:
         """
-        images: Dictionary of (time-point ID, numpy array) representing CT or quantitative nuclear medicine images. 
+        images: Dictionary of (time-point ID, numpy array) representing CT or quantitative nuclear medicine images.
         meta: Dictionary of (time-point ID, MetaDataType dataclass) representing meta-data for each time point.
         """
-       
+
         # TODO Consistency checks: verify that all time points are present in images, masks and meta.
         # TODO Consistency checks: verify that there are no missing masks across time points.
 
@@ -156,8 +155,14 @@ class LongitudinalStudy:
         """Returns the activity within a region of interest. The units of the nuclear medicine data
         should be Bq/mL."""
         if self.meta[time_id].Radionuclide is None or self.modality not in ["NM", "PT"]:
-            raise AssertionError("Can't compute activity if the image data does not represent the distribution of a radionuclide")
-        return numpy.sum(self.masks[time_id][region] * self.array_at(time_id=time_id) * self.voxel_volume(time_id=time_id))
+            raise AssertionError(
+                "Can't compute activity if the image data does not represent the distribution of a radionuclide"
+            )
+        return numpy.sum(
+            self.masks[time_id][region]
+            * self.array_at(time_id=time_id)
+            * self.voxel_volume(time_id=time_id)
+        )
 
     def density_of(self, region: str, time_id: int) -> float:
         """Returns the mean density of region of interest, in HU"""

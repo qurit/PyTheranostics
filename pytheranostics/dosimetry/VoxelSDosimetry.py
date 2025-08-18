@@ -118,9 +118,11 @@ class VoxelSDosimetry(BaseDosimetry):
         """Apply convolution over TIA map."""
         ref_time_id = self.config["ReferenceTimePoint"]
         nm_voxel_mm = self.nm_data.images[ref_time_id].GetSpacing()[0]
-        
-        dose_kernel = DoseVoxelKernel(isotope=self.nm_data.meta[0].Radionuclide, voxel_size_mm=nm_voxel_mm)
-        
+
+        dose_kernel = DoseVoxelKernel(
+            isotope=self.nm_data.meta[0].Radionuclide, voxel_size_mm=nm_voxel_mm
+        )
+
         # Resample CT to NM (Default using linear interpolator)
         resampled_ct = resample_to_target(
             source_img=self.ct_data.images[ref_time_id],
