@@ -1,6 +1,6 @@
 from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
 from typing import Any, Dict, Optional
-from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
+from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
 from scipy.interpolate import PchipInterpolator
 from typing import Tuple
 import datetime

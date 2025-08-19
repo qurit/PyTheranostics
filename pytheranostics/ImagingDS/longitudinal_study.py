@@ -4,7 +4,6 @@ from typing import Dict, List, Optional
 
 import numpy
 import SimpleITK
-from SimpleITK import Image
 
 from pytheranostics.ImagingDS.metadata import ImagingMetadata
 from pytheranostics.ImagingTools.Tools import (
@@ -377,7 +376,7 @@ def create_logitudinal_from_dicom(
             f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}"
         )
 
-    images: Dict[int, Image] = {}
+    images: Dict[int, SimpleITK.Image] = {}
     metadata: Dict[int, ImagingMetadata] = {}
 
     for time_id, dir in enumerate(dicom_dirs):
