@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy
 import SimpleITK
+from numpy.typing import NDArray
 
 from pytheranostics.ImagingDS.metadata import ImagingMetadata
 from pytheranostics.ImagingTools.Tools import (
@@ -25,9 +26,26 @@ class LongitudinalStudy:
         meta: Dict[int, ImagingMetadata],
         modality: str = "NM",
     ) -> None:
-        """
-        images: Dictionary of (time-point ID, numpy array) representing CT or quantitative nuclear medicine images.
-        meta: Dictionary of (time-point ID, ImagingMetadata dataclass) representing meta-data for each time point.
+        """Initialize a LongitudinalStudy instance.
+
+        Args:
+            images (Dict[int, SimpleITK.Image]): Dictionary of (time-point ID, SimpleITK.Image)
+                representing CT or quantitative nuclear medicine images for each time point
+                in the longitudinal study.
+            meta (Dict[int, ImagingMetadata]): Dictionary of (time-point ID, ImagingMetadata)
+                representing metadata for each time point, containing acquisition details
+                and radionuclide information.
+            modality (str, optional): The imaging modality type. Supported values are "NM"
+                (Nuclear Medicine), "PT" (PET), "CT", or "DOSE". Defaults to "NM".
+
+        Raises:
+            ValueError: If the specified modality is not one of the supported values:
+                "NM", "PT", "CT", or "DOSE".
+
+        Note:
+            The constructor initializes an empty masks dictionary that can be populated later
+            using the `add_masks_to_time_point` method. It also defines a comprehensive list
+            of valid mask names for regions of interest including organs, glands, and lesions.
         """
 
         # TODO Consistency checks: verify that all time points are present in images, masks and meta.
@@ -38,7 +56,7 @@ class LongitudinalStudy:
 
         self.modality = modality
         self.images = images
-        self.masks: Dict[int, Dict[str, numpy.ndarray]] = (
+        self.masks: Dict[int, Dict[str, NDArray[numpy.bool_]]] = (
             {}
         )  # {time_id: {mask_name: array}}
 
@@ -65,7 +83,7 @@ class LongitudinalStudy:
         self._valid_masks.extend(lesion_masks)
         return None
 
-    def array_at(self, time_id: int) -> numpy.ndarray:
+    def array_at(self, time_id: int) -> NDArray[Any]:
         """Access Array Data"""
         return numpy.transpose(
             numpy.squeeze(SimpleITK.GetArrayFromImage(self.images[time_id])),
@@ -74,7 +92,7 @@ class LongitudinalStudy:
 
     def array_of_activity_at(
         self, time_id: int, region: Optional[str] = None
-    ) -> numpy.ndarray:
+    ) -> NDArray[Any]:
         """Returns the array in units of activity in Bq, with the posibility of masking out for one specific region."""
         if self.modality not in ["NM", "PT"]:
             raise AssertionError(
@@ -165,14 +183,14 @@ class LongitudinalStudy:
 
     def density_of(self, region: str, time_id: int) -> float:
         """Returns the mean density of region of interest, in HU"""
-        return numpy.mean(
-            self.array_at(time_id=time_id)[self.masks[time_id][region] > 0]
+        return float(
+            numpy.mean(self.array_at(time_id=time_id)[self.masks[time_id][region] > 0])
         )
 
     def voxel_volume(self, time_id: int) -> float:
         """Returns the volume of a voxel in mL"""
         spacing = self.images[time_id].GetSpacing()
-        return spacing[0] / 10 * spacing[1] / 10 * spacing[2] / 10
+        return float(spacing[0] / 10 * spacing[1] / 10 * spacing[2] / 10)
 
     def average_of(self, region: str, time_id: int) -> float:
         """_summary_
@@ -184,8 +202,8 @@ class LongitudinalStudy:
         Returns:
             float: _description_
         """
-        return numpy.average(
-            self.array_at(time_id=time_id)[self.masks[time_id][region]]
+        return float(
+            numpy.average(self.array_at(time_id=time_id)[self.masks[time_id][region]])
         )
 
     def add_bone_marrow_mask_from_phantom(
