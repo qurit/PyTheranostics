@@ -114,6 +114,9 @@ exclude = [
     ".mypy_cache/",
 ]
 
+[tool.isort]
+profile = "black"
+
 [tool.pytest.ini_options]
 markers = [
     "smoke: marks tests as smoke tests (quick functionality checks)",
