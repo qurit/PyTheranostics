@@ -83,6 +83,59 @@ class LongitudinalStudy:
         self._valid_masks.extend(lesion_masks)
         return None
 
+    @classmethod
+    def from_dicom(
+        cls,
+        dicom_dirs: List[str],
+        modality: str = "CT",
+        calibration_factor: Optional[float] = None,
+    ) -> "LongitudinalStudy":
+        """Create a LongitudinalStudy object from a list of DICOM directories.
+
+        Currently assumes the order of the list corresponds to the order of the time points.
+
+        Args:
+            dicom_dirs (List[str]): List of paths to DICOM directories, each containing
+                images for one time point in the longitudinal study.
+            modality (str, optional): The imaging modality. Supported values are "CT"
+                and "Lu177_SPECT". Defaults to "CT".
+            calibration_factor (float, optional): Converts reconstructed SPECT image
+                (raw counts * num_proj) to units of Bq/mL. Defaults to None.
+
+        Returns:
+            LongitudinalStudy: A new LongitudinalStudy instance containing the loaded
+                DICOM data organized by time points.
+
+        Raises:
+            ValueError: If the specified modality is not supported.
+        """
+        # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
+        supported_modalities = {
+            "CT": "CT",
+            "Lu177_SPECT": "NM",
+        }
+        if modality not in supported_modalities.keys():
+            raise ValueError(
+                f"Modality '{modality}' not supported. Currently, the following modalities are supported: {list(supported_modalities.keys())}"
+            )
+        internal_modality = supported_modalities[modality]
+
+        images: Dict[int, SimpleITK.Image] = {}
+        metadata: Dict[int, ImagingMetadata] = {}
+
+        for time_id, dicom_dir in enumerate(dicom_dirs):
+            image, meta = load_from_dicom_dir(
+                dir=dicom_dir, modality=modality, calibration_factor=calibration_factor
+            )
+            images[time_id] = image
+            metadata[time_id] = meta
+
+        return cls(
+            images=images,
+            meta=metadata,
+            modality=internal_modality,
+        )
+
     def array_at(self, time_id: int) -> NDArray[Any]:
         """Access Array Data"""
         return numpy.transpose(
@@ -369,41 +422,3 @@ class LongitudinalStudy:
         )
 
         return None
-
-
-# TODO: Find the proper placement. Currently here to avoid circular imports. Consider making it part of the init class.
-def create_logitudinal_from_dicom(
-    dicom_dirs: List[str],
-    modality: str = "CT",
-    calibration_factor: Optional[float] = None,
-) -> LongitudinalStudy:
-    """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
-    corresponds to the order of the time points.
-
-    Args:
-        dicom_dirs (List[str]): _description_
-        modality (str, optional): _description_. Defaults to "CT".
-        calibration_factor (float, optional): Converts reconstructed SPECT image (raw counts * num_proj) to units of Bq / mL. Defatuls to 1.
-    Returns:
-        LongitudinalStudy: _description_
-    """
-    # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
-    mod_supported = ["CT", "Lu177_SPECT"]
-    if modality not in mod_supported:
-        raise NotImplementedError(
-            f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}"
-        )
-
-    images: Dict[int, SimpleITK.Image] = {}
-    metadata: Dict[int, ImagingMetadata] = {}
-
-    for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(
-            dir=dir, modality=modality, calibration_factor=calibration_factor
-        )
-        images[time_id] = image
-        metadata[time_id] = meta
-
-    return LongitudinalStudy(
-        images=images, meta=metadata, modality=modality if modality == "CT" else "NM"
-    )
