@@ -10,7 +10,7 @@ from pandas import DataFrame
 from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
 from pytheranostics.dosimetry.dvk import DoseVoxelKernel
 from pytheranostics.fits.fits import get_exponential
-from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
+from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
 from pytheranostics.ImagingTools.Tools import itk_image_from_array, resample_to_target
 
 
@@ -100,7 +100,7 @@ class VoxelSDosimetry(BaseDosimetry):
                 region_mask.astype(numpy.float64) * region_tia * act_map_at_ref / f_to
             )  # MBq_h
 
-        # Create ITK Image Object and embed it into a LongStudy.  #TODO: modularize, repeated code downwards.
+        # Create ITK Image Object and embed it into a LongitudinalStudy.  #TODO: modularize, repeated code downwards.
         tia_image = itk_image_from_array(
             array=numpy.transpose(tia_map, axes=(2, 0, 1)),
             ref_image=self.nm_data.images[ref_time_id],
@@ -140,7 +140,7 @@ class VoxelSDosimetry(BaseDosimetry):
             ),
         )
 
-        # Create ITK Image Object and embed it into a LongStudy
+        # Create ITK Image Object and embed it into a LongitudinalStudy
         # Clear dose outside patient body:
         dose_map_array *= self.nm_data.masks[ref_time_id]["WholeBody"]
 

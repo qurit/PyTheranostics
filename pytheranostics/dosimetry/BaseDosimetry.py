@@ -10,7 +10,7 @@ import pandas
 
 from pytheranostics.dosimetry.BoneMarrow import bm_scaling_factor
 from pytheranostics.fits.fits import exponential_fit_lmfit
-from pytheranostics.ImagingDS.LongStudy import LongitudinalStudy
+from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
 from pytheranostics.ImagingTools.Tools import extract_masks
 from pytheranostics.MiscTools.Tools import calculate_time_difference
 from pytheranostics.plots.plots import plot_tac_residuals
