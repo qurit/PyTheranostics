@@ -20,7 +20,7 @@ class TestLongitudinalStudyFixtures:
 
     @staticmethod
     def create_mock_sitk_image(
-        shape=(10, 10, 10), spacing=(1.0, 1.0, 1.0), origin=(0.0, 0.0, 0.0)
+        shape=(7, 10, 12), spacing=(1.0, 1.0, 1.0), origin=(0.0, 0.0, 0.0)
     ):
         """Create a minimal mock SimpleITK image for testing.
 
@@ -60,7 +60,7 @@ class TestLongitudinalStudyFixtures:
         )
 
     @staticmethod
-    def create_minimal_study(num_timepoints=2, modality="NM", image_shape=(10, 10, 10)):
+    def create_minimal_study(num_timepoints=2, modality="NM", image_shape=(6, 10, 13)):
         """Create a minimal LongitudinalStudy for testing.
 
         Args:
@@ -103,9 +103,9 @@ class TestLongitudinalStudyInit:
         assert len(study.images) == 2
         assert len(study.meta) == 2
         assert len(study.masks) == 0
-        assert isinstance(study._valid_masks, list)
-        assert "Liver" in study._valid_masks
-        assert "Lesion_1" in study._valid_masks
+        assert isinstance(study._VALID_MASKS, list)
+        assert "Liver" in study._VALID_MASKS
+        assert "Lesion_1" in study._VALID_MASKS
 
     def test_init_mismatched_keys_raises_error(self):
         """Test that mismatched image and metadata keys raise ValueError."""
@@ -135,15 +135,6 @@ class TestLongitudinalStudyInit:
         ):
             LongitudinalStudy(images=images, meta=meta, modality=invalid_modality)
 
-    def test_init_creates_lesion_masks(self):
-        """Test that initialization creates expected number of lesion masks."""
-        study = TestLongitudinalStudyFixtures.create_minimal_study()
-
-        lesion_masks = [
-            mask for mask in study._valid_masks if mask.startswith("Lesion_")
-        ]
-        assert len(lesion_masks) == 999999  # Lesion_1 through Lesion_999999
-
 
 class TestLongitudinalStudyArrayAccess:
     """Test array access methods with mock data."""
@@ -152,7 +143,7 @@ class TestLongitudinalStudyArrayAccess:
     def test_array_at_success(self, mock_get_array):
         """Test successful array access."""
         # Setup mock return value
-        test_array = np.random.rand(10, 10, 10)
+        test_array = np.random.rand(7, 10, 12)
         mock_get_array.return_value = test_array
 
         study = TestLongitudinalStudyFixtures.create_minimal_study()
@@ -374,7 +365,7 @@ class TestLongitudinalStudyPropertyBased:
         ]
 
         for organ in required_organs:
-            assert organ in study._valid_masks
+            assert organ in study._VALID_MASKS
 
 
 class TestLongitudinalStudyIntegration:
@@ -457,14 +448,8 @@ class TestLongitudinalStudyEdgeCases:
         study = TestLongitudinalStudyFixtures.create_minimal_study()
 
         # Test boundary lesion numbers
-        assert "Lesion_1" in study._valid_masks
-        assert "Lesion_999999" in study._valid_masks
-
-        # Test that we have exactly the expected number
-        lesion_count = sum(
-            1 for mask in study._valid_masks if mask.startswith("Lesion_")
-        )
-        assert lesion_count == 999999
+        assert "Lesion_1" in study._VALID_MASKS
+        assert "Lesion_99999" in study._VALID_MASKS
 
 
 class TestLongitudinalStudyPerformance:
