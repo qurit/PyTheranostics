@@ -126,3 +126,7 @@ filterwarnings = [
     "ignore:.*SwigPy.*:DeprecationWarning",
     "ignore:.*swigvar.*:DeprecationWarning",
 ]
+# Run smoke tests first and stop on first failure
+addopts = "--tb=short -x"
+# Test collection ordering: smoke tests first
+testpaths = ["tests"]
