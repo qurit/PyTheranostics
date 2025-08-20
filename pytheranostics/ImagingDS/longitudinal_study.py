@@ -20,6 +20,24 @@ class LongitudinalStudy:
     """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs
     /regions of interest and meta-data."""
 
+    # Mask mapping format:
+    _VALID_MASKS = [
+        "Kidney_Left",
+        "Kidney_Right",
+        "Liver",
+        "Spleen",
+        "Bladder",
+        "SubmandibularGland_Left",
+        "SubmandibularGland_Right",
+        "ParotidGland_Left",
+        "ParotidGland_Right",
+        "BoneMarrow",
+        "Skeleton",
+        "WholeBody",
+        "RemainderOfBody",
+        "TotalTumorBurden",
+    ] + [f"Lesion_{i}" for i in range(1, 100_000)]
+
     def __init__(
         self,
         images: Dict[int, SimpleITK.Image],
@@ -61,31 +79,11 @@ class LongitudinalStudy:
 
         self.modality = modality
         self.images = images
+        self.meta = meta
         self.masks: Dict[int, Dict[str, NDArray[numpy.bool_]]] = (
             {}
         )  # {time_id: {mask_name: array}}
 
-        self.meta = meta
-
-        # Mask mapping format:
-        self._valid_masks = [
-            "Kidney_Left",
-            "Kidney_Right",
-            "Liver",
-            "Spleen",
-            "Bladder",
-            "SubmandibularGland_Left",
-            "SubmandibularGland_Right",
-            "ParotidGland_Left",
-            "ParotidGland_Right",
-            "BoneMarrow",
-            "Skeleton",
-            "WholeBody",
-            "RemainderOfBody",
-            "TotalTumorBurden",
-        ]
-        lesion_masks = [f"Lesion_{i}" for i in range(1, 1000000)]
-        self._valid_masks.extend(lesion_masks)
         return None
 
     @classmethod
@@ -216,9 +214,9 @@ class LongitudinalStudy:
                     f"{mask_source} is not part of the available masks: {masks.keys()}"
                 )
 
-            if mask_target not in self._valid_masks:
+            if mask_target not in self._VALID_MASKS:
                 raise ValueError(
-                    f"{mask_target} is not a valid mask name. Please use one of: {self._valid_masks}"
+                    f"{mask_target} is not a valid mask name. Please use one of: {self._VALID_MASKS}"
                 )
 
             if mask_target in self.masks[time_id]:
