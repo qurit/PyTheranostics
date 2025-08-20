@@ -48,8 +48,13 @@ class LongitudinalStudy:
             of valid mask names for regions of interest including organs, glands, and lesions.
         """
 
-        # TODO Consistency checks: verify that all time points are present in images, masks and meta.
+        if images.keys() != meta.keys():
+            raise ValueError(
+                "Not all time points have corresponding images and metadata."
+            )
+
         # TODO Consistency checks: verify that there are no missing masks across time points.
+        # NOTE: Such consistency would involve running add_mask_to_time_point() in __init__
 
         if modality not in ["NM", "PT", "CT", "DOSE"]:
             raise ValueError(f"Modality {modality} is not supported.")
@@ -146,18 +151,36 @@ class LongitudinalStudy:
     def array_of_activity_at(
         self, time_id: int, region: Optional[str] = None
     ) -> NDArray[Any]:
-        """Returns the array in units of activity in Bq, with the posibility of masking out for one specific region."""
+        """Returns the array in units of activity in Bq, with the posibility of masking
+        out for one specific region."""
         if self.modality not in ["NM", "PT"]:
-            raise AssertionError(
-                f"Activity can't be calculated from {self.modality} data."
-            )
+            raise ValueError(f"Activity can't be calculated from {self.modality} data.")
+
+        if time_id not in self.images:
+            raise ValueError(f"Time ID {time_id} not found in dataset.")
 
         array = self.array_at(time_id=time_id)
-        mask = (
-            self.masks[time_id][region]
-            if region is not None
-            else numpy.ones(shape=array.shape, dtype=numpy.int8)
-        )
+
+        if region is None:
+            mask = numpy.ones(shape=array.shape, dtype=numpy.bool_)
+        else:
+            if time_id not in self.masks:
+                raise ValueError(
+                    f"Time ID {time_id} does not include mask data. Did you run "
+                    "add_masks_to_time_point()?"
+                )
+            if region not in self.masks[time_id]:
+                available_regions = list(self.masks[time_id].keys())
+                raise ValueError(
+                    f"Region {region} not found in masks for time ID {time_id}. "
+                    f"Available regions: {available_regions}"
+                )
+            if self.masks[time_id][region].shape != array.shape:
+                raise ValueError(
+                    f"Mask shape {self.masks[time_id][region].shape} doesn't match "
+                    f"array shape {array.shape} for time ID {time_id}"
+                )
+            mask = self.masks[time_id][region]
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
@@ -203,15 +226,18 @@ class LongitudinalStudy:
                     f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!"
                 )
 
-            # Masks are in the right orientation and spacing, however there could be discrepancies in array
-            # shapes (reason, unknown). We resample to ensure shapes between image and masks are consistent TODO: Fix.
+            # Masks are in the right orientation and spacing, however there could be discrepancies
+            # in array shapes (reason, unknown). We resample to ensure shapes between image and
+            # masks are consistent.
+            # TODO: Fix.
             mask_ = resample_mask_to_target(
                 mask_img=masks[mask_source], target_img=self.images[time_id]
             )
 
-            self.masks[time_id][mask_target] = numpy.transpose(
+            mask_array = numpy.transpose(
                 SimpleITK.GetArrayFromImage(mask_), axes=(1, 2, 0)
             )
+            self.masks[time_id][mask_target] = mask_array.astype(numpy.bool_)
 
         return None
 
