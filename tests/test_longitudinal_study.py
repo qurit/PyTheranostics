@@ -103,9 +103,9 @@ class TestLongitudinalStudyInit:
         assert len(study.images) == 2
         assert len(study.meta) == 2
         assert len(study.masks) == 0
-        assert isinstance(study._VALID_MASKS, list)
-        assert "Liver" in study._VALID_MASKS
-        assert "Lesion_1" in study._VALID_MASKS
+        assert isinstance(study._VALID_ORGAN_NAMES, list)
+        assert "Liver" in study._VALID_ORGAN_NAMES
+        assert LongitudinalStudy._is_valid_mask_name("Lesion_1")
 
     def test_init_mismatched_keys_raises_error(self):
         """Test that mismatched image and metadata keys raise ValueError."""
@@ -349,23 +349,51 @@ class TestLongitudinalStudyPropertyBased:
             expected_shape = (shape[1], shape[0], shape[2])
             assert result.shape == expected_shape
 
-    def test_mask_validation_completeness(self):
-        """Property: all standard organ masks should be in valid_masks."""
-        study = TestLongitudinalStudyFixtures.create_minimal_study()
+    @pytest.mark.parametrize(
+        "mask_name,expected",
+        [
+            # Valid organ names
+            ("Liver", True),
+            ("Spleen", True),
+            ("Kidney_Left", True),
+            ("Kidney_Right", True),
+            ("Bladder", True),
+            ("BoneMarrow", True),
+            ("WholeBody", True),
+            # Valid lesion formats
+            ("Lesion_1", True),
+            ("Lesion_42", True),
+            ("Lesion_99999", True),
+            # Invalid formats
+            ("lesion_1", False),  # lowercase
+            ("LESION_1", False),  # uppercase
+            ("leSIon_1", False),  # mixed case
+            ("Lesion_0", False),  # zero not allowed
+            ("Lesion_01", False),  # leading zero
+            ("Lesion_", False),  # missing number
+            ("Lesion_a", False),  # non-numeric
+            ("Lesion_1a", False),  # mixed alphanumeric
+            ("Lesion 1", False),  # space instead of underscore
+            ("Lesion-1", False),  # hyphen instead of underscore
+            # Edge cases
+            ("", False),  # empty string
+            ("Kidneys", False),  # not in valid list (plural vs Kidney_Left/Right)
+            ("Lungs", False),  # not in valid list
+            ("Tumor", False),  # not in valid list (use TotalTumorBurden or Lesion_N)
+            ("Background", False),  # not in valid list
+            ("Unknown", False),  # not in valid list
+            ("Random", False),  # not in valid list
+            ("Lesion_-1", False),  # negative number
+        ],
+    )
+    def test_mask_validation(self, mask_name, expected):
+        """Test comprehensive mask name validation patterns."""
+        from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
 
-        required_organs = [
-            "Kidney_Left",
-            "Kidney_Right",
-            "Liver",
-            "Spleen",
-            "Bladder",
-            "BoneMarrow",
-            "Skeleton",
-            "WholeBody",
-        ]
-
-        for organ in required_organs:
-            assert organ in study._VALID_MASKS
+        result = LongitudinalStudy._is_valid_mask_name(mask_name)
+        assert (
+            result == expected
+        ), f"Expected {mask_name} to be {expected}, got {result}"
 
 
 class TestLongitudinalStudyIntegration:
@@ -442,14 +470,6 @@ class TestLongitudinalStudyEdgeCases:
         # Should return array of all zeros
         assert np.all(result == 0)
         assert result.shape == (10, 10, 10)
-
-    def test_lesion_numbering_edge_cases(self):
-        """Test that lesion numbering works for edge cases."""
-        study = TestLongitudinalStudyFixtures.create_minimal_study()
-
-        # Test boundary lesion numbers
-        assert "Lesion_1" in study._VALID_MASKS
-        assert "Lesion_99999" in study._VALID_MASKS
 
 
 class TestLongitudinalStudyPerformance:
