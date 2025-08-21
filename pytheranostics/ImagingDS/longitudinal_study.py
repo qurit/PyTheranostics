@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -20,8 +21,7 @@ class LongitudinalStudy:
     """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs
     /regions of interest and meta-data."""
 
-    # Mask mapping format:
-    _VALID_MASKS = [
+    _VALID_ORGAN_NAMES = [
         "Kidney_Left",
         "Kidney_Right",
         "Liver",
@@ -36,7 +36,7 @@ class LongitudinalStudy:
         "WholeBody",
         "RemainderOfBody",
         "TotalTumorBurden",
-    ] + [f"Lesion_{i}" for i in range(1, 100_000)]
+    ]
 
     def __init__(
         self,
@@ -139,6 +139,19 @@ class LongitudinalStudy:
             modality=internal_modality,
         )
 
+    @staticmethod
+    def _is_valid_mask_name(mask_name: str) -> bool:
+        """Check if a mask name is valid.
+
+        Valid names are either:
+        - Standard organ names from _VALID_ORGAN_NAMES
+        - Lesion names in format 'Lesion_N' where N is a positive integer
+        """
+        if mask_name in LongitudinalStudy._VALID_ORGAN_NAMES:
+            return True
+        lesion_pattern = r"^Lesion_([1-9]\d*)$"
+        return bool(re.match(lesion_pattern, mask_name))
+
     def array_at(self, time_id: int) -> NDArray[Any]:
         """Access Array Data"""
         return numpy.transpose(
@@ -214,9 +227,10 @@ class LongitudinalStudy:
                     f"{mask_source} is not part of the available masks: {masks.keys()}"
                 )
 
-            if mask_target not in self._VALID_MASKS:
+            if not self._is_valid_mask_name(mask_target):
                 raise ValueError(
-                    f"{mask_target} is not a valid mask name. Please use one of: {self._VALID_MASKS}"
+                    f"{mask_target} is not a valid mask name. Please use one of: "
+                    f"\n{self._VALID_ORGAN_NAMES}\nor 'Lesion_N' where N is a positive integer."
                 )
 
             if mask_target in self.masks[time_id]:
