@@ -90,17 +90,21 @@ exclude = '''
 # See: https://github.com/PyCQA/flake8/issues/234
 
 [tool.mypy]
-# Development-friendly mypy configuration
-# For focused development, use: mypy --ignore-missing-imports file.py
+# Very strict mypy configuration for high-quality type checking
 python_version = "3.8"
-warn_return_any = false
+follow_imports = "skip"  # Avoid optype internal error in dependencies
+strict = true
+warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false  # Set to true once codebase has more type annotations
-ignore_missing_imports = true  # Ignore third-party libraries without types
-follow_imports = "normal"      # Change to "skip" for faster, focused checking
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+# Display settings
 show_error_codes = true
 pretty = true
-
+error_summary = true
 # Exclude data and build directories
 exclude = [
     "pytheranostics/data/",
@@ -109,6 +113,9 @@ exclude = [
     ".venv/",
     ".mypy_cache/",
 ]
+
+[tool.isort]
+profile = "black"
 
 [tool.pytest.ini_options]
 markers = [
@@ -119,3 +126,7 @@ filterwarnings = [
     "ignore:.*SwigPy.*:DeprecationWarning",
     "ignore:.*swigvar.*:DeprecationWarning",
 ]
+# Run smoke tests first and stop on first failure
+addopts = "--tb=short -x"
+# Test collection ordering: smoke tests first
+testpaths = ["tests"]
