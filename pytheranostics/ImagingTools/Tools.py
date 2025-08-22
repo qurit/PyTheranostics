@@ -1,6 +1,6 @@
 import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy
 import pydicom
@@ -9,18 +9,17 @@ from rt_utils import RTStructBuilder
 from SimpleITK import Image
 
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
+from pytheranostics.ImagingDS.metadata import ImagingMetadata
 from pytheranostics.registration.CTtoSPECT import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
 )
 
-MetaDataType = Dict[str, Any]  # This could be improved ...
-
 # TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
 # the code below)
 
 
-def load_metadata(dir: str, modality: str) -> MetaDataType:
+def load_metadata(dir: str, modality: str) -> ImagingMetadata:
     """Loads relevant meta-data from a dicom dataset.
 
     Args:
@@ -34,7 +33,7 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
         ValueError: _description_
 
     Returns:
-        MetaDataType: _description_
+        ImagingMetaData: _description_
     """
 
     dicom_slices = [
@@ -44,8 +43,8 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
     if len(dicom_slices) == 0:
         raise AssertionError(f"No Dicom data was found under {dir}")
 
-    radionuclide = "N/A"
-    injected_activity = "N/A"
+    radionuclide = None
+    injected_activity = None
 
     if modality == "CT":
         dicom_slices = [f for f in dicom_slices if hasattr(f, "SliceLocation")]
@@ -83,18 +82,19 @@ def load_metadata(dir: str, modality: str) -> MetaDataType:
             print(
                 "Injected activity not found in DICOM header. Using default: 7400 MBq"
             )
-            injected_activity = 7400
+            injected_activity = 7400.0
 
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
-    meta = {
-        "AcquisitionDate": slice_.AcquisitionDate,
-        "AcquisitionTime": slice_.AcquisitionTime,
-        "PatientID": slice_.PatientID,
-        "Radionuclide": radionuclide,
-        "Injected_Activity_MBq": injected_activity,
-    }
+    meta = ImagingMetadata(
+        PatientID=slice_.PatientID,
+        AcquisitionDate=slice_.AcquisitionDate,
+        AcquisitionTime=slice_.AcquisitionTime,
+        HoursAfterInjection=None,
+        Radionuclide=radionuclide,
+        Injected_Activity_MBq=injected_activity,
+    )
 
     return meta
 
@@ -320,7 +320,7 @@ def squeeze_sitk_image_dimension(
 
 def load_from_dicom_dir(
     dir: str, modality: str, calibration_factor: Optional[float] = None
-) -> Tuple[Image, MetaDataType]:
+) -> Tuple[Image, ImagingMetadata]:
     """Load CT or SPECT data from DICOM files in the specified folder.
     Returns the Image object and some relevant metadata.
 
@@ -329,7 +329,7 @@ def load_from_dicom_dir(
         modality (str): _description_
         calibration_factor (str, optional): Factor to scale SPECT voxel values (e.g., could be SPECT calibration Factor in BQ/CPS or dimensionless factor)
     Returns:
-        Tuple[Image, MetaDataType]: _description_
+        Tuple[Image, ImagingMetadata]: _description_
     """
     # Read image content and spatial information using SimpleITK
     image = sitk_load_dcm_series(dcm_dir=Path(dir))

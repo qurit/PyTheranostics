@@ -120,7 +120,7 @@ class VoxelSDosimetry(BaseDosimetry):
         nm_voxel_mm = self.nm_data.images[ref_time_id].GetSpacing()[0]
 
         dose_kernel = DoseVoxelKernel(
-            isotope=self.nm_data.meta[0]["Radionuclide"], voxel_size_mm=nm_voxel_mm
+            isotope=self.nm_data.meta[0].Radionuclide, voxel_size_mm=nm_voxel_mm
         )
 
         # Resample CT to NM (Default using linear interpolator)
