@@ -1,10 +1,11 @@
 import os
+import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy
 import SimpleITK
-from SimpleITK import Image
+from numpy.typing import NDArray
 
 from pytheranostics.ImagingDS.metadata import ImagingMetadata
 from pytheranostics.ImagingTools.Tools import (
@@ -20,53 +21,138 @@ class LongitudinalStudy:
     """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs
     /regions of interest and meta-data."""
 
+    _VALID_ORGAN_NAMES = [
+        "Kidney_Left",
+        "Kidney_Right",
+        "Liver",
+        "Spleen",
+        "Bladder",
+        "SubmandibularGland_Left",
+        "SubmandibularGland_Right",
+        "ParotidGland_Left",
+        "ParotidGland_Right",
+        "BoneMarrow",
+        "Skeleton",
+        "WholeBody",
+        "RemainderOfBody",
+        "TotalTumorBurden",
+    ]
+
     def __init__(
         self,
         images: Dict[int, SimpleITK.Image],
         meta: Dict[int, ImagingMetadata],
         modality: str = "NM",
     ) -> None:
-        """
-        images: Dictionary of (time-point ID, numpy array) representing CT or quantitative nuclear medicine images.
-        meta: Dictionary of (time-point ID, ImagingMetadata dataclass) representing meta-data for each time point.
+        """Initialize a LongitudinalStudy instance.
+
+        Args:
+            images (Dict[int, SimpleITK.Image]): Dictionary of (time-point ID, SimpleITK.Image)
+                representing CT or quantitative nuclear medicine images for each time point
+                in the longitudinal study.
+            meta (Dict[int, ImagingMetadata]): Dictionary of (time-point ID, ImagingMetadata)
+                representing metadata for each time point, containing acquisition details
+                and radionuclide information.
+            modality (str, optional): The imaging modality type. Supported values are "NM"
+                (Nuclear Medicine), "PT" (PET), "CT", or "DOSE". Defaults to "NM".
+
+        Raises:
+            ValueError: If the specified modality is not one of the supported values:
+                "NM", "PT", "CT", or "DOSE".
+
+        Note:
+            The constructor initializes an empty masks dictionary that can be populated later
+            using the `add_masks_to_time_point` method. It also defines a comprehensive list
+            of valid mask names for regions of interest including organs, glands, and lesions.
         """
 
-        # TODO Consistency checks: verify that all time points are present in images, masks and meta.
+        if images.keys() != meta.keys():
+            raise ValueError(
+                "Not all time points have corresponding images and metadata."
+            )
+
         # TODO Consistency checks: verify that there are no missing masks across time points.
+        # NOTE: Such consistency would involve running add_mask_to_time_point() in __init__
 
         if modality not in ["NM", "PT", "CT", "DOSE"]:
             raise ValueError(f"Modality {modality} is not supported.")
 
         self.modality = modality
         self.images = images
-        self.masks: Dict[int, Dict[str, numpy.ndarray]] = (
+        self.meta = meta
+        self.masks: Dict[int, Dict[str, NDArray[numpy.bool_]]] = (
             {}
         )  # {time_id: {mask_name: array}}
 
-        self.meta = meta
-
-        # Mask mapping format:
-        self._valid_masks = [
-            "Kidney_Left",
-            "Kidney_Right",
-            "Liver",
-            "Spleen",
-            "Bladder",
-            "SubmandibularGland_Left",
-            "SubmandibularGland_Right",
-            "ParotidGland_Left",
-            "ParotidGland_Right",
-            "BoneMarrow",
-            "Skeleton",
-            "WholeBody",
-            "RemainderOfBody",
-            "TotalTumorBurden",
-        ]
-        lesion_masks = [f"Lesion_{i}" for i in range(1, 1000000)]
-        self._valid_masks.extend(lesion_masks)
         return None
 
-    def array_at(self, time_id: int) -> numpy.ndarray:
+    @classmethod
+    def from_dicom(
+        cls,
+        dicom_dirs: List[str],
+        modality: str = "CT",
+        calibration_factor: Optional[float] = None,
+    ) -> "LongitudinalStudy":
+        """Create a LongitudinalStudy object from a list of DICOM directories.
+
+        Currently assumes the order of the list corresponds to the order of the time points.
+
+        Args:
+            dicom_dirs (List[str]): List of paths to DICOM directories, each containing
+                images for one time point in the longitudinal study.
+            modality (str, optional): The imaging modality. Supported values are "CT"
+                and "Lu177_SPECT". Defaults to "CT".
+            calibration_factor (float, optional): Converts reconstructed SPECT image
+                (raw counts * num_proj) to units of Bq/mL. Defaults to None.
+
+        Returns:
+            LongitudinalStudy: A new LongitudinalStudy instance containing the loaded
+                DICOM data organized by time points.
+
+        Raises:
+            ValueError: If the specified modality is not supported.
+        """
+        # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
+        supported_modalities = {
+            "CT": "CT",
+            "Lu177_SPECT": "NM",
+        }
+        if modality not in supported_modalities.keys():
+            raise ValueError(
+                f"Modality '{modality}' not supported. Currently, the following modalities are supported: {list(supported_modalities.keys())}"
+            )
+        internal_modality = supported_modalities[modality]
+
+        images: Dict[int, SimpleITK.Image] = {}
+        metadata: Dict[int, ImagingMetadata] = {}
+
+        for time_id, dicom_dir in enumerate(dicom_dirs):
+            image, meta = load_from_dicom_dir(
+                dir=dicom_dir, modality=modality, calibration_factor=calibration_factor
+            )
+            images[time_id] = image
+            metadata[time_id] = meta
+
+        return cls(
+            images=images,
+            meta=metadata,
+            modality=internal_modality,
+        )
+
+    @staticmethod
+    def _is_valid_mask_name(mask_name: str) -> bool:
+        """Check if a mask name is valid.
+
+        Valid names are either:
+        - Standard organ names from _VALID_ORGAN_NAMES
+        - Lesion names in format 'Lesion_N' where N is a positive integer
+        """
+        if mask_name in LongitudinalStudy._VALID_ORGAN_NAMES:
+            return True
+        lesion_pattern = r"^Lesion_([1-9]\d*)$"
+        return bool(re.match(lesion_pattern, mask_name))
+
+    def array_at(self, time_id: int) -> NDArray[Any]:
         """Access Array Data"""
         return numpy.transpose(
             numpy.squeeze(SimpleITK.GetArrayFromImage(self.images[time_id])),
@@ -75,19 +161,37 @@ class LongitudinalStudy:
 
     def array_of_activity_at(
         self, time_id: int, region: Optional[str] = None
-    ) -> numpy.ndarray:
-        """Returns the array in units of activity in Bq, with the posibility of masking out for one specific region."""
+    ) -> NDArray[Any]:
+        """Returns the array in units of activity in Bq, with the posibility of masking
+        out for one specific region."""
         if self.modality not in ["NM", "PT"]:
-            raise AssertionError(
-                f"Activity can't be calculated from {self.modality} data."
-            )
+            raise ValueError(f"Activity can't be calculated from {self.modality} data.")
+
+        if time_id not in self.images:
+            raise ValueError(f"Time ID {time_id} not found in dataset.")
 
         array = self.array_at(time_id=time_id)
-        mask = (
-            self.masks[time_id][region]
-            if region is not None
-            else numpy.ones(shape=array.shape, dtype=numpy.int8)
-        )
+
+        if region is None:
+            mask = numpy.ones(shape=array.shape, dtype=numpy.bool_)
+        else:
+            if time_id not in self.masks:
+                raise ValueError(
+                    f"Time ID {time_id} does not include mask data. Did you run "
+                    "add_masks_to_time_point()?"
+                )
+            if region not in self.masks[time_id]:
+                available_regions = list(self.masks[time_id].keys())
+                raise ValueError(
+                    f"Region {region} not found in masks for time ID {time_id}. "
+                    f"Available regions: {available_regions}"
+                )
+            if self.masks[time_id][region].shape != array.shape:
+                raise ValueError(
+                    f"Mask shape {self.masks[time_id][region].shape} doesn't match "
+                    f"array shape {array.shape} for time ID {time_id}"
+                )
+            mask = self.masks[time_id][region]
 
         return array * mask * self.voxel_volume(time_id=time_id)
 
@@ -123,9 +227,10 @@ class LongitudinalStudy:
                     f"{mask_source} is not part of the available masks: {masks.keys()}"
                 )
 
-            if mask_target not in self._valid_masks:
+            if not self._is_valid_mask_name(mask_target):
                 raise ValueError(
-                    f"{mask_target} is not a valid mask name. Please use one of: {self._valid_masks}"
+                    f"{mask_target} is not a valid mask name. Please use one of: "
+                    f"\n{self._VALID_ORGAN_NAMES}\nor 'Lesion_N' where N is a positive integer."
                 )
 
             if mask_target in self.masks[time_id]:
@@ -133,15 +238,18 @@ class LongitudinalStudy:
                     f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!"
                 )
 
-            # Masks are in the right orientation and spacing, however there could be discrepancies in array
-            # shapes (reason, unknown). We resample to ensure shapes between image and masks are consistent TODO: Fix.
+            # Masks are in the right orientation and spacing, however there could be discrepancies
+            # in array shapes (reason, unknown). We resample to ensure shapes between image and
+            # masks are consistent.
+            # TODO: Fix.
             mask_ = resample_mask_to_target(
                 mask_img=masks[mask_source], target_img=self.images[time_id]
             )
 
-            self.masks[time_id][mask_target] = numpy.transpose(
+            mask_array = numpy.transpose(
                 SimpleITK.GetArrayFromImage(mask_), axes=(1, 2, 0)
             )
+            self.masks[time_id][mask_target] = mask_array.astype(numpy.bool_)
 
         return None
 
@@ -166,14 +274,14 @@ class LongitudinalStudy:
 
     def density_of(self, region: str, time_id: int) -> float:
         """Returns the mean density of region of interest, in HU"""
-        return numpy.mean(
-            self.array_at(time_id=time_id)[self.masks[time_id][region] > 0]
+        return float(
+            numpy.mean(self.array_at(time_id=time_id)[self.masks[time_id][region] > 0])
         )
 
     def voxel_volume(self, time_id: int) -> float:
         """Returns the volume of a voxel in mL"""
         spacing = self.images[time_id].GetSpacing()
-        return spacing[0] / 10 * spacing[1] / 10 * spacing[2] / 10
+        return float(spacing[0] / 10 * spacing[1] / 10 * spacing[2] / 10)
 
     def average_of(self, region: str, time_id: int) -> float:
         """_summary_
@@ -185,8 +293,8 @@ class LongitudinalStudy:
         Returns:
             float: _description_
         """
-        return numpy.average(
-            self.array_at(time_id=time_id)[self.masks[time_id][region]]
+        return float(
+            numpy.average(self.array_at(time_id=time_id)[self.masks[time_id][region]])
         )
 
     def add_bone_marrow_mask_from_phantom(
@@ -352,41 +460,3 @@ class LongitudinalStudy:
         )
 
         return None
-
-
-# TODO: Find the proper placement. Currently here to avoid circular imports. Consider making it part of the init class.
-def create_logitudinal_from_dicom(
-    dicom_dirs: List[str],
-    modality: str = "CT",
-    calibration_factor: Optional[float] = None,
-) -> LongitudinalStudy:
-    """Creates a LongitudinalStudy object from a list of dicom dirs. Currently it assumes the order of the list
-    corresponds to the order of the time points.
-
-    Args:
-        dicom_dirs (List[str]): _description_
-        modality (str, optional): _description_. Defaults to "CT".
-        calibration_factor (float, optional): Converts reconstructed SPECT image (raw counts * num_proj) to units of Bq / mL. Defatuls to 1.
-    Returns:
-        LongitudinalStudy: _description_
-    """
-    # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
-    mod_supported = ["CT", "Lu177_SPECT"]
-    if modality not in mod_supported:
-        raise NotImplementedError(
-            f"{modality} not supported. Currently, the following  modalities are supported: {mod_supported}"
-        )
-
-    images: Dict[int, Image] = {}
-    metadata: Dict[int, ImagingMetadata] = {}
-
-    for time_id, dir in enumerate(dicom_dirs):
-        image, meta = load_from_dicom_dir(
-            dir=dir, modality=modality, calibration_factor=calibration_factor
-        )
-        images[time_id] = image
-        metadata[time_id] = meta
-
-    return LongitudinalStudy(
-        images=images, meta=metadata, modality=modality if modality == "CT" else "NM"
-    )
