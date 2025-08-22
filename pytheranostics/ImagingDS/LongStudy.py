@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import numpy
 import SimpleITK
 from SimpleITK import Image
 
+from pytheranostics.ImagingDS.metadata import ImagingMetadata
 from pytheranostics.ImagingTools.Tools import (
     itk_image_from_array,
     jaccard_index,
@@ -13,8 +14,6 @@ from pytheranostics.ImagingTools.Tools import (
     resample_mask_to_target,
 )
 from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
-
-MetaDataType = Dict[int, Dict[str, Any]]
 
 
 class LongitudinalStudy:
@@ -24,12 +23,12 @@ class LongitudinalStudy:
     def __init__(
         self,
         images: Dict[int, SimpleITK.Image],
-        meta: Dict[int, MetaDataType],
+        meta: Dict[int, ImagingMetadata],
         modality: str = "NM",
     ) -> None:
         """
         images: Dictionary of (time-point ID, numpy array) representing CT or quantitative nuclear medicine images.
-        meta: Dictionary of (time-point ID, Dictionary of meta-data) representing meta-data for each time point.
+        meta: Dictionary of (time-point ID, ImagingMetadata dataclass) representing meta-data for each time point.
         """
 
         # TODO Consistency checks: verify that all time points are present in images, masks and meta.
@@ -155,10 +154,7 @@ class LongitudinalStudy:
     def activity_in(self, region: str, time_id: int) -> float:
         """Returns the activity within a region of interest. The units of the nuclear medicine data
         should be Bq/mL."""
-        if self.meta[time_id]["Radionuclide"] == "N/A" or self.modality not in [
-            "NM",
-            "PT",
-        ]:
+        if self.meta[time_id].Radionuclide is None or self.modality not in ["NM", "PT"]:
             raise AssertionError(
                 "Can't compute activity if the image data does not represent the distribution of a radionuclide"
             )
@@ -382,7 +378,7 @@ def create_logitudinal_from_dicom(
         )
 
     images: Dict[int, Image] = {}
-    metadata: Dict[int, MetaDataType] = {}
+    metadata: Dict[int, ImagingMetadata] = {}
 
     for time_id, dir in enumerate(dicom_dirs):
         image, meta = load_from_dicom_dir(

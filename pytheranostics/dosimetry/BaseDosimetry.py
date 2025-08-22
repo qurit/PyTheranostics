@@ -241,7 +241,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
             # Time (relative to time of injection, in hours)
             tmp_results[roi_name].append(
-                [self.nm_data.meta[time_id]["Time"] for time_id in time_ids]
+                [self.nm_data.meta[time_id].HoursAfterInjection for time_id in time_ids]
             )
 
             # Volume (from CT, in mL)
@@ -310,15 +310,15 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         with open(rad_data_path, "r") as rad_data:
             radionuclide_data = json.load(rad_data)
 
-        if "Radionuclide" not in self.nm_data.meta[0]:
+        if self.nm_data.meta[0].Radionuclide is None:
             raise ValueError("Nuclear Medicine Data missing radionuclide")
 
-        if self.nm_data.meta[0]["Radionuclide"] not in radionuclide_data:
+        if self.nm_data.meta[0].Radionuclide not in radionuclide_data:
             raise ValueError(
-                f"Data for {self.nm_data.meta['Radionuclide']} is not available."
+                f"Data for {self.nm_data.meta[0].Radionuclide} is not available."
             )
 
-        return radionuclide_data[self.nm_data.meta[0]["Radionuclide"]]
+        return radionuclide_data[self.nm_data.meta[0].Radionuclide]
 
     def check_patient_in_db(self) -> None:
         """Check if prior dosimetry exists for this patient"""
@@ -582,10 +582,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def normalize_time_to_injection(self, time_id: int) -> None:
         """Express acquisition time corresponding to time_id in terms of injection time"""
 
-        acq_time = f"{self.nm_data.meta[time_id]['AcquisitionDate']} {self.nm_data.meta[time_id]['AcquisitionTime']}"
+        acq_time = f"{self.nm_data.meta[time_id].AcquisitionDate} {self.nm_data.meta[time_id].AcquisitionTime}"
         inj_time = f"{self.config['InjectionDate']} {self.config['InjectionTime']}"
 
-        self.nm_data.meta[time_id]["Time"] = calculate_time_difference(
+        self.nm_data.meta[time_id].HoursAfterInjection = calculate_time_difference(
             date_str1=acq_time, date_str2=inj_time
         )
 

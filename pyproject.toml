@@ -17,6 +17,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+# NOTE: When updating dependencies, also update .pre-commit-config.yaml pytest hook
 dependencies = [
     "numpy",
     "matplotlib",
