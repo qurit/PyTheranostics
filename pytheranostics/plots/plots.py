@@ -50,8 +50,9 @@ def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
 
     plt.tight_layout()
 
-def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, x_label: str = "Time [hr]",
-                       y_label: str = "Activity [MBq]", output_dir: Optional[Path] = None) -> None:
+def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, cycle: int,  x_label: str = "Time [hr]",
+                       y_label: str = "Activity [MBq]", output_dir: Optional[Path] = None,
+                       ) -> None:
     """Plot Time activity curve and residuals.
 
     Parameters
@@ -93,7 +94,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, x_label: st
     else:
         weights = None
     # Generate x-values for plotting the fitted model starting from x=0
-    x_fit = numpy.linspace(0, x_data[-1] * 2, 500)
+    x_fit = numpy.linspace(0, x_data[-1] * 3, 500)
     y_fit = result.eval(x=x_fit)
 
     # First subplot: Linear scale plot
@@ -103,7 +104,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, x_label: st
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color='red')
     ax1.set_xlim(left=0)  # Start x-axis from zero
-    ax1.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
+    ax1.set_xlim(right = x_data[-1] * 3)  # Start y-axis from zero
     ax1.set_ylim(bottom=0)  # Start y-axis from zero
     ax1.set_title(region)
     ax1.set_xlabel(x_label)
@@ -141,7 +142,7 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, x_label: st
     ax3.set_ylabel("Residuals")
 
     if output_dir is not None:
-        plt.savefig(output_dir / f"{region}_fit.pdf", format="pdf", bbox_inches="tight")
+        plt.savefig(output_dir / f"{region}_fit_Cycle_0{cycle}.png", format="png", bbox_inches="tight", dpi=300)
 
     plt.show()
         
