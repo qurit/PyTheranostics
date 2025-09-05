@@ -335,7 +335,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             
             fit_results = self.smart_fit_selection(region_data=region_data, region=region)
 
-            plot_tac_residuals(result=fit_results, region=region, output_dir=self.db_dir)
+            plot_tac_residuals(result=fit_results, region=region, cycle = self.config["Cycle"], output_dir=self.db_dir)
             
             # Parameters for sum of exponential functions:
             fit_params = [fit_results.params[param].value for param in fit_results.params.keys()]  # A1, B1, A2, B2, ...
@@ -530,6 +530,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
          and 177Lu-DOTATATE: the role of associated risk factors"
          biexp   
         """
+        print("Calculating BED for Kidneys")
         this_dir=Path(__file__).resolve().parent.parent
         RADIOBIOLOGY_DATA_FILE = Path(this_dir,"data","radiobiology.json")
         with open(RADIOBIOLOGY_DATA_FILE) as f:
@@ -542,34 +543,21 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             t_repair = self.radiobiology_dic[organ]['t_repair']
             alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
             AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
-            if self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == False:
-                if kinetic == 'monoexp':
-                    t_eff = numpy.log(2) / ((self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1])/2)
-                    bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
-                elif kinetic == 'biexp':
-                    mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
-                    mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
-                    t_washout = numpy.log(2) /  mean_lambda_washout
-                    t_uptake = numpy.log(2) /  mean_lambda_uptake
-                    bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
-                                  ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
-                                  (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
-                print(f'{organ}', bed[organ])
-        
-            elif self.config["rois"]["Kidney_Left"]["apply_biokinetics_from_previous_cycle"] == True:
-                if kinetic == 'monoexp':
-                    t_eff = numpy.log(2) /(( self.config["rois"]["Kidney_Left"]["fixed_parameters"][0] +  self.config["rois"]["Kidney_Right"]["fixed_parameters"][0] )/2)
-                    bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
-                elif kinetic == 'biexp':
-                    mean_lambda_washout = (self.config["rois"]['Kidney_Left']["fixed_parameters"][0] + self.config["rois"]['Kidney_Right']["fixed_parameters"][0]) / 2
-                    mean_lambda_uptake = (self.config["rois"]['Kidney_Left']["fixed_parameters"][1] + self.config["rois"]['Kidney_Right']["fixed_parameters"][1]) / 2
-                    t_washout = numpy.log(2) /  mean_lambda_washout
-                    t_uptake = numpy.log(2) /  mean_lambda_uptake
-                    bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
-                                  ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
-                                  (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
             
-                print(f'{organ}', bed[organ])                          
+            if kinetic == 'monoexp':
+                t_eff = numpy.log(2) / ((self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1])/2)
+                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
+            elif kinetic == 'biexp':
+                mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
+                mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
+                t_washout = numpy.log(2) /  mean_lambda_washout
+                t_uptake = numpy.log(2) /  mean_lambda_uptake
+                bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
+                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
+                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
+            print(f'{organ}', bed[organ])
+        
+                       
         self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
 
     def save_images_and_masks_at(self, time_id: int) -> None:
@@ -585,14 +573,32 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         
         return None
     
-    def write_json_data(self, file_path):
+    def write_json_data(self, file_path, 
+                        InstitutionName: str,
+                        ClinicalTrial: str,
+                        Radionuclide: str,
+                        create_new: bool = True
+                        ) -> None:
         
+        """Writes dosimetry results to a JSON file.
+        If create_new is True, a new JSON file is created. If False, existing data is updated, usually used to add results from subseqent cycles.
+        Args:
+            file_path (str): Path to the JSON file.
+            create_new (bool): Whether to create a new file or update existing data.
+        """
+
         # Open empty json to load its structure:
-        empty_json_path = path.dirname(__file__) + f"/../data/output.json"
-        with open(empty_json_path, 'r') as file:
+        if create_new:
+            json_path = path.dirname(__file__) + f"/../data/output.json"
+        else:
+            json_path = file_path
+        with open(json_path, 'r') as file:
             data = json.load(file)
             
         data["PatientID"] = self.config["PatientID"]
+        data["InstitutionName"] = InstitutionName
+        data["ClinicalTrial"] = ClinicalTrial
+        data["Radionuclide"] = Radionuclide
         data["Gender"] = self.config["Gender"]
         data["No_of_completed_cycles"] = self.config["Cycle"]
 
@@ -610,7 +616,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         cycle["InjectionDate"] = self.config["InjectionDate"]
         cycle["InjectionTime"] = self.config["InjectionTime"]
         cycle["InjectedActivity"] = self.config["InjectedActivity"]
-        cycle["ApplyBiokineticsFromPreviousCycle"] = self.config.get("ApplyBiokineticsFromPreviousCycle", cycle.get("ApplyBiokineticsFromPreviousCycle", "NA"))
+        cycle["Weight_g"] = self.config["PatientWeight_g"]
         cycle["Level"] = self.config["Level"]
         cycle["Method"] = self.config["Method"]
         cycle["OutputFormat"] = self.config["OutputFormat"]
