@@ -190,11 +190,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             print("No Reference Time point was given. Assigning time ID = 0")
             self.config["ReferenceTimePoint"] = 0
         
-        if "WholeBody" not in self.config["rois"]:
-            raise ValueError("Missing 'WholeBody' region parameters.")
-        
-        if "RemainderOfBody" not in self.config["rois"]:
-            raise ValueError("Missing 'RemainderOfBody' region parameters.")
+        if "Organ" in self.config["Level"]:
+            if "WholeBody" not in self.config["rois"]:
+                raise ValueError("Missing 'WholeBody' region parameters.")
+
+            if "RemainderOfBody" not in self.config["rois"]:
+                raise ValueError("Missing 'RemainderOfBody' region parameters.")
         
         return None
     
@@ -346,7 +347,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             tmp_tia_data["Fit_params"].append(fit_params)
             
             # R_Squared and Akaike Information Criterion
-            tmp_tia_data["R_squared_AIC"].append([fit_results.rsquared, fit_results.aic])
+            try:
+                tmp_tia_data["R_squared_AIC"].append([fit_results.rsquared, fit_results.aic])
+            except AttributeError:
+                tmp_tia_data["R_squared_AIC"].append([numpy.nan, numpy.nan])
             
             # Calculate Integral: 
             tmp_tia_data["TIA_MBq_h"].append(
