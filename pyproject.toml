@@ -23,6 +23,7 @@ dependencies = [
     "matplotlib",
     "pandas",
     "pydicom",
+    "pynetdicom",
     "openpyxl",
     "rt-utils",
     "scikit-image",
