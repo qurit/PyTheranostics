@@ -80,7 +80,7 @@ We would like to thank the following contributors for their work on this project
 
 ..  contributors:: qurit/PyTheranostics
    .. :avatars:
-   .. :exclude: dependabot[bot] 
+   .. :exclude: dependabot[bot]
 
 .. footer::
 
