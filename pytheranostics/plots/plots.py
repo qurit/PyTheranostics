@@ -53,6 +53,7 @@ def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
 def plot_tac_residuals(
     result: lmfit.model.ModelResult,
     region: str,
+    cycle: int,
     x_label: str = "Time [hr]",
     y_label: str = "Activity [MBq]",
     output_dir: Optional[Path] = None,
@@ -98,7 +99,7 @@ def plot_tac_residuals(
     else:
         weights = None
     # Generate x-values for plotting the fitted model starting from x=0
-    x_fit = numpy.linspace(0, x_data[-1] * 2, 500)
+    x_fit = numpy.linspace(0, x_data[-1] * 3, 500)
     y_fit = result.eval(x=x_fit)
 
     # First subplot: Linear scale plot
@@ -108,14 +109,17 @@ def plot_tac_residuals(
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color="red")
     ax1.set_xlim(left=0)  # Start x-axis from zero
-    ax1.set_xlim(right=x_data[-1] * 2)  # Start y-axis from zero
+    ax1.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
     ax1.set_ylim(bottom=0)  # Start y-axis from zero
     ax1.set_title(region)
     ax1.set_xlabel(x_label)
     ax1.set_ylabel(y_label)
     # Add R-squared and AIC as text
-    ax1.text(0.7, 0.9, f"$R^2={result.rsquared:.3f}$", transform=ax1.transAxes)
-    ax1.text(0.7, 0.85, f"AIC={result.aic:.3f}", transform=ax1.transAxes)
+    try:
+        ax1.text(0.7, 0.9, f'$R^2={result.rsquared:.3f}$', transform=ax1.transAxes)
+        ax1.text(0.7, 0.85, f'AIC={result.aic:.3f}', transform=ax1.transAxes)
+    except AttributeError:
+        pass
     # Remove legend if present
     legend = ax1.get_legend()
     if legend:
@@ -146,7 +150,7 @@ def plot_tac_residuals(
     ax3.set_ylabel("Residuals")
 
     if output_dir is not None:
-        plt.savefig(output_dir / f"{region}_fit.pdf", format="pdf", bbox_inches="tight")
+        plt.savefig(output_dir / f"{region}_fit_Cycle_0{cycle}.png", format="png", bbox_inches="tight", dpi=300)
 
     plt.show()
 
