@@ -110,8 +110,11 @@ def plot_tac_residuals(result: lmfit.model.ModelResult, region: str, cycle: int,
     ax1.set_xlabel(x_label)
     ax1.set_ylabel(y_label)
     # Add R-squared and AIC as text
-    ax1.text(0.7, 0.9, f'$R^2={result.rsquared:.3f}$', transform=ax1.transAxes)
-    ax1.text(0.7, 0.85, f'AIC={result.aic:.3f}', transform=ax1.transAxes)
+    try:
+        ax1.text(0.7, 0.9, f'$R^2={result.rsquared:.3f}$', transform=ax1.transAxes)
+        ax1.text(0.7, 0.85, f'AIC={result.aic:.3f}', transform=ax1.transAxes)
+    except AttributeError:
+        pass
     # Remove legend if present
     legend = ax1.get_legend()
     if legend:

@@ -208,7 +208,7 @@ def initialize_biokinetics_from_prior_cycle(config: dict, prior_treatment_data: 
 
     return config
 
-def plot_MIP(ax, SPECT, vmax):
+def plot_MIP(ax, SPECT, vmax=300000):
     plt.sca(ax)
     plt.imshow(
         SPECT.max(axis=0).T,
@@ -218,7 +218,7 @@ def plot_MIP(ax, SPECT, vmax):
         vmin=0
     )
     plt.xlim(30, 100)
-    plt.ylim(40, 234)
+    plt.ylim(0, 234)
     
     plt.axis("off")
     
