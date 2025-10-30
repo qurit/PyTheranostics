@@ -4,20 +4,21 @@ from typing import Dict, List, Tuple
 
 import numpy
 import pandas
+from numpy.typing import NDArray
 from scipy.ndimage import median_filter
 
 MEV_PER_G_TO_GY = 1.602176634e-10  # Gy per (MeV/g)
 
 
-def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
+def hu_to_rho(hu: NDArray) -> NDArray:
     """Convert a CT array, in HU into a density map in g/cc
     Conversion based on Schneider et al. 2000 (using GATE's material db example)
 
     Args:
-        hu (numpy.ndarray): _description_
+        hu (NDArray): _description_
 
     Returns:
-        numpy.ndarray: _description_
+        NDArray: _description_
     """
     # Define the bin edges for HU values
     bins = numpy.array(
@@ -334,7 +335,7 @@ def initialize_biokinetics_from_prior_cycle(
 # ----------------------------
 # CSV I/O
 # ----------------------------
-def read_dpk_csv(path: str) -> Tuple[numpy.ndarray, numpy.ndarray]:
+def read_dpk_csv(path: str) -> Tuple[NDArray, NDArray]:
     """Read a DPK CSV (from Graves et al. 2019 https://aapm.onlinelibrary.wiley.com/doi/10.1002/mp.13789)
     and return (r_mm, K_Gy_per_decay) as 1D arrays.
 
@@ -345,7 +346,7 @@ def read_dpk_csv(path: str) -> Tuple[numpy.ndarray, numpy.ndarray]:
 
     Returns
     -------
-    Tuple[numpy.ndarray, numpy.ndarray]
+    Tuple[NDArray, NDArray]
         Radius in mm, Dose Kernel in Gy/decay.
 
     Raises
@@ -393,9 +394,7 @@ def read_dpk_csv(path: str) -> Tuple[numpy.ndarray, numpy.ndarray]:
     return r_mm, K_Gy
 
 
-def merge_multiple_csvs(
-    csvs: List[str], df_mm: float = 0.1, rmax_mm: float = 200.0
-) -> Tuple[numpy.ndarray, numpy.ndarray]:
+def merge_multiple_csvs(csvs: List[str]) -> Tuple[NDArray, NDArray]:
     """Read multiple CSVs and sum their K(r). Return common fine-grid r_mm and summed K(r).
         - Interpolates each K onto a common 0.1 mm grid from r=0 to rmax_mm.
         - Zero beyond the last provided radius in each file.
@@ -404,14 +403,10 @@ def merge_multiple_csvs(
     ----------
     csvs : List[str]
         List of pahts to CSV files.
-    df_mm : float, optional
-        grid step in mm, by default 0.1
-    rmax_mm : float, optional
-        maximum radius in mm, by default 200.0
 
     Returns
     -------
-    Tuple[numpy.ndarray, numpy.ndarray]
+    Tuple[NDArray, NDArray]
         Radius in mm, Summed Dose Kernel in Gy/decay.
     """
     # Read first to determine radius grid
@@ -434,19 +429,19 @@ def merge_multiple_csvs(
 # Kernel construction
 # ----------------------------
 def build_3d_field_from_radial(
-    K_r_mm: numpy.ndarray,
-    r_mm: numpy.ndarray,
+    K_r_mm: NDArray,
+    r_mm: NDArray,
     df_mm: float = 0.5,
     Rmax_mm: float = 200.0,
-) -> numpy.ndarray:
+) -> NDArray:
     """Build an isotropic 3-D field on a fine grid (spacing df_mm) by sampling K(r).
     The field spans [-Rmax_mm, +Rmax_mm] along each axis.
 
     Parameters
     ----------
-    K_r_mm : numpy.ndarray
+    K_r_mm : NDArray
         Dose Kernel in Gy/decay.
-    r_mm : numpy.ndarray
+    r_mm : NDArray
         Radius in mm.
     df_mm : float
         Grid step in mm.
@@ -455,7 +450,7 @@ def build_3d_field_from_radial(
 
     Returns
     -------
-    numpy.ndarray
+    NDArray
         3-D Dose Kernel field in Gy/decay.
     """
     # Determine N (odd) so that extent covers Rmax_mm
@@ -474,13 +469,13 @@ def build_3d_field_from_radial(
     return K_field
 
 
-def box_filter_1d(arr: numpy.ndarray, M: int, axis: int) -> numpy.ndarray:
+def box_filter_1d(arr: NDArray, M: int, axis: int) -> NDArray:
     """Separable 1-D box filter (uniform average) along a given axis using cumulative sums.
      Handles zero-padding at the boundaries.
 
     Parameters
     ----------
-    arr : numpy.ndarray
+    arr : NDArray
         3-D dose kernel field.
     M : int
         Window length
@@ -489,7 +484,7 @@ def box_filter_1d(arr: numpy.ndarray, M: int, axis: int) -> numpy.ndarray:
 
     Returns
     -------
-    numpy.ndarray
+    NDArray
         Filtered array.
     """
     if M <= 1:
@@ -518,14 +513,14 @@ def box_filter_1d(arr: numpy.ndarray, M: int, axis: int) -> numpy.ndarray:
 
 
 def double_box_average_3d(
-    K_field: numpy.ndarray, L_mm: float, df_mm: float
-) -> Tuple[numpy.ndarray, int]:
+    K_field: NDArray, L_mm: float, df_mm: float
+) -> Tuple[NDArray, int]:
     """Apply two box averages of width L_mm (source & target) to the 3-D field.
     Implemented as separable 1-D filters along x,y,z.
 
     Parameters
     ----------
-    K_field : numpy.ndarray
+    K_field : NDArray
         3-D dose kernel field.
     L_mm : float
         Box Width in mm. This is the voxel size of the coarse lattice. (i.e., SPECT voxel Size)
@@ -534,7 +529,7 @@ def double_box_average_3d(
 
     Returns
     -------
-    Tuple[numpy.ndarray, int]
+    Tuple[NDArray, int]
         Averaged 3-D field, M (box length in voxels).
     """
     M = max(1, int(round(L_mm / df_mm)))
@@ -549,13 +544,13 @@ def double_box_average_3d(
 
 
 def sample_on_coarse_lattice(
-    K_avg: numpy.ndarray, L_mm: float, df_mm: float, Rmax_mm: float
-) -> Tuple[numpy.ndarray, int]:
+    K_avg: NDArray, L_mm: float, df_mm: float, Rmax_mm: float
+) -> Tuple[NDArray, int]:
     """Sample the averaged fine field at coarse lattice points (iL, jL, kL).
 
     Parameters
     ----------
-    K_avg : numpy.ndarray
+    K_avg : NDArray
         Averaged 3-D dose kernel field.
     L_mm : float
         Box width in mm. This is the voxel size of the coarse lattice. (i.e., SPECT voxel Size)
@@ -566,7 +561,7 @@ def sample_on_coarse_lattice(
 
     Returns
     -------
-    Tuple[numpy.ndarray, int]
+    Tuple[NDArray, int]
         h: 3-D kernel (odd-sized cube)
         Nc: radius in coarse voxels (so size = 2*Nc+1)
     """
@@ -591,7 +586,7 @@ def sample_on_coarse_lattice(
 # ----------------------------
 # Sanity checks
 # ----------------------------
-def spherical_integral_K(r_mm: numpy.ndarray, K_r: numpy.ndarray) -> float:
+def spherical_integral_K(r_mm: NDArray, K_r: NDArray) -> float:
     """
     Approximate ∫ K(r) dV over 0..∞ using discrete shells on the provided r grid (mm).
     Returns value in Gy * mm^3 (convert to Gy*m^3 by *1e-9).
@@ -605,7 +600,7 @@ def spherical_integral_K(r_mm: numpy.ndarray, K_r: numpy.ndarray) -> float:
     return float(numpy.sum(shell))  # Gy * mm^3
 
 
-def kernel_volume_sum(h: numpy.ndarray, L_mm: float) -> float:
+def kernel_volume_sum(h: NDArray, L_mm: float) -> float:
     """
     Sum(h) * voxel_volume (Gy * mm^3), comparable to spherical_integral_K.
     """
@@ -613,9 +608,7 @@ def kernel_volume_sum(h: numpy.ndarray, L_mm: float) -> float:
     return float(numpy.sum(h) * V_vox_mm3)
 
 
-def radius_for_fraction(
-    r_mm: numpy.ndarray, K_r: numpy.ndarray, frac: float = 0.995
-) -> float:
+def radius_for_fraction(r_mm: NDArray, K_r: NDArray, frac: float = 0.995) -> float:
     """
     Return the first *tabulated* radius r[j] (mm) at which the cumulative deposited dose
     (volume integral) exceeds `frac` of the total (default 99.5%).
