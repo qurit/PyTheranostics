@@ -17,6 +17,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+# NOTE: When updating dependencies, also update .pre-commit-config.yaml pytest hook
 dependencies = [
     "numpy",
     "matplotlib",
@@ -40,8 +41,14 @@ dev = [
     "flake8>=6.0",
     "black>=23.0",
     "mypy>=1.0",
+    "pandas-stubs>=2.0.0",
+    "scipy-stubs",
+    "types-requests",
+    "pre-commit>=3.0.0",
     "sphinx>=7.0",
-    "sphinx-rtd-theme>=1.0"
+    "sphinx-rtd-theme>=1.0",
+    "pydocstyle>=6.0",
+    "flake8-docstrings>=1.7"
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -56,10 +63,78 @@ packages = [
     "pytheranostics.segmentation",
     "pytheranostics.registration",
     "pytheranostics.shared"
-] 
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | build
+  | dist
+  | data
+  | \.json$
+  | \.yaml$
+  | \.yml$
+)/
+'''
+
+# Note: Flake8 configuration is in setup.cfg (not here)
+# Flake8 does not support pyproject.toml natively as of 2025
+# See: https://github.com/PyCQA/flake8/issues/234
+
+[tool.mypy]
+# Very strict mypy configuration for high-quality type checking
+python_version = "3.8"
+follow_imports = "skip"  # Avoid optype internal error in dependencies
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+# Display settings
+show_error_codes = true
+pretty = true
+error_summary = true
+# Exclude data and build directories
+exclude = [
+    "pytheranostics/data/",
+    "build/",
+    "dist/",
+    ".venv/",
+    ".mypy_cache/",
+]
+
+[tool.isort]
+profile = "black"
 
 [tool.pytest.ini_options]
+markers = [
+    "smoke: marks tests as smoke tests (quick functionality checks)",
+    "slow: marks tests as slow (heavy computation or large data)",
+]
 filterwarnings = [
     "ignore:.*SwigPy.*:DeprecationWarning",
     "ignore:.*swigvar.*:DeprecationWarning",
 ]
+# Run smoke tests first and stop on first failure
+addopts = "--tb=short -x"
+# Test collection ordering: smoke tests first
+testpaths = ["tests"]
+
+[tool.pydocstyle]
+convention = "numpy"
+add-ignore = ["D100", "D104"]  # D100: Missing docstring in public module, D104: Missing docstring in public package
+match = "(?!test_).*\\.py"  # Ignore test files
+match-dir = "^(?!(\\.git|\\.mypy_cache|\\.pytest_cache|build|dist|data)).*"
