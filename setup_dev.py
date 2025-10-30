@@ -72,6 +72,7 @@ def main():
     print("  pytest -m smoke        # Run smoke tests only")
     print("  black .                # Format code")
     print("  flake8                 # Lint code")
+    print("  pydocstyle pytheranostics  # Check docstring style (NumPy format)")
     print("  mypy pytheranostics    # Type check")
     print("  pre-commit run --all-files  # Run all pre-commit checks")
     print("\n🪝 Pre-commit hooks are now active and will run on every commit")

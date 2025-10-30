@@ -18,6 +18,14 @@ repos:
       - id: flake8
         files: '^(pytheranostics/|tests/)|^[^/]+\.py$'
 
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        files: '^pytheranostics/.*\.py$'
+        args: ["--convention=numpy"]
+        additional_dependencies: ["tomli"]  # For reading pyproject.toml config
+
   # Temporarily disabled - mypy follows imports to legacy code with type issues
   # - repo: https://github.com/pre-commit/mirrors-mypy
   #   rev: v1.16.1
