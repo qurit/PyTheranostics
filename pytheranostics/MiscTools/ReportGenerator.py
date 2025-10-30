@@ -1,5 +1,8 @@
+from pathlib import Path
 import json
 import glob
+import inspect
+
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -9,8 +12,51 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.platypus import Image
 
+def signature_block(person, styles, width=2.5*inch, height=0.6*inch):
+    """
+    Creates a stable signature block: placeholder for signature, line, and text.
+    Returns a small table that can be inserted side-by-side with others.
+    """
+    # Empty row for signature space
+    sig_space = Spacer(1, height)
 
-def create_dosimetry_pdf(json_file, output_file):
+    # Line row
+    line = Table([[""]], colWidths=[width])
+    line.setStyle(TableStyle([("LINEABOVE", (0,0), (-1,-1), 1, colors.black)]))
+
+    # Text row
+    text = Paragraph(
+        f"<para align=center><b>{person['name']}</b><br/>{person['title']}<br/>{person['affiliation']}</para>",
+        styles["Normal"]
+    )
+
+    # Wrap everything in a column table (1 col, 3 rows)
+    block = Table(
+        [[sig_space],
+         [line],
+         [text]],
+        colWidths=[width]
+    )
+    block.setStyle(TableStyle([("ALIGN", (0,0), (-1,-1), "CENTER")]))
+    return block
+
+
+
+def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by=None):
+    """
+    Generate a dosimetry report PDF from patient JSON data.
+    Parameters
+    ----------
+    json_file : str or Path
+        Path to the patient's JSON file.
+    output_file : str or Path
+        Path to save the generated PDF report.
+    calculated_by : list of dict, optional
+        List of dictionaries with keys 'name', 'title', 'affiliation' for those who calculated the doses.
+    approved_by : list of dict, optional
+        List of dictionaries with keys 'name', 'title', 'affiliation' for those who approved the report.
+    """
+    
     # Load JSON data
     with open(json_file, 'r') as file:
         data = json.load(file)
@@ -27,8 +73,7 @@ def create_dosimetry_pdf(json_file, output_file):
     elements.append(Spacer(1, 0.5*inch))
     
     # Subject Information Section
-    subject_title = Paragraph("<b>Subject Information</b>", styles['Heading2'])
-    elements.append(subject_title)
+    elements.append(Paragraph("<b>Subject Information</b>", styles['Heading2']))
     
     # Subject Information Table
     subject_data = [
@@ -51,17 +96,165 @@ def create_dosimetry_pdf(json_file, output_file):
     elements.append(subject_table)
     elements.append(Spacer(1, 0.3*inch))
 
+    elements.append(Paragraph(f"<b>Maximum Intensity Projection</b>", styles['Heading3']))
+    
+    calling_folder = Path().absolute()  # notebook folder
+    mip_images = []
+    max_width = 8*inch
+    max_height = 6*inch
+
+    for i in range(1, data.get("No_of_completed_cycles")+1):
+        pattern = calling_folder / f"TestDoseDB/MIP_tp*_Cycle_0{i}.png"
+        matches = sorted(glob.glob(str(pattern)))  # find all matches for this cycle
+
+        for match in matches:
+            img = Image(match)
+            scale = min(max_width / img.imageWidth, max_height / img.imageHeight) / 2
+            img.drawWidth = img.imageWidth * scale
+            img.drawHeight = img.imageHeight * scale
+            mip_images.append(img)
+
+    # Put all images in one row using a Table
+    if mip_images:
+        mip_table = Table([mip_images])  # single row
+        mip_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(mip_table)
+
+        # Add caption below
+        elements.append(Spacer(1, 0.2*inch)) 
+        caption = Paragraph(
+            "<para align=center><i>Figure 1: Maximum Intensity Projection images of the patient across cycles. "
+            "The regions show the segmented organs at risk including the kidneys and the salivary glands. </i></para>", 
+            styles['Normal']
+        )
+        elements.append(caption)
+        elements.append(Spacer(1, 0.2*inch))
+    
+    
     for i in range(1,data.get("No_of_completed_cycles")+1):
         cycle = data[f"Cycle_0{i}"]
-        cycle_info(i, elements, styles)
+        cycle_info(i, elements, styles, data)
         
-    fig_title = Paragraph(f"<b>Patient Summary</b>", styles['Heading2'])
-    elements.append(fig_title)
+    elements.append(Paragraph(f"<b>Patient Summary</b>", styles['Heading2']))
     
+    # Paths to your three images
+    image_paths = [
+        calling_folder / "TestDoseDB/Gy_cummulative.png",
+        calling_folder / "TestDoseDB/Gy_per_cycle.png",
+        calling_folder / "TestDoseDB/Gy_per_GBq_per_cycle.png"
+    ]
+
+    # Load and scale images
+    imgs = []
+    for path in image_paths:
+        img = Image(str(path))
+        scale = min(max_width / img.imageWidth, max_height / img.imageHeight) / 2.8
+        img.drawWidth = img.imageWidth * scale
+        img.drawHeight = img.imageHeight * scale
+        imgs.append(img)
+
+    # Create a table with 1 row and 3 columns
+    table = Table([imgs], colWidths=[max_width/3]*3)
+
+    # Optional styling
+    table.setStyle(TableStyle([
+        ("ALIGN", (0,0), (-1,-1), "CENTER"),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE")
+    ]))
+
+    elements.append(Spacer(1, 0.3*inch))
+    elements.append(table)
+
+    # Add caption
+    elements.append(Spacer(1, 0.2*inch))
+    caption = Paragraph(
+        "<para align=center><i>Figure 2: Cumulative absorbed dose, absorbed dose per cycle, and absorbed dose per GBq per cycle for target organs.</i></para>",
+        styles['Normal']
+    )
+    elements.append(caption)
+    elements.append(Spacer(1, 0.2*inch))
+
+    # Paths to trend plots
+    trend_paths = [
+        calling_folder / "TestDoseDB/Hemoglobin_trend.png",
+        calling_folder / "TestDoseDB/Platelets_trend.png",
+        calling_folder / "TestDoseDB/eGFR_trend.png",
+        calling_folder / "TestDoseDB/PSA_trend.png",
+        
+    ]
+
+    trend_imgs = []
+    for path in trend_paths:
+        img = Image(str(path))
+        # Scale to fit 2×2 layout
+        scale = min((max_width/2.2) / img.imageWidth, (max_height/2.2) / img.imageHeight)
+        img.drawWidth = img.imageWidth * scale
+        img.drawHeight = img.imageHeight * scale
+        trend_imgs.append(img)
+
+    # Arrange in 2×2 structure
+    trend_table_data = [
+        [trend_imgs[0], trend_imgs[1]],
+        [trend_imgs[2], trend_imgs[3]]
+    ]
+
+    trend_table = Table(trend_table_data, colWidths=[max_width/2.2, max_width/2.2])
+
+    trend_table.setStyle(TableStyle([
+        ("ALIGN", (0,0), (-1,-1), "CENTER"),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 12),
+        ("TOPPADDING", (0,0), (-1,-1), 12),
+    ]))
+
+    elements.append(Spacer(1, 0.3*inch))
+    elements.append(trend_table)
+
+    # Add caption
+    elements.append(Spacer(1, 0.2*inch))
+    caption = Paragraph(
+        "<para align=center><i>Figure 3: Trends of hematological and renal function, and PSA.</i></para>",
+        styles['Normal']
+    )
+    elements.append(caption)
+    elements.append(Spacer(1, 0.2*inch))
+
+    
+    # ===============================
+    # Signatures Section
+    # ===============================
+    elements.append(Spacer(1, 0.5 * inch))
+    team_title = Paragraph("<b>Signature Section</b>", styles["Heading2"])
+    elements.append(team_title)
+
+
+    # --- Calculated by ---
+    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Paragraph("The absorbed doses were calculated by:", styles["Normal"]))
+
+    if calculated_by:
+        calc_blocks = [signature_block(p, styles) for p in calculated_by]
+        calc_table = Table([calc_blocks], colWidths=[doc.width/len(calc_blocks)]*len(calc_blocks))
+        elements.append(calc_table)
+
+    # --- Approved by ---
+    elements.append(Spacer(1, 0.5 * inch))
+    elements.append(Paragraph("The results were reviewed and approved by:", styles["Normal"]))
+
+    if approved_by:
+        app_blocks = [signature_block(p, styles) for p in approved_by]
+        app_table = Table([app_blocks], colWidths=[doc.width/len(app_blocks)]*len(app_blocks))
+        elements.append(app_table)
+
+
     # Build PDF
     doc.build(elements)
 
-def cycle_info(cycle_n, elements, styles):
+def cycle_info(cycle_n, elements, styles, data):
     # Therapy Information Section
     therapy_title = Paragraph(f"<b>Cycle {cycle_n}</b>", styles['Heading2'])
     elements.append(therapy_title)
@@ -87,36 +280,21 @@ def cycle_info(cycle_n, elements, styles):
     
     elements.append(therapy_table)
 
-    fig_title = Paragraph(f"<b>Maximum Intensity Projection</b>", styles['Heading3'])
-    elements.append(fig_title)
 
     page_width, page_height = letter
     max_width = page_width - 2*72   # 1-inch margins
     max_height = page_height - 2*72
     
-    # Add image to elements list
-    image_path = "TestDoseDB/mip.PNG"
-    img = Image(image_path)  # Adjust size as needed
-    scale = min(max_width / img.imageWidth, max_height / img.imageHeight) / 2
-
-    # Apply scaling (preserve aspect ratio)
-    img.drawWidth = img.imageWidth * scale
-    img.drawHeight = img.imageHeight * scale
-    elements.append(Spacer(1, 0.3*inch))
-    elements.append(img)
-
-    # Add caption immediately after the image
-    caption = Paragraph("<para align=center><i>Figure 1: Maximum Intensity Projection images of the patient at the different SPECT/CT scan time points post injection. The regions show the segmented organs at risk including the kidneys and the salivary glands. </i></para>", 
-                       styles['Normal'])
-    elements.append(caption)
-    elements.append(Spacer(1, 0.2*inch)) 
-    
     
     fig_title = Paragraph(f"<b>Time-activity curves, fit functions, and fit parameters</b>", styles['Heading3'])
     elements.append(fig_title)
     
-    image_paths = glob.glob("TestDoseDB/*Cycle_01.png")
+    calling_folder = Path().absolute()  # notebook folder
+    pattern = calling_folder / f"TestDoseDB/*_fit_Cycle_0{cycle_n}.png"
 
+    # glob returns a list of matching files
+    image_paths = glob.glob(str(pattern))   
+     
     for image_path in image_paths:
         img = Image(image_path)
 
