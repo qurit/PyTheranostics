@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
 Development environment setup script.
-Activate a virtual environment before running.
+Activate a virtual environment or conda environment before running.
 """
 
+import os
 import subprocess
 import sys
 
 
 def is_virtual_env():
-    """Check if we're running in a virtual environment."""
+    """Check if we're running in a virtual environment or conda environment."""
     return (
         hasattr(sys, "real_prefix")  # virtualenv
         or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)  # venv
-        or "VIRTUAL_ENV" in os.environ  # environment variable
+        or "VIRTUAL_ENV" in os.environ  # venv environment variable
+        or "CONDA_DEFAULT_ENV" in os.environ  # conda environment
+        or "CONDA_PREFIX" in os.environ  # conda environment
     )
 
 
@@ -24,13 +27,18 @@ def main():
 
     # Check if we're in a virtual environment
     if not is_virtual_env():
-        print("❌ ERROR: Not running in a virtual environment!")
-        print("\nPlease activate your virtual environment first:")
-        print("  Windows: .venv\\Scripts\\activate")
-        print("  Linux/Mac: source .venv/bin/activate")
+        print("❌ ERROR: Not running in a virtual or conda environment!")
+        print("\nPlease activate your environment first:")
+        print("  Virtual env (Windows): .venv\\Scripts\\activate")
+        print("  Virtual env (Linux/Mac): source .venv/bin/activate")
+        print("  Conda: conda activate <env_name>")
         sys.exit(1)
 
-    print("✅ Virtual environment detected")
+    # Detect environment type
+    env_type = "conda" if "CONDA_DEFAULT_ENV" in os.environ else "virtual"
+    env_name = os.environ.get("CONDA_DEFAULT_ENV", "virtual environment")
+
+    print(f"✅ {env_type.capitalize()} environment detected: {env_name}")
     print(f"Python executable: {sys.executable}")
 
     # Upgrade pip first
@@ -64,6 +72,7 @@ def main():
     print("  pytest -m smoke        # Run smoke tests only")
     print("  black .                # Format code")
     print("  flake8                 # Lint code")
+    print("  pydocstyle pytheranostics  # Check docstring style (NumPy format)")
     print("  mypy pytheranostics    # Type check")
     print("  pre-commit run --all-files  # Run all pre-commit checks")
     print("\n🪝 Pre-commit hooks are now active and will run on every commit")
@@ -72,6 +81,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import os  # Import here to avoid issues if script fails early
-
     main()
