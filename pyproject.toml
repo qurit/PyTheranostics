@@ -46,7 +46,9 @@ dev = [
     "types-requests",
     "pre-commit>=3.0.0",
     "sphinx>=7.0",
-    "sphinx-rtd-theme>=1.0"
+    "sphinx-rtd-theme>=1.0",
+    "pydocstyle>=6.0",
+    "flake8-docstrings>=1.7"
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -130,3 +132,9 @@ filterwarnings = [
 addopts = "--tb=short -x"
 # Test collection ordering: smoke tests first
 testpaths = ["tests"]
+
+[tool.pydocstyle]
+convention = "numpy"
+add-ignore = ["D100", "D104"]  # D100: Missing docstring in public module, D104: Missing docstring in public package
+match = "(?!test_).*\\.py"  # Ignore test files
+match-dir = "^(?!(\\.git|\\.mypy_cache|\\.pytest_cache|build|dist|data)).*"
