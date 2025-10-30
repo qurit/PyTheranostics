@@ -3,7 +3,8 @@ from typing import Dict, Tuple
 
 import numpy
 from scipy.ndimage import median_filter
-
+from typing import Dict, Tuple
+import matplotlib.pyplot as plt
 
 def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
     """Convert a CT array, in HU into a density map in g/cc
@@ -324,3 +325,20 @@ def initialize_biokinetics_from_prior_cycle(
             print("")
 
     return config
+
+def plot_MIP(ax, SPECT, vmax=300000):
+    plt.sca(ax)
+    plt.imshow(
+        SPECT.max(axis=0).T,
+        cmap='Greys',
+        interpolation='Gaussian',
+        vmax=vmax,
+        vmin=0
+    )
+    plt.xlim(30, 100)
+    plt.ylim(0, 234)
+    
+    plt.axis("off")
+    
+    plt.xticks([])
+    plt.yticks([])
