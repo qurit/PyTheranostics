@@ -1,38 +1,36 @@
 import os
+from pathlib import Path
 from typing import Optional
 
 import numpy
 from scipy import signal
 
-from pytheranostics.MiscTools.Tools import hu_to_rho
+from pytheranostics.MiscTools.Tools import hu_to_rho, load_kernel_from_csv
 
 
 class DoseVoxelKernel:
     def __init__(self, isotope: str, voxel_size_mm: float) -> None:
-        """_summary_
+        """Initialize Dose Voxel-Kernel for convolution-based dosimetry.
 
         Args:
-            isotope (str): _description_
-            voxel_size_mm (float): _description_
+            isotope (str): Isotope name, e.g., "Lu177".
+            voxel_size_mm (float): Voxel size in mm, e.g., 4.80
+        Raises:
+            FileNotFoundError: If Voxel-Kernel file is not found.
         """
-        try:
-            self.kernel = numpy.fromfile(
-                os.path.dirname(__file__)
-                + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:1.2f}-mm-mGyperMBqs-SoftICRP.img",
-                dtype=numpy.float32,
-            )
-        except FileNotFoundError:
-            print(
-                f" >> Voxel Kernel for SPECT voxel size ({voxel_size_mm:2.2f} mm) not found. Using default kernel for 4.8 mm voxels..."
+
+        # Set file path for Voxel-Kernel.
+        kernel_file = Path(
+            os.path.dirname(__file__)
+            + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:2.2f}-mm-mGyperMBqs-Soft.csv"
+        )
+
+        if not kernel_file.exists():
+            raise FileNotFoundError(
+                f" >> Voxel Kernel for SPECT voxel size ({voxel_size_mm:2.2f} mm) not found."
             )
 
-            self.kernel = numpy.fromfile(
-                os.path.dirname(__file__)
-                + f"/../data/voxel_kernels/{isotope}-4.80-mm-mGyperMBqs-SoftICRP.img",
-                dtype=numpy.float32,
-            )
-
-        self.kernel = self.kernel.reshape((51, 51, 51)).astype(numpy.float64)
+        self.kernel = load_kernel_from_csv(path=kernel_file)
 
     def tia_to_dose(
         self, tia_mbq_s: numpy.ndarray, ct: Optional[numpy.ndarray] = None
