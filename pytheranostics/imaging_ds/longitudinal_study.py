@@ -2,6 +2,7 @@
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -99,6 +100,8 @@ class LongitudinalStudy:
         dicom_dirs: List[str],
         modality: str = "CT",
         calibration_factor: Optional[float] = None,
+        parallel: bool = True,
+        max_workers: Optional[int] = None,
     ) -> "LongitudinalStudy":
         """Create a LongitudinalStudy object from a list of DICOM directories.
 
@@ -111,6 +114,10 @@ class LongitudinalStudy:
                 and "Lu177_SPECT". Defaults to "CT".
             calibration_factor (float, optional): Converts reconstructed SPECT image
                 (raw counts * num_proj) to units of Bq/mL. Defaults to None.
+            parallel (bool, optional): Whether to load DICOM directories in parallel.
+                Defaults to True for faster loading of multiple timepoints.
+            max_workers (int, optional): Maximum number of parallel workers. If None,
+                defaults to min(number of CPUs, number of directories).
 
         Returns
         -------
@@ -137,12 +144,45 @@ class LongitudinalStudy:
         images: Dict[int, SimpleITK.Image] = {}
         metadata: Dict[int, ImagingMetadata] = {}
 
-        for time_id, dicom_dir in enumerate(dicom_dirs):
-            image, meta = load_from_dicom_dir(
-                dir=dicom_dir, modality=modality, calibration_factor=calibration_factor
-            )
-            images[time_id] = image
-            metadata[time_id] = meta
+        if parallel and len(dicom_dirs) > 1:
+            # Parallel loading for multiple timepoints
+            print(f"Loading {len(dicom_dirs)} {modality} timepoints in parallel...")
+
+            # Helper function for parallel execution
+            def load_single_timepoint(args):
+                time_id, dicom_dir = args
+                print(f"  Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                return time_id, load_from_dicom_dir(
+                    dir=dicom_dir,
+                    modality=modality,
+                    calibration_factor=calibration_factor,
+                )
+
+            # Use ThreadPoolExecutor for I/O-bound DICOM loading
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        load_single_timepoint, (time_id, dicom_dir)
+                    ): time_id
+                    for time_id, dicom_dir in enumerate(dicom_dirs)
+                }
+
+                for future in as_completed(futures):
+                    time_id, (image, meta) = future.result()
+                    images[time_id] = image
+                    metadata[time_id] = meta
+                    print(f"  ✓ Timepoint {time_id} loaded")
+        else:
+            # Sequential loading
+            for time_id, dicom_dir in enumerate(dicom_dirs):
+                print(f"Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                image, meta = load_from_dicom_dir(
+                    dir=dicom_dir,
+                    modality=modality,
+                    calibration_factor=calibration_factor,
+                )
+                images[time_id] = image
+                metadata[time_id] = meta
 
         return cls(
             images=images,
