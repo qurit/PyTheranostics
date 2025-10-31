@@ -1,3 +1,5 @@
+"""Module for voxel-level dosimetry calculations."""
+
 import os
 import shutil
 from typing import Any, Dict, Optional
@@ -10,13 +12,16 @@ from pandas import DataFrame
 from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
 from pytheranostics.dosimetry.dvk import DoseVoxelKernel
 from pytheranostics.fits.fits import get_exponential
-from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
-from pytheranostics.ImagingTools.Tools import itk_image_from_array, resample_to_target
+from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
+from pytheranostics.imaging_tools.Tools import itk_image_from_array, resample_to_target
 
 
 class VoxelSDosimetry(BaseDosimetry):
-    """Voxel S Dosimetry class: Computes parameters of fit for time activity curves at the region (organ/lesion) level, and
-    apply them at the voxel level for voxels belonging to user-defined regions."""
+    """Voxel S Dosimetry class.
+
+    Computes parameters of fit for time activity curves at the region (organ/lesion) level,
+    and apply them at the voxel level for voxels belonging to user-defined regions.
+    """
 
     def __init__(
         self,
@@ -38,8 +43,7 @@ class VoxelSDosimetry(BaseDosimetry):
         self.toMBqs = 3600  # Convert MBqh toMBqs
 
     def compute_voxel_tia(self) -> None:
-        """
-        Computes the Time Integrated Activity (TIA) for each voxel in specified regions.
+        """Compute the Time Integrated Activity (TIA) for each voxel in specified regions.
 
         This method uses the fit parameters for each region to compute the TIA for
         each voxel within those regions. It handles different regions appropriately,
@@ -56,7 +60,6 @@ class VoxelSDosimetry(BaseDosimetry):
         AssertionError
             If overlapping structures are found when adding regions to calculate voxel-TIA.
         """
-
         ref_time_id = int(self.config["ReferenceTimePoint"])
         tia_map = numpy.zeros_like(
             self.nm_data.array_at(time_id=ref_time_id), dtype=numpy.float64
@@ -234,12 +237,12 @@ class VoxelSDosimetry(BaseDosimetry):
         return None
 
     def compute_dose(self) -> None:
-        """Steps:
-        Compute TIA at the region level
-        Get parameters of fit from region and compute TIA at the voxel level
+        """Compute dose by performing the following steps.
+
+        Compute TIA at the region level.
+        Get parameters of fit from region and compute TIA at the voxel level.
         Convolve TIA map with Dose kernel and (optional) scale with CT density.
         """
-
         self.compute_tia()
         self.compute_voxel_tia()
         if self.config["Method"] == "Voxel-S-value":

@@ -1,3 +1,5 @@
+"""Metadata structures for imaging datasets."""
+
 from dataclasses import dataclass
 from typing import Optional
 
