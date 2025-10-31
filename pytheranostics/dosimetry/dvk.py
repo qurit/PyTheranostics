@@ -10,25 +10,38 @@ from pytheranostics.MiscTools.Tools import hu_to_rho, load_kernel_from_csv
 
 class DoseVoxelKernel:
     def __init__(self, isotope: str, voxel_size_mm: float) -> None:
-        """Initialize Dose Voxel-Kernel for convolution-based dosimetry.
+        """Initialize Dose Voxel-Kernel for convolution-based dosimetry. If kernel for specified voxel size is not found, the closest
+        available size will be used.
 
         Args:
             isotope (str): Isotope name, e.g., "Lu177".
             voxel_size_mm (float): Voxel size in mm, e.g., 4.80
-        Raises:
-            FileNotFoundError: If Voxel-Kernel file is not found.
         """
 
         # Set file path for Voxel-Kernel.
+        kernel_dir = Path(os.path.dirname(__file__) + "/../data/voxel_kernels/")
+        kernel_files = list(kernel_dir.glob(f"{isotope}-*-mm-mGyperMBqs-Soft.csv"))
+        kernels = {
+            size: file
+            for file in kernel_files
+            for size in [float(file.stem.split("-")[1])]
+        }
+
+        if voxel_size_mm not in kernels:
+            # get closest available kernel size
+            available_sizes = numpy.array(list(kernels.keys()))
+            closest_size = available_sizes[
+                numpy.argmin(numpy.abs(available_sizes - voxel_size_mm))
+            ]
+            print(
+                f" >> Voxel Kernel for SPECT voxel size ({voxel_size_mm:2.2f} mm) not found. Using closest available size: {closest_size:2.2f} mm."
+            )
+            voxel_size_mm = closest_size
+
         kernel_file = Path(
             os.path.dirname(__file__)
             + f"/../data/voxel_kernels/{isotope}-{voxel_size_mm:2.2f}-mm-mGyperMBqs-Soft.csv"
         )
-
-        if not kernel_file.exists():
-            raise FileNotFoundError(
-                f" >> Voxel Kernel for SPECT voxel size ({voxel_size_mm:2.2f} mm) not found."
-            )
 
         self.kernel = load_kernel_from_csv(path=kernel_file)
 
