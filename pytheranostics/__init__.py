@@ -1,10 +1,5 @@
 """PyTheranostics - A Python library for nuclear medicine processing and dosimetry."""
 
-__version__ = "0.1.0"
-__author__ = "Carlos Uribe, PhD, MCCPM"
-__email__ = "curibe@bccrc.ca"
-__license__ = "MIT"
-
 # Lazy access to subpackages (to support attribute access like `pytheranostics.imaging_ds`)
 # without importing them eagerly or triggering unused-import lint issues.
 import importlib
