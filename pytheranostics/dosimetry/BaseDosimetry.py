@@ -1,3 +1,5 @@
+"""Base dosimetry module for radiation dose calculations."""
+
 import abc
 import json
 from os import path
@@ -10,9 +12,9 @@ import pandas
 
 from pytheranostics.dosimetry.BoneMarrow import bm_scaling_factor
 from pytheranostics.fits.fits import exponential_fit_lmfit
-from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
-from pytheranostics.ImagingTools.Tools import extract_masks
-from pytheranostics.MiscTools.Tools import calculate_time_difference
+from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
+from pytheranostics.imaging_tools.Tools import extract_masks
+from pytheranostics.misc_tools.Tools import calculate_time_difference
 from pytheranostics.plots.plots import plot_tac_residuals
 
 
@@ -58,20 +60,28 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         ct_data: LongitudinalStudy,
         clinical_data: Optional[pandas.DataFrame] = None,
     ) -> None:
-        """Inputs:
+        """Initialize the base dosimetry class.
 
-        patient_id: patient ID, string.
-        cycle: the cycle number (1, 2, ...), int.
-        config: Configuration parameters for dosimetry calculations, a Dict.
-        database_dir: a folder to store patient-dosimetry results, string.
-        nm_data: longitudinal, quantitative, nuclear-medicine imaging data, type LongitudinalStudy.
-                 Note: voxel values should be in units of Bq/mL.
-        ct_data: longitudinal CT imaging data, type LongitudinalStudy,
-                 Note: voxel values should be in HU units.
-        clinical_data: clinical data such as blood sampling, an optional pandas DataFrame.
-                 Note: blood counting should be in units of Bq/mL.
+        Parameters
+        ----------
+        patient_id : str
+            Patient ID.
+        cycle : int
+            The cycle number (1, 2, ...).
+        config : Dict
+            Configuration parameters for dosimetry calculations.
+        database_dir : str
+            A folder to store patient-dosimetry results.
+        nm_data : LongitudinalStudy
+            Longitudinal, quantitative, nuclear-medicine imaging data.
+            Note: voxel values should be in units of Bq/mL.
+        ct_data : LongitudinalStudy
+            Longitudinal CT imaging data.
+            Note: voxel values should be in HU units.
+        clinical_data : pandas.DataFrame, optional
+            Clinical data such as blood sampling.
+            Note: blood counting should be in units of Bq/mL.
         """
-
         # Configuration
         self.config = config
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
@@ -130,11 +140,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
     def default_config(self) -> None:
         """Set to None/False the mandatory keys in the config dictionary if not defined.
+
         We could achieve the same behaviour with dict.get(key, None) but this way we
         inform the user.
-
         """
-
         defaults = {
             "fixed_parameters": None,
             "param_init": None,
@@ -152,7 +161,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     )
 
     def extract_masks_and_correct_overlaps(self) -> None:
-        """_summary_"""
+        """Extract masks and correct overlaps between regions."""
         # Inform the user if some masks are unused and therefore excluded.
         for roi_name in self.nm_data.masks[0]:
             if roi_name not in self.config["rois"] and roi_name != "BoneMarrow":
@@ -191,7 +200,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return None
 
     def check_nm_ct_masks(self) -> None:
-        """Checks that, for each time point, each region contains masks in both NM and CT datasets."""
+        """Check that, for each time point, each region contains masks in both NM and CT datasets."""
         for time_id, nm_masks in self.nm_data.masks.items():
             nm_masks_list = list(nm_masks.keys())
             ct_masks_list = list(self.ct_data.masks[time_id].keys())
@@ -206,25 +215,31 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return None
 
     def check_mandatory_fields(self) -> None:
+        """Check for required fields in the configuration.
+
+        Raises
+        ------
+        ValueError
+            If required fields are missing from configuration.
+        """
         if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
             raise ValueError("Incomplete Configuration file.")
 
         if "ReferenceTimePoint" not in self.config:
             print("No Reference Time point was given. Assigning time ID = 0")
             self.config["ReferenceTimePoint"] = 0
-        
+
         if "Organ" in self.config["Level"]:
             if "WholeBody" not in self.config["rois"]:
                 raise ValueError("Missing 'WholeBody' region parameters.")
 
             if "RemainderOfBody" not in self.config["rois"]:
                 raise ValueError("Missing 'RemainderOfBody' region parameters.")
-        
+
         return None
 
     def initialize(self) -> pandas.DataFrame:
-        """Populates initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
-
+        """Populate initial result dataframe containing organs of interest, volumes, acquisition times, etc."""
         tmp_results: Dict[str, List[float]] = {
             roi_name: []
             for roi_name in self.nm_data.masks[0].keys()
@@ -276,8 +291,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def initialize_bone_marrow(
         self, temp_results: Dict[str, List[float]]
     ) -> Dict[str, List[float]]:
-        """Initialize activity and times for Bone-Marrow blood-based measurements"""
-
+        """Initialize activity and times for Bone-Marrow blood-based measurements."""
         if (
             "BoneMarrow" in self.config["rois"]
             and self.clinical_data is not None
@@ -303,9 +317,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return temp_results
 
     def check_nm_data(self) -> Dict[str, Any]:
-        """Verify that radionuclide info is present in NM data, and that radionuclide data (e.g., half-life)
-        is available in internal database."""
+        """Verify that radionuclide info is present in NM data.
 
+        Also verify that radionuclide data (e.g., half-life) is available in internal database.
+        """
         # Load Radionuclide data
         rad_data_path = path.dirname(__file__) + "/../data/isotopes.json"
         with open(rad_data_path, "r") as rad_data:
@@ -322,7 +337,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return radionuclide_data[self.nm_data.meta[0].Radionuclide]
 
     def check_patient_in_db(self) -> None:
-        """Check if prior dosimetry exists for this patient"""
+        """Check if prior dosimetry exists for this patient."""
         # TODO: handle logging: error/warnings/prints.
         print(
             "Database search function not implemented. Dosimetry for this patient might "
@@ -334,13 +349,14 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return None
 
     def sanity_checks(self, metric: str) -> None:
-        """Checks that metric in wholebody is equal to sum of metric in individual regions.
+        """Check that metric in wholebody is equal to sum of metric in individual regions.
+
         Note: currently excluding BoneMarrow.
 
-        Args:
-            metric (str): _description_
+        Args
+        ----
+            metric (str): The metric to check.
         """
-
         if (
             "BoneMarrow" in self.results.index
             and "BoneMarrow" not in self.nm_data.masks[0].keys()
@@ -369,7 +385,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return None
 
     def compute_tia(self) -> None:
-        """Computes Time-Integrated Activity over each source-organ."""
+        """Compute Time-Integrated Activity over each source-organ."""
         # decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h  # TODO: Check how to incorporate into bounds? (flake8)
 
         if self.radionuclide["half_life_units"] != "hours":
@@ -391,8 +407,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 region_data=region_data, region=region
             )
 
-            plot_tac_residuals(result=fit_results, region=region, cycle = self.config["Cycle"], output_dir=self.db_dir)
-            
+            plot_tac_residuals(
+                result=fit_results,
+                region=region,
+                cycle=self.config["Cycle"],
+                output_dir=self.db_dir,
+            )
+
             # Parameters for sum of exponential functions:
             fit_params = [
                 fit_results.params[param].value for param in fit_results.params.keys()
@@ -405,11 +426,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
             # R_Squared and Akaike Information Criterion
             try:
-                tmp_tia_data["R_squared_AIC"].append([fit_results.rsquared, fit_results.aic])
+                tmp_tia_data["R_squared_AIC"].append(
+                    [fit_results.rsquared, fit_results.aic]
+                )
             except AttributeError:
                 tmp_tia_data["R_squared_AIC"].append([numpy.nan, numpy.nan])
-            
-            # Calculate Integral: 
+
+            # Calculate Integral:
             tmp_tia_data["TIA_MBq_h"].append(
                 self.analytical_integrate(result=fit_results)
             )
@@ -436,7 +459,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def smart_fit_selection(
         self, region_data: pandas.Series, region: str
     ) -> lmfit.model.ModelResult:
-        """If enabled in self.config, iterates through different valid fits orders and select best fit based on Akaike Information Criterion.
+        """Select the best fit based on Akaike Information Criterion.
+
+        If enabled in self.config, iterates through different valid fits orders and select best fit based on Akaike Information Criterion.
         If a fit order is specified by the user, then the method will just perform fit following user's selected order and configuration.
 
         Parameters
@@ -451,7 +476,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         lmfit.model.ModelResult
             The best fit model based on Akaike Information Criterion.
         """
-
         # If fit_order is defined by user:
         if self.config["rois"][region]["fit_order"] is not None:
             fit_results, _ = exponential_fit_lmfit(
@@ -580,8 +604,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         return integral
 
     def normalize_time_to_injection(self, time_id: int) -> None:
-        """Express acquisition time corresponding to time_id in terms of injection time"""
-
+        """Express acquisition time corresponding to time_id in terms of injection time."""
         acq_time = f"{self.nm_data.meta[time_id].AcquisitionDate} {self.nm_data.meta[time_id].AcquisitionTime}"
         inj_time = f"{self.config['InjectionDate']} {self.config['InjectionTime']}"
 
@@ -593,16 +616,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def compute_dose(self) -> None:
-        """The abstract method to compute Dose to Organs and voxels. Must be implemented in all daughter dosimetry
-        classes inheriting from BaseDosimetry. Should run `compute_tia()` first."""
+        """Compute Dose to Organs and voxels.
+
+        This abstract method must be implemented in all daughter dosimetry classes inheriting
+        from BaseDosimetry. Should run `compute_tia()` first.
+        """
         self.compute_tia()
         return None
 
     def calculate_bed(self, kinetic: str) -> None:
-        """
-        monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity after peptide receptor radionuclide therapy with 90Y-DOTATOC
-        and 177Lu-DOTATATE: the role of associated risk factors"
-        biexp
+        """Calculate Biologically Effective Dose (BED).
+
+        Monoexp equation based on the paper Bodei et al. "Long-term evaluation of renal toxicity
+        after peptide receptor radionuclide therapy with 90Y-DOTATOC and 177Lu-DOTATATE: the role
+        of associated risk factors".
         """
         this_dir = Path(__file__).resolve().parent.parent
         RADIOBIOLOGY_DATA_FILE = Path(this_dir, "data", "radiobiology.json")
@@ -615,33 +642,74 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         bed = {}
 
         for organ in organs:
-            t_repair = self.radiobiology_dic[organ]['t_repair']
-            alpha_beta = self.radiobiology_dic[organ]['alpha_beta']
-            AD = float(bed_df.loc[bed_df.index == organ]['AD[Gy/GBq]'].values[0])  * float(self.config['InjectedActivity']) / 1000 # Gy
-            
-            if kinetic == 'monoexp':
-                t_eff = numpy.log(2) / ((self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1])/2)
-                bed[organ] = AD + 1/alpha_beta * t_repair/(t_repair + t_eff) * AD**2
-            elif kinetic == 'biexp':
-                mean_lambda_washout = (self.results.loc['Kidney_Left']['Fit_params'][1] + self.results.loc['Kidney_Right']['Fit_params'][1]) / 2
-                mean_lambda_uptake = (self.results.loc['Kidney_Left']['Fit_params'][2] + self.results.loc['Kidney_Right']['Fit_params'][2]) / 2
-                t_washout = numpy.log(2) /  mean_lambda_washout
-                t_uptake = numpy.log(2) /  mean_lambda_uptake
-                bed[organ] = AD * (1 + (AD / (t_washout - t_uptake)) * (1 / alpha_beta) * (( (2 * t_repair**4 * (t_washout - t_uptake)) / ((t_repair**2 - t_washout**2) * (t_repair**2 - t_uptake**2)) ) + 
-                              ((2 * t_washout * t_uptake * t_repair) / (t_washout**2 - t_uptake**2) * (((t_washout)/(t_repair - t_washout)) + ((t_uptake) / (t_repair - t_uptake)))) - 
-                              (((t_repair) / (t_washout - t_uptake)) * (((t_washout**2)/(t_repair - t_washout)) + ((t_uptake**2)/(t_repair - t_uptake))))))
-            print(f'{organ}', bed[organ])
-        
-                       
-        self.df_ad['BED[Gy]'] = self.df_ad.index.map(bed)
+            t_repair = self.radiobiology_dic[organ]["t_repair"]
+            alpha_beta = self.radiobiology_dic[organ]["alpha_beta"]
+            AD = (
+                float(bed_df.loc[bed_df.index == organ]["AD[Gy/GBq]"].values[0])
+                * float(self.config["InjectedActivity"])
+                / 1000
+            )  # Gy
+
+            if kinetic == "monoexp":
+                t_eff = numpy.log(2) / (
+                    (
+                        self.results.loc["Kidney_Left"]["Fit_params"][1]
+                        + self.results.loc["Kidney_Right"]["Fit_params"][1]
+                    )
+                    / 2
+                )
+                bed[organ] = AD + 1 / alpha_beta * t_repair / (t_repair + t_eff) * AD**2
+            elif kinetic == "biexp":
+                mean_lambda_washout = (
+                    self.results.loc["Kidney_Left"]["Fit_params"][1]
+                    + self.results.loc["Kidney_Right"]["Fit_params"][1]
+                ) / 2
+                mean_lambda_uptake = (
+                    self.results.loc["Kidney_Left"]["Fit_params"][2]
+                    + self.results.loc["Kidney_Right"]["Fit_params"][2]
+                ) / 2
+                t_washout = numpy.log(2) / mean_lambda_washout
+                t_uptake = numpy.log(2) / mean_lambda_uptake
+                bed[organ] = AD * (
+                    1
+                    + (AD / (t_washout - t_uptake))
+                    * (1 / alpha_beta)
+                    * (
+                        (
+                            (2 * t_repair**4 * (t_washout - t_uptake))
+                            / (
+                                (t_repair**2 - t_washout**2)
+                                * (t_repair**2 - t_uptake**2)
+                            )
+                        )
+                        + (
+                            (2 * t_washout * t_uptake * t_repair)
+                            / (t_washout**2 - t_uptake**2)
+                            * (
+                                ((t_washout) / (t_repair - t_washout))
+                                + ((t_uptake) / (t_repair - t_uptake))
+                            )
+                        )
+                        - (
+                            ((t_repair) / (t_washout - t_uptake))
+                            * (
+                                ((t_washout**2) / (t_repair - t_washout))
+                                + ((t_uptake**2) / (t_repair - t_uptake))
+                            )
+                        )
+                    )
+                )
+            print(f"{organ}", bed[organ])
+
+        self.df_ad["BED[Gy]"] = self.df_ad.index.map(bed)
 
     def save_images_and_masks_at(self, time_id: int) -> None:
         """Save CT, NM and masks for a specific time point.
 
-        Args:
+        Args
+        ----
             time_id (int): The time point ID.
         """
-
         self.ct_data.save_image_to_nii_at(
             time_id=time_id, out_path=self.db_dir, name="CT"
         )
@@ -653,27 +721,31 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         )
 
         return None
-    
-    def write_json_data(self, file_path, 
-                        InstitutionName: str,
-                        ClinicalTrial: str,
-                        Radionuclide: str,
-                        create_new: bool = True
-                        ) -> None:
-        
-        """Writes dosimetry results to a JSON file.
-        If create_new is True, a new JSON file is created. If False, existing data is updated, usually used to add results from subseqent cycles.
-        Args:
+
+    def write_json_data(
+        self,
+        file_path,
+        InstitutionName: str,
+        ClinicalTrial: str,
+        Radionuclide: str,
+        create_new: bool = True,
+    ) -> None:
+        """Write dosimetry results to a JSON file.
+
+        If create_new is True, a new JSON file is created. If False, existing data is updated,
+        usually used to add results from subsequent cycles.
+
+        Args
+        ----
             file_path (str): Path to the JSON file.
             create_new (bool): Whether to create a new file or update existing data.
         """
-
         # Open empty json to load its structure:
         if create_new:
-            json_path = path.dirname(__file__) + f"/../data/output.json"
+            json_path = path.dirname(__file__) + "/../data/output.json"
         else:
             json_path = file_path
-        with open(json_path, 'r') as file:
+        with open(json_path, "r") as file:
             data = json.load(file)
 
         data["PatientID"] = self.config["PatientID"]

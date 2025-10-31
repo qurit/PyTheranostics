@@ -1,12 +1,11 @@
-"""
-PyTheranostics - A Python library for nuclear medicine processing and dosimetry
-"""
+"""PyTheranostics - A Python library for nuclear medicine processing and dosimetry."""
 
 __version__ = "0.1.0"
 __author__ = "Carlos Uribe, PhD, MCCPM"
 __email__ = "curibe@bccrc.ca"
 __license__ = "MIT"
 
+# Import submodules for easier access
 from pytheranostics.calibrations.gamma_camera import GammaCamera  # Calibration
 from pytheranostics.dicomtools.dicomtools import DicomModify  # DICOM handling
 from pytheranostics.fits.fits import biexp_fun, monoexp_fun, triexp_fun  # Analysis

@@ -1,20 +1,25 @@
+"""Miscellaneous utility tools for image processing and analysis."""
+
 from datetime import datetime
 from typing import Dict, Tuple
 
+import matplotlib.pyplot as plt
 import numpy
 from scipy.ndimage import median_filter
-from typing import Dict, Tuple
-import matplotlib.pyplot as plt
+
 
 def hu_to_rho(hu: numpy.ndarray) -> numpy.ndarray:
-    """Convert a CT array, in HU into a density map in g/cc
-    Conversion based on Schneider et al. 2000 (using GATE's material db example)
+    """Convert a CT array in HU into a density map in g/cc.
+
+    Conversion based on Schneider et al. 2000 (using GATE's material db example).
 
     Args:
-        hu (numpy.ndarray): _description_
+        hu (numpy.ndarray): CT array in Hounsfield Units.
 
-    Returns:
-        numpy.ndarray: _description_
+    Returns
+    -------
+    numpy.ndarray
+        Density map in g/cc.
     """
     # Define the bin edges for HU values
     bins = numpy.array(
@@ -155,7 +160,7 @@ def calculate_time_difference(
     - The time difference is calculated as (date_str1 - date_str2).
     - The result is returned in hours as a float value.
     """
-
+    # Remove fractional seconds if present
     # Clean up:
     date_str1 = date_str1.split(".")[0]
     date_str2 = date_str2.split(".")[0]
@@ -182,9 +187,9 @@ def extract_exponential_params_from_json(
     json_data : dict
         The patient's JSON dictionary.
     cycle : str
-        The cycle ID
+        The cycle ID.
     region : str
-        The region of interest
+        The region of interest.
 
     Returns
     -------
@@ -234,8 +239,10 @@ def extract_exponential_params_from_json(
 def extract_exponential_params_from_json_legacy(
     json_data: dict, cycle: str, region: str
 ) -> Tuple[Dict[str, float], bool, Dict[str, float]]:
-    """Legacy function to extract parameters of fit for a defined region and cycle from a JSON dictionary of a patient.
-    It supports the previous version of patient JSON where not all parameters of fit where stored.
+    """Extract parameters of fit for a defined region and cycle from a patient JSON dictionary.
+
+    Legacy function to support the previous version of patient JSON where not all parameters
+    of fit were stored.
 
     Parameters
     ----------
@@ -298,7 +305,22 @@ def extract_exponential_params_from_json_legacy(
 def initialize_biokinetics_from_prior_cycle(
     config: dict, prior_treatment_data: dict, cycle: str
 ) -> dict:
+    """Initialize biokinetics parameters from a previous treatment cycle.
 
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary.
+    prior_treatment_data : dict
+        Prior treatment data dictionary.
+    cycle : str
+        Cycle identifier.
+
+    Returns
+    -------
+    dict
+        Updated configuration dictionary.
+    """
     for roi, roi_info in config["rois"].items():
 
         if (
@@ -326,19 +348,27 @@ def initialize_biokinetics_from_prior_cycle(
 
     return config
 
+
 def plot_MIP(ax, SPECT, vmax=300000):
+    """Plot Maximum Intensity Projection (MIP) of SPECT data.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes object to plot on.
+    SPECT : numpy.ndarray
+        SPECT data array.
+    vmax : int, optional
+        Maximum value for display, by default 300000.
+    """
     plt.sca(ax)
     plt.imshow(
-        SPECT.max(axis=0).T,
-        cmap='Greys',
-        interpolation='Gaussian',
-        vmax=vmax,
-        vmin=0
+        SPECT.max(axis=0).T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0
     )
     plt.xlim(30, 100)
     plt.ylim(0, 234)
-    
+
     plt.axis("off")
-    
+
     plt.xticks([])
     plt.yticks([])

@@ -1,3 +1,5 @@
+"""Module for longitudinal medical imaging studies."""
+
 import os
 import re
 from pathlib import Path
@@ -7,8 +9,8 @@ import numpy
 import SimpleITK
 from numpy.typing import NDArray
 
-from pytheranostics.ImagingDS.metadata import ImagingMetadata
-from pytheranostics.ImagingTools.Tools import (
+from pytheranostics.imaging_ds.metadata import ImagingMetadata
+from pytheranostics.imaging_tools.Tools import (
     itk_image_from_array,
     jaccard_index,
     load_from_dicom_dir,
@@ -18,8 +20,11 @@ from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
 
 
 class LongitudinalStudy:
-    """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs
-    /regions of interest and meta-data."""
+    """Longitudinal Study Data Class.
+
+    Holds multiple medical imaging datasets, alongside with masks for organs/regions
+    of interest and meta-data.
+    """
 
     _VALID_ORGAN_NAMES = [
         "Kidney_Left",
@@ -56,16 +61,18 @@ class LongitudinalStudy:
             modality (str, optional): The imaging modality type. Supported values are "NM"
                 (Nuclear Medicine), "PT" (PET), "CT", or "DOSE". Defaults to "NM".
 
-        Raises:
-            ValueError: If the specified modality is not one of the supported values:
+        Raises
+        ------
+        ValueError
+            If the specified modality is not one of the supported values:
                 "NM", "PT", "CT", or "DOSE".
 
-        Note:
+        Note
+        ----
             The constructor initializes an empty masks dictionary that can be populated later
             using the `add_masks_to_time_point` method. It also defines a comprehensive list
             of valid mask names for regions of interest including organs, glands, and lesions.
         """
-
         if images.keys() != meta.keys():
             raise ValueError(
                 "Not all time points have corresponding images and metadata."
@@ -105,12 +112,16 @@ class LongitudinalStudy:
             calibration_factor (float, optional): Converts reconstructed SPECT image
                 (raw counts * num_proj) to units of Bq/mL. Defaults to None.
 
-        Returns:
-            LongitudinalStudy: A new LongitudinalStudy instance containing the loaded
+        Returns
+        -------
+        LongitudinalStudy
+            A new LongitudinalStudy instance containing the loaded
                 DICOM data organized by time points.
 
-        Raises:
-            ValueError: If the specified modality is not supported.
+        Raises
+        ------
+        ValueError
+            If the specified modality is not supported.
         """
         # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
         supported_modalities = {
@@ -153,7 +164,18 @@ class LongitudinalStudy:
         return bool(re.match(lesion_pattern, mask_name))
 
     def array_at(self, time_id: int) -> NDArray[Any]:
-        """Access Array Data"""
+        """Access Array Data.
+
+        Parameters
+        ----------
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        NDArray[Any]
+            The array data at the specified time point.
+        """
         return numpy.transpose(
             numpy.squeeze(SimpleITK.GetArrayFromImage(self.images[time_id])),
             axes=(1, 2, 0),
@@ -162,8 +184,10 @@ class LongitudinalStudy:
     def array_of_activity_at(
         self, time_id: int, region: Optional[str] = None
     ) -> NDArray[Any]:
-        """Returns the array in units of activity in Bq, with the posibility of masking
-        out for one specific region."""
+        """Return the array in units of activity in Bq.
+
+        With the posibility of masking out for one specific region.
+        """
         if self.modality not in ["NM", "PT"]:
             raise ValueError(f"Activity can't be calculated from {self.modality} data.")
 
@@ -208,11 +232,12 @@ class LongitudinalStudy:
             masks (Dict[str, SimpleITK.Image]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_image (simpleITK)}
             mask_mapping (Optional[Dict[str, str]], optional): Mapping between masks names in input masks dictionary, and standard mask names in pyTheranostics. Defaults to None. If None, takes each name as is.
 
-        Raises:
-            ValueError: If mapping between user input masks and pyTheranostics standard mask names is invalid.
+        Raises
+        ------
+        ValueError
+            If mapping between user input masks and pyTheranostics standard mask names is invalid.
 
         """
-
         # If mask mapping is not specified, utilize user defined names in masks Dictionary.
         if mask_mapping is None:
             mask_mapping = {mask_name: mask_name for mask_name in masks.keys()}
@@ -254,14 +279,29 @@ class LongitudinalStudy:
         return None
 
     def volume_of(self, region: str, time_id: int) -> float:
-        """Returns the volume of a region of interest, in mL"""
+        """Return the volume of a region of interest, in mL.
+
+        Parameters
+        ----------
+        region : str
+            The region name.
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        float
+            Volume in mL.
+        """
         return numpy.sum(self.masks[time_id][region]) * self.voxel_volume(
             time_id=time_id
         )
 
     def activity_in(self, region: str, time_id: int) -> float:
-        """Returns the activity within a region of interest. The units of the nuclear medicine data
-        should be Bq/mL."""
+        """Return the activity within a region of interest.
+
+        The units of the nuclear medicine data should be Bq/mL.
+        """
         if self.meta[time_id].Radionuclide is None or self.modality not in ["NM", "PT"]:
             raise AssertionError(
                 "Can't compute activity if the image data does not represent the distribution of a radionuclide"
@@ -273,25 +313,51 @@ class LongitudinalStudy:
         )
 
     def density_of(self, region: str, time_id: int) -> float:
-        """Returns the mean density of region of interest, in HU"""
+        """Return the mean density of region of interest, in HU.
+
+        Parameters
+        ----------
+        region : str
+            The region name.
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        float
+            Mean density in HU.
+        """
         return float(
             numpy.mean(self.array_at(time_id=time_id)[self.masks[time_id][region] > 0])
         )
 
     def voxel_volume(self, time_id: int) -> float:
-        """Returns the volume of a voxel in mL"""
+        """Return the volume of a voxel in mL.
+
+        Parameters
+        ----------
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        float
+            Voxel volume in mL.
+        """
         spacing = self.images[time_id].GetSpacing()
         return float(spacing[0] / 10 * spacing[1] / 10 * spacing[2] / 10)
 
     def average_of(self, region: str, time_id: int) -> float:
-        """_summary_
+        """Compute average value in a region.
 
         Args:
-            region (str): _description_
-            time_id (int): _description_
+            region (str): The region name.
+            time_id (int): The time point ID.
 
-        Returns:
-            float: _description_
+        Returns
+        -------
+        float
+            Average value in the region.
         """
         return float(
             numpy.average(self.array_at(time_id=time_id)[self.masks[time_id][region]])
@@ -303,12 +369,14 @@ class LongitudinalStudy:
         phantom_bone_marrow_path: Path,
         num_iterations: int = 3,
     ) -> None:
-        """Generate Bone Marrow mask on each time point by registering a generic skeleton
-        derived from an XCAT phantom into the patient's Skeleton CT and subsequently applying
-        this spatial transformation to register the phantom's bone marrow into the patient's
-        anatomy.
+        """Generate Bone Marrow mask on each time point.
 
-        Args:
+        Registers a generic skeleton derived from an XCAT phantom into the patient's Skeleton
+        CT and subsequently applying this spatial transformation to register the phantom's bone
+        marrow into the patient's anatomy.
+
+        Args
+        ----
             phantom_skeleton_path (Path): Path to phantom Skeleton .nii file.
             phantom_bone_marrow_path (Path): Path to phantom Bone Marrow .nii file.
         """
@@ -380,7 +448,13 @@ class LongitudinalStudy:
         return None
 
     def check_masks_consistency(self) -> None:
-        """Check that we have the same masks in all time points"""
+        """Check that we have the same masks in all time points.
+
+        Raises
+        ------
+        AssertionError
+            If masks are inconsistent across time points.
+        """
         masks_list = [sorted(list(masks.keys())) for _, masks in self.masks.items()]
 
         sample = masks_list[0]
@@ -396,7 +470,8 @@ class LongitudinalStudy:
     ) -> None:
         """Save Image from a particular time-point as a nifty file.
 
-        Args:
+        Args
+        ----
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
@@ -412,7 +487,8 @@ class LongitudinalStudy:
     ) -> None:
         """Save Image from a particular time-point as a nifty file.
 
-        Args:
+        Args
+        ----
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
@@ -428,7 +504,8 @@ class LongitudinalStudy:
     ) -> None:
         """Save Masks from a particular time-point as a nifty file.
 
-        Args:
+        Args
+        ----
             time_id (int): The time ID representing  the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
             regions (List[str]): A list of regions (masks) to be saved. If empty, save all masks.

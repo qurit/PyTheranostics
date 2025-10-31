@@ -14,7 +14,7 @@ import pandas
 from scipy.interpolate import PchipInterpolator
 
 from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
-from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
+from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
 
 parent_dir = path.dirname(path.dirname(__file__))
 SVALUES_PATH = path.join(parent_dir, "data", "s-values")
