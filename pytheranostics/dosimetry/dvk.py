@@ -6,7 +6,7 @@ from typing import Optional
 import numpy
 from scipy import signal
 
-from pytheranostics.misc_tools.Tools import hu_to_rho
+from pytheranostics.misc_tools.tools import hu_to_rho
 
 
 class DoseVoxelKernel:

@@ -11,13 +11,13 @@ import SimpleITK
 from numpy.typing import NDArray
 
 from pytheranostics.imaging_ds.metadata import ImagingMetadata
-from pytheranostics.imaging_tools.Tools import (
+from pytheranostics.imaging_tools.tools import (
     itk_image_from_array,
     jaccard_index,
     load_from_dicom_dir,
     resample_mask_to_target,
 )
-from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
+from pytheranostics.registration.phantom_to_ct import PhantomToCTBoneReg
 
 
 class LongitudinalStudy:

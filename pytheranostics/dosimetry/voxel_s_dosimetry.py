@@ -9,11 +9,11 @@ import pandas
 import SimpleITK
 from pandas import DataFrame
 
-from pytheranostics.dosimetry.BaseDosimetry import BaseDosimetry
+from pytheranostics.dosimetry.base_dosimetry import BaseDosimetry
 from pytheranostics.dosimetry.dvk import DoseVoxelKernel
 from pytheranostics.fits.fits import get_exponential
 from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
-from pytheranostics.imaging_tools.Tools import itk_image_from_array, resample_to_target
+from pytheranostics.imaging_tools.tools import itk_image_from_array, resample_to_target
 
 
 class VoxelSDosimetry(BaseDosimetry):

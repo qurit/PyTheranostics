@@ -1,3 +1,9 @@
+"""CT to SPECT registration module.
+
+This module provides functions for registering CT images to SPECT images
+and transforming CT-derived masks into SPECT space.
+"""
+
 from typing import Tuple
 
 import SimpleITK
@@ -6,19 +12,20 @@ import SimpleITK
 def register_ct_to_spect(
     ct_image: SimpleITK.Image, spect_image: SimpleITK.Image
 ) -> Tuple[SimpleITK.Image, SimpleITK.Transform]:
-    """
-    Registers a CT image to a SPECT image and applies the resulting transformation to a CT-derived mask.
+    """Register a CT image to a SPECT image using rigid registration.
 
-    Parameters:
-    - ct_image: sitk.Image
+    Parameters
+    ----------
+    ct_image : SimpleITK.Image
         The moving image (CT) to be registered.
-    - spect_image: sitk.Image
+    spect_image : SimpleITK.Image
         The fixed image (SPECT) to which CT will be registered.
 
-    Returns:
-    - registered_ct: sitk.Image
+    Returns
+    -------
+    registered_ct : SimpleITK.Image
         The CT image resampled in SPECT space.
-    - final_transform: sitk.Transform
+    final_transform : SimpleITK.Transform
         The transform mapping CT space to SPECT space.
     """
     # Initialize registration method
@@ -77,21 +84,21 @@ def register_ct_to_spect(
 def transform_ct_mask_to_spect(
     mask: SimpleITK.Image, spect: SimpleITK.Image, transform: SimpleITK.Transform
 ) -> SimpleITK.Image:
-    """_summary_
+    """Transform a CT mask into SPECT space using a given transformation.
 
     Parameters
     ----------
     mask : SimpleITK.Image
-        _description_
+        Binary mask from CT to be transformed.
     spect : SimpleITK.Image
-        _description_
+        Reference SPECT image defining the target space.
     transform : SimpleITK.Transform
-        _description_
+        The transformation from CT to SPECT space.
 
     Returns
     -------
     SimpleITK.Image
-        _description_
+        The mask resampled in SPECT space.
     """
     return SimpleITK.Resample(
         mask, spect, transform, SimpleITK.sitkNearestNeighbor, 0, mask.GetPixelID()

@@ -12,7 +12,7 @@ from SimpleITK import Image
 
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
 from pytheranostics.imaging_ds.metadata import ImagingMetadata
-from pytheranostics.registration.CTtoSPECT import (
+from pytheranostics.registration.ct_to_spect import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
 )

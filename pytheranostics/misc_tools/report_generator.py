@@ -50,13 +50,13 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     Parameters
     ----------
     json_file : str or Path
-        Path to the patient's JSON file.
+            Path to the patient's JSON file.
     output_file : str or Path
-        Path to save the generated PDF report.
+            Path to save the generated PDF report.
     calculated_by : list of dict, optional
-        List of dictionaries with keys 'name', 'title', 'affiliation' for those who calculated the doses.
+            List of dictionaries with keys 'name', 'title', 'affiliation' for those who calculated the doses.
     approved_by : list of dict, optional
-        List of dictionaries with keys 'name', 'title', 'affiliation' for those who approved the report.
+            List of dictionaries with keys 'name', 'title', 'affiliation' for those who approved the report.
     """
     # Load JSON data
     with open(json_file, "r") as file:
@@ -282,13 +282,13 @@ def cycle_info(cycle_n, elements, styles, data):
     Parameters
     ----------
     cycle_n : int
-        The cycle number.
+            The cycle number.
     elements : list
-        List of reportlab elements to append to.
+            List of reportlab elements to append to.
     styles : dict
-        ReportLab styles dictionary.
+            ReportLab styles dictionary.
     data : dict
-        Patient data dictionary.
+            Patient data dictionary.
     """
     # Therapy Information Section
     therapy_title = Paragraph(f"<b>Cycle {cycle_n}</b>", styles["Heading2"])

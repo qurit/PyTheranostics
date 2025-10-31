@@ -1,0 +1,48 @@
+"""Bone marrow dosimetry scaling factors.
+
+This module provides functions for calculating bone marrow scaling factors
+used in blood-based dosimetry methods.
+"""
+
+from typing import Optional
+
+from pytheranostics.dosimetry.olinda import load_phantom_mass
+
+
+def bm_scaling_factor(
+    gender: str = "Male",
+    mass_bm: Optional[float] = None,
+    hematocrit: Optional[float] = None,
+) -> float:
+    """Calculate bone marrow scaling factor for blood-based dosimetry.
+
+    Determines the scaling factor to estimate integrated activity in bone marrow
+    from activity concentration in blood measurements.
+
+    Parameters
+    ----------
+    gender : str, optional
+        Patient gender ("Male" or "Female"), by default "Male"
+    mass_bm : float, optional
+        Bone marrow mass in grams. If None, uses phantom mass, by default None
+    hematocrit : float, optional
+        Patient hematocrit value. If None, uses default RMBLR of 1.0, by default None
+
+    Returns
+    -------
+    float
+        Scaling factor for converting blood activity to bone marrow activity.
+    """
+    RMBLR = 1.0  # Activity concentration in Red Marrow over blood. Generally 1 for PSMA and SSRT.
+
+    if hematocrit is not None:
+        RMBLR = 0.19 / (1 - hematocrit)
+
+    # If the bone-marrow mass is unknown, use phantom mass.
+    if mass_bm is None:
+        mass_bm = load_phantom_mass(gender=gender, organ="Red Marrow")  # in Grams.
+
+    print(f"Phantom Bone Marrow Mass (in grams): {mass_bm}")
+    print(f"Red Marrow to Blood Ratio: RMBLR = {RMBLR}")
+
+    return RMBLR * mass_bm
