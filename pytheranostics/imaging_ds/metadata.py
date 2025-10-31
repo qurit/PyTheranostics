@@ -1,16 +1,9 @@
-"""Metadata structures for imaging datasets."""
+"""Metadata structures for imaging datasets.
 
-from dataclasses import dataclass
-from typing import Optional
+This module re-exports shared metadata types to keep imaging_ds free of
+cross-package dependencies and avoid circular imports.
+"""
 
+from pytheranostics.shared.types import ImagingMetadata
 
-@dataclass
-class ImagingMetadata:
-    """Metadata information for medical imaging datasets."""
-
-    PatientID: str
-    AcquisitionDate: str
-    AcquisitionTime: str
-    HoursAfterInjection: Optional[float]
-    Radionuclide: Optional[str]
-    Injected_Activity_MBq: Optional[float]
+__all__ = ["ImagingMetadata"]

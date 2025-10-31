@@ -1,8 +1,10 @@
 """Tools for medical image manipulation and processing."""
 
+from __future__ import annotations
+
 import glob
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy
 import pydicom
@@ -11,7 +13,11 @@ from rt_utils import RTStructBuilder
 from SimpleITK import Image
 
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
-from pytheranostics.imaging_ds.metadata import ImagingMetadata
+
+if TYPE_CHECKING:
+    # Imported only for type checking to avoid circular imports at runtime
+    from pytheranostics.imaging_ds.metadata import ImagingMetadata
+
 from pytheranostics.registration.ct_to_spect import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
@@ -94,6 +100,9 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
 
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
+
+    # Local import from shared types to avoid circular dependencies
+    from pytheranostics.shared.types import ImagingMetadata
 
     meta = ImagingMetadata(
         PatientID=slice_.PatientID,
