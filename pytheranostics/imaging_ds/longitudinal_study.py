@@ -318,6 +318,59 @@ class LongitudinalStudy:
 
         return None
 
+    def add_raw_masks_to_time_point(
+        self,
+        time_id: int,
+        masks: Dict[str, SimpleITK.Image],
+        *,
+        resample_to_image_geometry: bool = True,
+    ) -> None:
+        """Add masks using their incoming names without validating or remapping.
+
+        This is a permissive import method intended for early data ingestion.
+        It stores masks under their original ROI names as found in RTSTRUCT or
+        other sources. Downstream workflows can later inspect available names
+        and explicitly normalize or remap to canonical labels.
+
+        Args
+        ----
+        time_id : int
+            Index of the time point to which masks will be added.
+        masks : Dict[str, SimpleITK.Image]
+            Dictionary of incoming masks {roi_name: sitk.Image}.
+        resample_to_image_geometry : bool
+            If True, resample each mask to match the study image geometry at
+            this time point to ensure consistent array shapes. Defaults to True.
+
+        Notes
+        -----
+        - No validation is performed on the ROI names.
+        - Existing masks with the same name at this time_id will be overwritten.
+        """
+        if time_id not in self.masks:
+            self.masks[time_id] = {}
+
+        for mask_name, mask_img in masks.items():
+            # Optionally enforce geometry consistency
+            mask_itk = (
+                resample_mask_to_target(
+                    mask_img=mask_img, target_img=self.images[time_id]
+                )
+                if resample_to_image_geometry
+                else mask_img
+            )
+
+            mask_array = numpy.transpose(
+                SimpleITK.GetArrayFromImage(mask_itk), axes=(1, 2, 0)
+            )
+            if mask_name in self.masks[time_id]:
+                print(
+                    f"Warning: {mask_name} found at Time = {time_id}. It will be over-written!"
+                )
+            self.masks[time_id][mask_name] = mask_array.astype(numpy.bool_)
+
+        return None
+
     def volume_of(self, region: str, time_id: int) -> float:
         """Return the volume of a region of interest, in mL.
 
