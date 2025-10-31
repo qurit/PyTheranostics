@@ -1,3 +1,9 @@
+"""Phantom to CT registration module.
+
+This module provides registration of XCAT phantom anatomy to patient CT scans,
+primarily for bone marrow segmentation.
+"""
+
 from pathlib import Path
 from typing import Optional
 
@@ -13,14 +19,14 @@ class PhantomToCTBoneReg:
 
     Parameters
     ----------
-        CT_dir:
+            CT_dir:
 
-        phantom_dir: Path to directory containing Phantom DICOM data.
-            Phantom Data represents the bone+Marrow anatomy of an standard Male XCAT Phantom.
+            phantom_dir: Path to directory containing Phantom DICOM data.
+                    Phantom Data represents the bone+Marrow anatomy of an standard Male XCAT Phantom.
 
     Limitations:
-        For optimal performance, CT and Phantom should roughly cover the same
-        FOV, and be oriented along the same direction.
+            For optimal performance, CT and Phantom should roughly cover the same
+            FOV, and be oriented along the same direction.
     """
 
     def __init__(
@@ -29,7 +35,18 @@ class PhantomToCTBoneReg:
         phantom_skeleton_path: Path = Path("../data/phantom/skeleton/Skeleton.nii.gz"),
         verbose: bool = False,
     ) -> None:
+        """Initialize the Phantom-to-CT registration helper.
 
+        Parameters
+        ----------
+        CT : SimpleITK.Image
+            The reference patient CT image.
+        phantom_skeleton_path : Path, optional
+            Path to the XCAT phantom skeleton image (NIfTI), by default
+            "../data/phantom/skeleton/Skeleton.nii.gz".
+        verbose : bool, optional
+            Enable verbose logging during registration, by default False.
+        """
         self.CT = SimpleITK.Image(CT)  # Make a Copy.
         self.Phantom = SimpleITK.ReadImage(fileName=phantom_skeleton_path)
 
@@ -50,7 +67,15 @@ class PhantomToCTBoneReg:
     def initial_alignment(
         self, fixed_image: SimpleITK.Image, moving_image: SimpleITK.Image
     ) -> None:
+        """Perform initial geometric alignment of images.
 
+        Parameters
+        ----------
+        fixed_image : SimpleITK.Image
+            The reference CT image.
+        moving_image : SimpleITK.Image
+            The phantom image to be aligned.
+        """
         self.InitialTransform = SimpleITK.CenteredTransformInitializer(
             fixed_image,
             moving_image,
@@ -63,13 +88,21 @@ class PhantomToCTBoneReg:
     def rigid_alignment(
         self, fixed_image: SimpleITK.Image, moving_image: SimpleITK.Image
     ) -> None:
-        """Rigid Registration. Please Note currently we only support default parameters.
+        """Perform rigid registration between images.
+
+        Note: Currently only supports default parameters.
         TODO: add support for user-defined registration parameters, probably using **kwargs
+
+        Parameters
+        ----------
+        fixed_image : SimpleITK.Image
+            The reference CT image.
+        moving_image : SimpleITK.Image
+            The phantom image to be registered.
         """
-
-        registration_method = SimpleITK.ImageRegistrationMethod()
-
-        # Similarity metric settings.
+        registration_method = (
+            SimpleITK.ImageRegistrationMethod()
+        )  # Similarity metric settings.
         registration_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
         registration_method.SetMetricSamplingStrategy(registration_method.RANDOM)
         registration_method.SetMetricSamplingPercentage(0.01)
@@ -95,7 +128,6 @@ class PhantomToCTBoneReg:
             raise AssertionError("Initial Transform was not applied.")
 
         registration_method.SetInitialTransform(self.InitialTransform, inPlace=False)
-
         self.RigidTransform = registration_method.Execute(
             SimpleITK.Cast(fixed_image, SimpleITK.sitkFloat32),
             SimpleITK.Cast(moving_image, SimpleITK.sitkFloat32),
@@ -106,9 +138,18 @@ class PhantomToCTBoneReg:
     def elastic_alignment(
         self, fixed_image: SimpleITK.Image, moving_image: SimpleITK.Image
     ) -> None:
+        """Perform elastic (deformable) registration using demons algorithm.
 
-        # Define a simple callback which allows us to monitor registration progress.
+        Parameters
+        ----------
+        fixed_image : SimpleITK.Image
+            The reference CT image.
+        moving_image : SimpleITK.Image
+            The phantom image to be registered.
+        """
+
         def iteration_callback(filter):  # TODO: Remove verbose ... or make it optional.
+            # Define a simple callback which allows us to monitor registration progress.
             if self.verbose:
                 print(
                     f"Iteration: {filter.GetElapsedIterations()}, Metric: {filter.GetMetric()}\n"
@@ -144,6 +185,22 @@ class PhantomToCTBoneReg:
         moving_image: SimpleITK.Image,
         transform: Transform,
     ) -> SimpleITK.Image:
+        """Apply a transformation to resample moving image into fixed image space.
+
+        Parameters
+        ----------
+        fixed_image : SimpleITK.Image
+            The reference image defining the target space.
+        moving_image : SimpleITK.Image
+            The image to be transformed.
+        transform : Transform
+            The transformation to apply.
+
+        Returns
+        -------
+        SimpleITK.Image
+            The transformed image in fixed image space.
+        """
         if transform is None:
             raise AssertionError("Transform was not calculated.")
 
@@ -159,7 +216,20 @@ class PhantomToCTBoneReg:
     def register(
         self, fixed_image: SimpleITK.Image, moving_image: SimpleITK.Image
     ) -> SimpleITK.Image:
+        """Perform full registration pipeline: initial alignment, rigid, and elastic.
 
+        Parameters
+        ----------
+        fixed_image : SimpleITK.Image
+            The reference CT image.
+        moving_image : SimpleITK.Image
+            The phantom image to be registered.
+
+        Returns
+        -------
+        SimpleITK.Image
+            The registered phantom image in CT space.
+        """
         # Initial Geometric Transform: Align images in space.
         self.initial_alignment(fixed_image=fixed_image, moving_image=moving_image)
 
@@ -199,6 +269,20 @@ class PhantomToCTBoneReg:
         fixed_image: SimpleITK.Image,
         mask_path: Path = Path("../data/phantom/bone_marrow/Marrow.nii.gz"),
     ) -> SimpleITK.Image:
+        """Register a phantom mask (e.g., bone marrow) to patient CT.
+
+        Parameters
+        ----------
+        fixed_image : SimpleITK.Image
+            The reference CT image.
+        mask_path : Path, optional
+            Path to the phantom mask file, by default "../data/phantom/bone_marrow/Marrow.nii.gz"
+
+        Returns
+        -------
+        SimpleITK.Image
+            The registered mask in CT space.
+        """
         mask_image = SimpleITK.ReadImage(fileName=mask_path)
         mask_image.SetOrigin(fixed_image.GetOrigin())
         mask_image = SimpleITK.Cast(mask_image, SimpleITK.sitkFloat32)

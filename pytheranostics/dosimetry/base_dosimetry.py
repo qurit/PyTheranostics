@@ -10,11 +10,11 @@ import lmfit
 import numpy
 import pandas
 
-from pytheranostics.dosimetry.BoneMarrow import bm_scaling_factor
+from pytheranostics.dosimetry.bone_marrow import bm_scaling_factor
 from pytheranostics.fits.fits import exponential_fit_lmfit
 from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
-from pytheranostics.imaging_tools.Tools import extract_masks
-from pytheranostics.misc_tools.Tools import calculate_time_difference
+from pytheranostics.imaging_tools.tools import extract_masks
+from pytheranostics.misc_tools.tools import calculate_time_difference
 from pytheranostics.plots.plots import plot_tac_residuals
 
 
@@ -28,24 +28,24 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     Parameters
     ----------
     nm_data : LongitudinalStudy
-        Nuclear Medicine data containing time series of images and masks.
+            Nuclear Medicine data containing time series of images and masks.
     ct_data : LongitudinalStudy
-        CT data containing anatomical information and masks.
+            CT data containing anatomical information and masks.
     config : dict
-        Configuration dictionary containing dosimetry parameters and settings.
+            Configuration dictionary containing dosimetry parameters and settings.
 
     Attributes
     ----------
     nm_data : LongitudinalStudy
-        Nuclear Medicine data instance.
+            Nuclear Medicine data instance.
     ct_data : LongitudinalStudy
-        CT data instance.
+            CT data instance.
     config : dict
-        Configuration parameters.
+            Configuration parameters.
     results : pandas.DataFrame
-        DataFrame containing dosimetry results.
+            DataFrame containing dosimetry results.
     db_dir : Path
-        Directory for storing dosimetry results.
+            Directory for storing dosimetry results.
 
     Notes
     -----
@@ -65,22 +65,22 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         Parameters
         ----------
         patient_id : str
-            Patient ID.
+                Patient ID.
         cycle : int
-            The cycle number (1, 2, ...).
+                The cycle number (1, 2, ...).
         config : Dict
-            Configuration parameters for dosimetry calculations.
+                Configuration parameters for dosimetry calculations.
         database_dir : str
-            A folder to store patient-dosimetry results.
+                A folder to store patient-dosimetry results.
         nm_data : LongitudinalStudy
-            Longitudinal, quantitative, nuclear-medicine imaging data.
-            Note: voxel values should be in units of Bq/mL.
+                Longitudinal, quantitative, nuclear-medicine imaging data.
+                Note: voxel values should be in units of Bq/mL.
         ct_data : LongitudinalStudy
-            Longitudinal CT imaging data.
-            Note: voxel values should be in HU units.
+                Longitudinal CT imaging data.
+                Note: voxel values should be in HU units.
         clinical_data : pandas.DataFrame, optional
-            Clinical data such as blood sampling.
-            Note: blood counting should be in units of Bq/mL.
+                Clinical data such as blood sampling.
+                Note: blood counting should be in units of Bq/mL.
         """
         # Configuration
         self.config = config
@@ -220,7 +220,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         Raises
         ------
         ValueError
-            If required fields are missing from configuration.
+                If required fields are missing from configuration.
         """
         if "InjectionDate" not in self.config or "InjectionTime" not in self.config:
             raise ValueError("Incomplete Configuration file.")
@@ -355,7 +355,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         Args
         ----
-            metric (str): The metric to check.
+                metric (str): The metric to check.
         """
         if (
             "BoneMarrow" in self.results.index
@@ -467,14 +467,14 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         Parameters
         ----------
         region_data : pandas.Series
-            Series containing Time and Activity.
+                Series containing Time and Activity.
         region : str
-            Region of Interest
+                Region of Interest
 
         Returns
         -------
         lmfit.model.ModelResult
-            The best fit model based on Akaike Information Criterion.
+                The best fit model based on Akaike Information Criterion.
         """
         # If fit_order is defined by user:
         if self.config["rois"][region]["fit_order"] is not None:
@@ -558,13 +558,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         Parameters
         ----------
         result : lmfit.model.ModelResult
-            The result object from fitting an exponential function using lmfit.
-            Should contain parameters for the exponential terms (A1, A2, B1, B2, etc.).
+                The result object from fitting an exponential function using lmfit.
+                Should contain parameters for the exponential terms (A1, A2, B1, B2, etc.).
 
         Returns
         -------
         float
-            The computed integral value.
+                The computed integral value.
 
         Notes
         -----
@@ -645,7 +645,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             t_repair = self.radiobiology_dic[organ]["t_repair"]
             alpha_beta = self.radiobiology_dic[organ]["alpha_beta"]
             AD = (
-                float(bed_df.loc[bed_df.index == organ]["AD[Gy/GBq]"].values[0])
+                float(self.df_ad.loc[bed_df.index == organ]["AD[Gy/GBq]"].values[0])
                 * float(self.config["InjectedActivity"])
                 / 1000
             )  # Gy
@@ -708,7 +708,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         Args
         ----
-            time_id (int): The time point ID.
+                time_id (int): The time point ID.
         """
         self.ct_data.save_image_to_nii_at(
             time_id=time_id, out_path=self.db_dir, name="CT"
@@ -737,8 +737,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         Args
         ----
-            file_path (str): Path to the JSON file.
-            create_new (bool): Whether to create a new file or update existing data.
+                file_path (str): Path to the JSON file.
+                create_new (bool): Whether to create a new file or update existing data.
         """
         # Open empty json to load its structure:
         if create_new:
