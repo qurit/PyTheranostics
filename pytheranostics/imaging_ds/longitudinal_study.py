@@ -1,25 +1,31 @@
+"""Module for longitudinal medical imaging studies."""
+
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import numpy
 import SimpleITK
 from numpy.typing import NDArray
 
-from pytheranostics.ImagingDS.metadata import ImagingMetadata
-from pytheranostics.ImagingTools.Tools import (
+from pytheranostics.imaging_ds.metadata import ImagingMetadata
+from pytheranostics.imaging_tools.tools import (
     itk_image_from_array,
     jaccard_index,
     load_from_dicom_dir,
     resample_mask_to_target,
 )
-from pytheranostics.registration.PhantomToCT import PhantomToCTBoneReg
+from pytheranostics.registration.phantom_to_ct import PhantomToCTBoneReg
 
 
 class LongitudinalStudy:
-    """Longitudinal Study Data Class to hold multiple medical imaging datasets, alongside with masks for organs
-    /regions of interest and meta-data."""
+    """Longitudinal Study Data Class.
+
+    Holds multiple medical imaging datasets, alongside with masks for organs/regions
+    of interest and meta-data.
+    """
 
     _VALID_ORGAN_NAMES = [
         "Kidney_Left",
@@ -56,16 +62,18 @@ class LongitudinalStudy:
             modality (str, optional): The imaging modality type. Supported values are "NM"
                 (Nuclear Medicine), "PT" (PET), "CT", or "DOSE". Defaults to "NM".
 
-        Raises:
-            ValueError: If the specified modality is not one of the supported values:
+        Raises
+        ------
+        ValueError
+            If the specified modality is not one of the supported values:
                 "NM", "PT", "CT", or "DOSE".
 
-        Note:
+        Note
+        ----
             The constructor initializes an empty masks dictionary that can be populated later
             using the `add_masks_to_time_point` method. It also defines a comprehensive list
             of valid mask names for regions of interest including organs, glands, and lesions.
         """
-
         if images.keys() != meta.keys():
             raise ValueError(
                 "Not all time points have corresponding images and metadata."
@@ -92,6 +100,8 @@ class LongitudinalStudy:
         dicom_dirs: List[str],
         modality: str = "CT",
         calibration_factor: Optional[float] = None,
+        parallel: bool = True,
+        max_workers: Optional[int] = None,
     ) -> "LongitudinalStudy":
         """Create a LongitudinalStudy object from a list of DICOM directories.
 
@@ -104,13 +114,21 @@ class LongitudinalStudy:
                 and "Lu177_SPECT". Defaults to "CT".
             calibration_factor (float, optional): Converts reconstructed SPECT image
                 (raw counts * num_proj) to units of Bq/mL. Defaults to None.
+            parallel (bool, optional): Whether to load DICOM directories in parallel.
+                Defaults to True for faster loading of multiple timepoints.
+            max_workers (int, optional): Maximum number of parallel workers. If None,
+                defaults to min(number of CPUs, number of directories).
 
-        Returns:
-            LongitudinalStudy: A new LongitudinalStudy instance containing the loaded
+        Returns
+        -------
+        LongitudinalStudy
+            A new LongitudinalStudy instance containing the loaded
                 DICOM data organized by time points.
 
-        Raises:
-            ValueError: If the specified modality is not supported.
+        Raises
+        ------
+        ValueError
+            If the specified modality is not supported.
         """
         # TODO: should fix this to make it robust and look at dicom header info for sorting time-points.
         supported_modalities = {
@@ -126,12 +144,45 @@ class LongitudinalStudy:
         images: Dict[int, SimpleITK.Image] = {}
         metadata: Dict[int, ImagingMetadata] = {}
 
-        for time_id, dicom_dir in enumerate(dicom_dirs):
-            image, meta = load_from_dicom_dir(
-                dir=dicom_dir, modality=modality, calibration_factor=calibration_factor
-            )
-            images[time_id] = image
-            metadata[time_id] = meta
+        if parallel and len(dicom_dirs) > 1:
+            # Parallel loading for multiple timepoints
+            print(f"Loading {len(dicom_dirs)} {modality} timepoints in parallel...")
+
+            # Helper function for parallel execution
+            def load_single_timepoint(args):
+                time_id, dicom_dir = args
+                print(f"  Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                return time_id, load_from_dicom_dir(
+                    dir=dicom_dir,
+                    modality=modality,
+                    calibration_factor=calibration_factor,
+                )
+
+            # Use ThreadPoolExecutor for I/O-bound DICOM loading
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        load_single_timepoint, (time_id, dicom_dir)
+                    ): time_id
+                    for time_id, dicom_dir in enumerate(dicom_dirs)
+                }
+
+                for future in as_completed(futures):
+                    time_id, (image, meta) = future.result()
+                    images[time_id] = image
+                    metadata[time_id] = meta
+                    print(f"  ✓ Timepoint {time_id} loaded")
+        else:
+            # Sequential loading
+            for time_id, dicom_dir in enumerate(dicom_dirs):
+                print(f"Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                image, meta = load_from_dicom_dir(
+                    dir=dicom_dir,
+                    modality=modality,
+                    calibration_factor=calibration_factor,
+                )
+                images[time_id] = image
+                metadata[time_id] = meta
 
         return cls(
             images=images,
@@ -152,8 +203,134 @@ class LongitudinalStudy:
         lesion_pattern = r"^Lesion_([1-9]\d*)$"
         return bool(re.match(lesion_pattern, mask_name))
 
+    # --- ROI name normalization & mapping helpers -----------------------------------------
+
+    @staticmethod
+    def canonical_roi_name(name: str) -> str:
+        """Return a best-effort canonical ROI name for pyTheranostics/Olinda.
+
+        This performs lightweight normalization of common suffixes and synonyms, keeping
+        unknown names as-is so users can decide later.
+
+        Rules applied:
+        - Drop training suffixes like "_m" (morphology/CT) and "_a" (activity/NM)
+        - Map frequent abbreviations to long-form organ names used across the codebase
+        """
+        base = name
+        if base.endswith("_m") or base.endswith("_a"):
+            base = base[:-2]
+
+        synonyms = {
+            "Kidney_L": "Kidney_Left",
+            "Kidney_R": "Kidney_Right",
+            "Parotid_L": "ParotidGland_Left",
+            "Parotid_R": "ParotidGland_Right",
+            "Submandibular_L": "SubmandibularGland_Left",
+            "Submandibular_R": "SubmandibularGland_Right",
+            "WBCT": "WholeBody",
+            "WB": "WholeBody",
+        }
+        return synonyms.get(base, base)
+
+    @classmethod
+    def propose_mapping_from_names(cls, names: Iterable[str]) -> Dict[str, str]:
+        """Propose a mapping from raw ROI names to canonical targets.
+
+        Parameters
+        ----------
+        names : Iterable[str]
+            Collection of raw ROI names (e.g., as found in RTSTRUCT files).
+
+        Returns
+        -------
+        Dict[str, str]
+            Proposed mapping {raw_name: canonical_name} using lightweight rules.
+        """
+        return {n: cls.canonical_roi_name(n) for n in set(names)}
+
+    @classmethod
+    def propose_mapping_from_studies(
+        cls, studies: Iterable["LongitudinalStudy"]
+    ) -> Dict[str, str]:
+        """Propose a mapping from all mask names found across multiple studies.
+
+        Parameters
+        ----------
+        studies : Iterable[LongitudinalStudy]
+            One or more LongitudinalStudy instances (e.g., SPECT and CT).
+
+        Returns
+        -------
+        Dict[str, str]
+            Proposed mapping {raw_name: canonical_name} across all timepoints.
+        """
+        raw: set[str] = set()
+        for study in studies:
+            for _, masks in study.masks.items():
+                raw.update(masks.keys())
+        return cls.propose_mapping_from_names(raw)
+
+    def rename_masks(
+        self, mapping: Dict[str, str], *, validate_targets: bool = True
+    ) -> None:
+        """Rename masks in-place according to a mapping.
+
+        Parameters
+        ----------
+        mapping : Dict[str, str]
+            Dictionary mapping source names to destination names.
+        validate_targets : bool, optional
+            If True, only apply renames where the destination is a valid mask name.
+        """
+        for time_id, masks in self.masks.items():
+            for src, dst in mapping.items():
+                if src in masks:
+                    if validate_targets and not self._is_valid_mask_name(dst):
+                        # Skip invalid targets to avoid breaking downstream
+                        continue
+                    masks[dst] = masks[src]
+                    if dst != src:
+                        try:
+                            del masks[src]
+                        except KeyError:
+                            pass
+        return None
+
+    def missing_targets(self, required: Iterable[str]) -> Dict[int, List[str]]:
+        """Report which required mask names are missing at each timepoint.
+
+        Parameters
+        ----------
+        required : Iterable[str]
+            Canonical ROI names expected to be present (e.g., from config).
+
+        Returns
+        -------
+        Dict[int, List[str]]
+            Per-timepoint list of missing ROI names (empty dict means all present).
+        """
+        req_set = set(required)
+        missing: Dict[int, List[str]] = {}
+        for tp in sorted(self.images.keys()):
+            have = set(self.masks.get(tp, {}).keys())
+            miss = sorted(list(req_set - have))
+            if miss:
+                missing[tp] = miss
+        return missing
+
     def array_at(self, time_id: int) -> NDArray[Any]:
-        """Access Array Data"""
+        """Access Array Data.
+
+        Parameters
+        ----------
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        NDArray[Any]
+            The array data at the specified time point.
+        """
         return numpy.transpose(
             numpy.squeeze(SimpleITK.GetArrayFromImage(self.images[time_id])),
             axes=(1, 2, 0),
@@ -162,8 +339,10 @@ class LongitudinalStudy:
     def array_of_activity_at(
         self, time_id: int, region: Optional[str] = None
     ) -> NDArray[Any]:
-        """Returns the array in units of activity in Bq, with the posibility of masking
-        out for one specific region."""
+        """Return the array in units of activity in Bq.
+
+        With the posibility of masking out for one specific region.
+        """
         if self.modality not in ["NM", "PT"]:
             raise ValueError(f"Activity can't be calculated from {self.modality} data.")
 
@@ -208,11 +387,12 @@ class LongitudinalStudy:
             masks (Dict[str, SimpleITK.Image]): Dictionary containing masks for time point time_id, in the format {mask_name: mask_image (simpleITK)}
             mask_mapping (Optional[Dict[str, str]], optional): Mapping between masks names in input masks dictionary, and standard mask names in pyTheranostics. Defaults to None. If None, takes each name as is.
 
-        Raises:
-            ValueError: If mapping between user input masks and pyTheranostics standard mask names is invalid.
+        Raises
+        ------
+        ValueError
+            If mapping between user input masks and pyTheranostics standard mask names is invalid.
 
         """
-
         # If mask mapping is not specified, utilize user defined names in masks Dictionary.
         if mask_mapping is None:
             mask_mapping = {mask_name: mask_name for mask_name in masks.keys()}
@@ -253,15 +433,83 @@ class LongitudinalStudy:
 
         return None
 
+    def add_raw_masks_to_time_point(
+        self,
+        time_id: int,
+        masks: Dict[str, SimpleITK.Image],
+        *,
+        resample_to_image_geometry: bool = True,
+    ) -> None:
+        """Add masks using their incoming names without validating or remapping.
+
+        This is a permissive import method intended for early data ingestion.
+        It stores masks under their original ROI names as found in RTSTRUCT or
+        other sources. Downstream workflows can later inspect available names
+        and explicitly normalize or remap to canonical labels.
+
+        Args
+        ----
+        time_id : int
+            Index of the time point to which masks will be added.
+        masks : Dict[str, SimpleITK.Image]
+            Dictionary of incoming masks {roi_name: sitk.Image}.
+        resample_to_image_geometry : bool
+            If True, resample each mask to match the study image geometry at
+            this time point to ensure consistent array shapes. Defaults to True.
+
+        Notes
+        -----
+        - No validation is performed on the ROI names.
+        - Existing masks with the same name at this time_id will be overwritten.
+        """
+        if time_id not in self.masks:
+            self.masks[time_id] = {}
+
+        for mask_name, mask_img in masks.items():
+            # Optionally enforce geometry consistency
+            mask_itk = (
+                resample_mask_to_target(
+                    mask_img=mask_img, target_img=self.images[time_id]
+                )
+                if resample_to_image_geometry
+                else mask_img
+            )
+
+            mask_array = numpy.transpose(
+                SimpleITK.GetArrayFromImage(mask_itk), axes=(1, 2, 0)
+            )
+            if mask_name in self.masks[time_id]:
+                print(
+                    f"Warning: {mask_name} found at Time = {time_id}. It will be over-written!"
+                )
+            self.masks[time_id][mask_name] = mask_array.astype(numpy.bool_)
+
+        return None
+
     def volume_of(self, region: str, time_id: int) -> float:
-        """Returns the volume of a region of interest, in mL"""
+        """Return the volume of a region of interest, in mL.
+
+        Parameters
+        ----------
+        region : str
+            The region name.
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        float
+            Volume in mL.
+        """
         return numpy.sum(self.masks[time_id][region]) * self.voxel_volume(
             time_id=time_id
         )
 
     def activity_in(self, region: str, time_id: int) -> float:
-        """Returns the activity within a region of interest. The units of the nuclear medicine data
-        should be Bq/mL."""
+        """Return the activity within a region of interest.
+
+        The units of the nuclear medicine data should be Bq/mL.
+        """
         if self.meta[time_id].Radionuclide is None or self.modality not in ["NM", "PT"]:
             raise AssertionError(
                 "Can't compute activity if the image data does not represent the distribution of a radionuclide"
@@ -273,25 +521,51 @@ class LongitudinalStudy:
         )
 
     def density_of(self, region: str, time_id: int) -> float:
-        """Returns the mean density of region of interest, in HU"""
+        """Return the mean density of region of interest, in HU.
+
+        Parameters
+        ----------
+        region : str
+            The region name.
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        float
+            Mean density in HU.
+        """
         return float(
             numpy.mean(self.array_at(time_id=time_id)[self.masks[time_id][region] > 0])
         )
 
     def voxel_volume(self, time_id: int) -> float:
-        """Returns the volume of a voxel in mL"""
+        """Return the volume of a voxel in mL.
+
+        Parameters
+        ----------
+        time_id : int
+            The time point ID.
+
+        Returns
+        -------
+        float
+            Voxel volume in mL.
+        """
         spacing = self.images[time_id].GetSpacing()
         return float(spacing[0] / 10 * spacing[1] / 10 * spacing[2] / 10)
 
     def average_of(self, region: str, time_id: int) -> float:
-        """_summary_
+        """Compute average value in a region.
 
         Args:
-            region (str): _description_
-            time_id (int): _description_
+            region (str): The region name.
+            time_id (int): The time point ID.
 
-        Returns:
-            float: _description_
+        Returns
+        -------
+        float
+            Average value in the region.
         """
         return float(
             numpy.average(self.array_at(time_id=time_id)[self.masks[time_id][region]])
@@ -303,12 +577,14 @@ class LongitudinalStudy:
         phantom_bone_marrow_path: Path,
         num_iterations: int = 3,
     ) -> None:
-        """Generate Bone Marrow mask on each time point by registering a generic skeleton
-        derived from an XCAT phantom into the patient's Skeleton CT and subsequently applying
-        this spatial transformation to register the phantom's bone marrow into the patient's
-        anatomy.
+        """Generate Bone Marrow mask on each time point.
 
-        Args:
+        Registers a generic skeleton derived from an XCAT phantom into the patient's Skeleton
+        CT and subsequently applying this spatial transformation to register the phantom's bone
+        marrow into the patient's anatomy.
+
+        Args
+        ----
             phantom_skeleton_path (Path): Path to phantom Skeleton .nii file.
             phantom_bone_marrow_path (Path): Path to phantom Bone Marrow .nii file.
         """
@@ -380,7 +656,13 @@ class LongitudinalStudy:
         return None
 
     def check_masks_consistency(self) -> None:
-        """Check that we have the same masks in all time points"""
+        """Check that we have the same masks in all time points.
+
+        Raises
+        ------
+        AssertionError
+            If masks are inconsistent across time points.
+        """
         masks_list = [sorted(list(masks.keys())) for _, masks in self.masks.items()]
 
         sample = masks_list[0]
@@ -396,7 +678,8 @@ class LongitudinalStudy:
     ) -> None:
         """Save Image from a particular time-point as a nifty file.
 
-        Args:
+        Args
+        ----
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
@@ -412,7 +695,8 @@ class LongitudinalStudy:
     ) -> None:
         """Save Image from a particular time-point as a nifty file.
 
-        Args:
+        Args
+        ----
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
@@ -428,7 +712,8 @@ class LongitudinalStudy:
     ) -> None:
         """Save Masks from a particular time-point as a nifty file.
 
-        Args:
+        Args
+        ----
             time_id (int): The time ID representing  the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
             regions (List[str]): A list of regions (masks) to be saved. If empty, save all masks.

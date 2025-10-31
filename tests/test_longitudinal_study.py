@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 import SimpleITK
 
-from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
-from pytheranostics.ImagingDS.metadata import ImagingMetadata
+from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
+from pytheranostics.imaging_ds.metadata import ImagingMetadata
 
 
 class TestLongitudinalStudyFixtures:
@@ -242,7 +242,7 @@ class TestLongitudinalStudyMaskManagement:
 
         # Mock the required functions
         with patch(
-            "pytheranostics.ImagingDS.longitudinal_study.resample_mask_to_target"
+            "pytheranostics.imaging_ds.longitudinal_study.resample_mask_to_target"
         ) as mock_resample, patch("SimpleITK.GetArrayFromImage") as mock_get_array:
 
             mock_resample.return_value = mock_mask_image
@@ -388,7 +388,7 @@ class TestLongitudinalStudyPropertyBased:
     )
     def test_mask_validation(self, mask_name, expected):
         """Test comprehensive mask name validation patterns."""
-        from pytheranostics.ImagingDS.longitudinal_study import LongitudinalStudy
+        from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
 
         result = LongitudinalStudy._is_valid_mask_name(mask_name)
         assert (

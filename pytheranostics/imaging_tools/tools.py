@@ -1,6 +1,10 @@
+"""Tools for medical image manipulation and processing."""
+
+from __future__ import annotations
+
 import glob
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy
 import pydicom
@@ -9,8 +13,12 @@ from rt_utils import RTStructBuilder
 from SimpleITK import Image
 
 from pytheranostics.dicomtools.dicomtools import sitk_load_dcm_series
-from pytheranostics.ImagingDS.metadata import ImagingMetadata
-from pytheranostics.registration.CTtoSPECT import (
+
+if TYPE_CHECKING:
+    # Imported only for type checking to avoid circular imports at runtime
+    from pytheranostics.imaging_ds.metadata import ImagingMetadata
+
+from pytheranostics.registration.ct_to_spect import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
 )
@@ -20,24 +28,30 @@ from pytheranostics.registration.CTtoSPECT import (
 
 
 def load_metadata(dir: str, modality: str) -> ImagingMetadata:
-    """Loads relevant meta-data from a dicom dataset.
+    """Load relevant meta-data from a dicom dataset.
 
     Args:
-        dir (str): _description_
-        modality (str): _description_
+        dir (str): Directory path containing DICOM files.
+        modality (str): The imaging modality.
 
-    Raises:
-        AssertionError: _description_
-        ValueError: _description_
-        AssertionError: _description_
-        ValueError: _description_
+    Raises
+    ------
+    AssertionError
+        If no DICOM data found in directory.
+    ValueError
+        If modality mismatch detected.
 
-    Returns:
-        ImagingMetaData: _description_
+    Returns
+    -------
+    ImagingMetadata
+        Metadata object with imaging information.
     """
+    # Convert Path to string if needed
+    dir_str = str(dir)
 
     dicom_slices = [
-        pydicom.dcmread(fname) for fname in glob.glob(dir + "/*.dcm", recursive=False)
+        pydicom.dcmread(fname)
+        for fname in glob.glob(dir_str + "/*.dcm", recursive=False)
     ]
 
     if len(dicom_slices) == 0:
@@ -87,6 +101,9 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
     # Global attributes. Should be the same in all slices!
     slice_ = dicom_slices[0]
 
+    # Local import from shared types to avoid circular dependencies
+    from pytheranostics.shared.types import ImagingMetadata
+
     meta = ImagingMetadata(
         PatientID=slice_.PatientID,
         AcquisitionDate=slice_.AcquisitionDate,
@@ -102,16 +119,19 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
 def itk_image_from_array(
     array: numpy.ndarray, ref_image: Image, is_mask: bool = False
 ) -> Image:
-    """Create an ITK Image object with a new array and existing
-        meta-data from another reference ITK image.
+    """Create an ITK Image object with a new array and existing meta-data.
+
+    Uses meta-data from another reference ITK image.
 
     Args:
-        array (numpy.ndarray): _description_
-        ref_image (Image): _description_
-        is_mask (bool)
+        array (numpy.ndarray): Array data for the new image.
+        ref_image (Image): Reference ITK image for metadata.
+        is_mask (bool): Whether the array represents a mask.
 
-    Returns:
-        Image: _description_
+    Returns
+    -------
+    Image
+        New ITK Image object with array data and reference metadata.
     """
     # Cast if masks:
     if is_mask:
@@ -153,19 +173,24 @@ def itk_image_from_array(
 def apply_qspect_dcm_scaling(
     image: Image, dir: str, scale_factor: Optional[Tuple[float, float]] = None
 ) -> Image:
-    """Read dicom metadata to extract appropriate scaling for Image voxel values, then
-    apply to original image and generate a new SimpleITK image object.
+    """Read dicom metadata to extract appropriate scaling for Image voxel values.
+
+    Apply scaling to original image and generate a new SimpleITK image object.
 
     Args:
-        image (Image): _description_
-        dir (str): _description_
-        scale_factor (Optional[Tuple[float, float]], optional): _description_. Defaults to None.
+        image (Image): Original SimpleITK image.
+        dir (str): Directory path containing DICOM files.
+        scale_factor (Optional[Tuple[float, float]], optional): Custom scale factor. Defaults to None.
 
-    Raises:
-        AssertionError: _description_
+    Raises
+    ------
+    AssertionError
+        If wrong modality or multiple DICOM files found.
 
-    Returns:
-        Image: _description_
+    Returns
+    -------
+    Image
+        Scaled SimpleITK image.
     """
     if scale_factor is None:
         # We use pydicom to access the appropriate tag:
@@ -207,9 +232,10 @@ def apply_qspect_dcm_scaling(
 
 
 def apply_qspect_dcm_origin(image: Image, dir: str) -> Image:
-    """Apply Origin and Direction from dicom header if needed. This could happen when SPECT data is stored
-    as a single .dcm file (i.e., stored as "NM" modality), ITKSnap sometimes fails to read the Position and Direction correctly, so we pull it
-    from pydicom.
+    """Apply Origin and Direction from dicom header if needed.
+
+    This could happen when SPECT data is stored as a single .dcm file (i.e., stored as "NM" modality),
+    ITKSnap sometimes fails to read the Position and Direction correctly, so we pull it from pydicom.
 
     Parameters
     ----------
@@ -322,14 +348,18 @@ def load_from_dicom_dir(
     dir: str, modality: str, calibration_factor: Optional[float] = None
 ) -> Tuple[Image, ImagingMetadata]:
     """Load CT or SPECT data from DICOM files in the specified folder.
+
     Returns the Image object and some relevant metadata.
 
     Args:
-        dir (str): _description_
-        modality (str): _description_
+        dir (str): Directory path containing DICOM files.
+        modality (str): The imaging modality.
         calibration_factor (str, optional): Factor to scale SPECT voxel values (e.g., could be SPECT calibration Factor in BQ/CPS or dimensionless factor)
-    Returns:
-        Tuple[Image, ImagingMetadata]: _description_
+
+    Returns
+    -------
+    Tuple[Image, ImagingMetadata]
+        Tuple containing the Image object and metadata.
     """
     # Read image content and spatial information using SimpleITK
     image = sitk_load_dcm_series(dcm_dir=Path(dir))
@@ -370,7 +400,7 @@ def load_from_dicom_dir(
 
 
 def are_vectors_orthogonal(origin: List[float], tol: float = 1e-24):
-    """Checks if the patient orientation is given by orthogonal vectors
+    """Check if the patient orientation is given by orthogonal vectors.
 
     Returns True if a·b, a·c, and b·c are all within ±tol; otherwise False.
 
@@ -398,17 +428,17 @@ def are_vectors_orthogonal(origin: List[float], tol: float = 1e-24):
 
 
 def force_orthogonality(image: SimpleITK.Image) -> SimpleITK.Image:
-    """_summary_
+    """Force orthogonality of patient orientation vectors.
 
     Parameters
     ----------
     image : SimpleITK.Image
-        _description_
+        Input image.
 
     Returns
     -------
     SimpleITK.Image
-        _description_
+        Image with orthogonal orientation vectors.
     """
     if not are_vectors_orthogonal(image.GetDirection()):
         print("Patient Orientation Vectors are NOT orthogonal. Forcing...")
@@ -522,16 +552,16 @@ def resample_mask_to_target(
 def load_and_resample_RT_to_target(
     ref_dicom_ct_dir: str, rt_struct_file: str, target_img: SimpleITK.Image
 ) -> Tuple[Dict[str, SimpleITK.Image], Dict[str, SimpleITK.Image]]:
-    """_summary_
+    """Load and resample RT structure to target image.
 
     Parameters
     ----------
     ref_dicom_ct_dir : str
-        _description_
+        Directory containing reference DICOM CT files.
     rt_struct_file : str
-        _description_
+        Path to RT structure file.
     target_img : SimpleITK.Image
-        _description_
+        Target image for resampling.
 
     Returns
     -------
@@ -556,14 +586,14 @@ def load_and_resample_RT_to_target(
 def load_and_register_RT_to_target(
     ref_dicom_ct_dir: str, rt_struct_file: str, target_img: SimpleITK.Image
 ) -> Tuple[Dict[str, SimpleITK.Image], Dict[str, SimpleITK.Image]]:
-    """_summary_
+    """Load and register RT structure to target image.
 
     Parameters
     ----------
     ref_dicom_ct_dir : str
-        _description_
+        Directory containing reference DICOM CT files.
     rt_struct_file : str
-        _description_
+        Path to RT structure file.
     target_img : SimpleITK.Image
         _description_
 
@@ -599,17 +629,24 @@ def resample_to_target(
     target_img: SimpleITK.Image,
     default_value: float = -1000.0,
 ) -> SimpleITK.Image:
-    """
-    Resample source_img to match the grid (origin, spacing, direction, size)
-    of target_image using the SimpleITK Linear interpolator.
+    """Resample source_img to match the grid of target_image.
 
-    Parameters:
-        source_img (sitk.Image): The image to be resampled.
-        target_img (sitk.Image): The reference image defining the desired grid.
-        default_value (float): Pixel value for voxels outside source_img domain. Defaults to CT air values.
+    Matches origin, spacing, direction, and size of target_image using the
+    SimpleITK Linear interpolator.
 
-    Returns:
-        sitk.Image: The resampled image.
+    Parameters
+    ----------
+    source_img : sitk.Image
+        The image to be resampled.
+    target_img : sitk.Image
+        The reference image defining the desired grid.
+    default_value : float
+        Pixel value for voxels outside source_img domain. Defaults to CT air values.
+
+    Returns
+    -------
+    sitk.Image
+        The resampled image.
     """
     # Set up the resampler
     resampler = SimpleITK.ResampleImageFilter()
@@ -629,15 +666,16 @@ def resample_to_target(
 def ensure_masks_disconnect(
     original_masks: Dict[str, numpy.ndarray],
 ) -> Dict[str, numpy.ndarray]:
-    """_summary_
+    """Ensure masks are disconnected by resolving overlaps.
 
     Args:
-        original_masks (Dict[str, numpy.ndarray]): _description_
+        original_masks (Dict[str, numpy.ndarray]): Dictionary of mask arrays.
 
-    Returns:
-        Dict[str, numpy.ndarray]: _description_
+    Returns
+    -------
+    Dict[str, numpy.ndarray]
+        Dictionary of disconnected masks.
     """
-
     if len(original_masks) == 0:
         return original_masks
 
@@ -670,14 +708,16 @@ def extract_masks(
     requested_rois: List[str],
 ) -> Dict[str, numpy.ndarray]:
     """Extract masks from NM dataset, according to user-defined list. Enforce that masks are disconnected.
-        Constrains:
-        - Tumors are always going to be removed from organs.
-        - For non-tumor regions with overlapping voxels, the newly added region will prevail.
 
-    Returns:
-        Dict[str, numpy.ndarray]: Dictionary of compliant masks.
+    Constrains:
+    - Tumors are always going to be removed from organs.
+    - For non-tumor regions with overlapping voxels, the newly added region will prevail.
+
+    Returns
+    -------
+    Dict[str, numpy.ndarray]
+        Dictionary of compliant masks.
     """
-
     # Available Mask Names:
     exclude = ["WholeBody", "RemainderOfBody"]
     if "BoneMarrow" not in mask_dataset[0]:
@@ -742,16 +782,17 @@ def extract_masks(
 
 
 def jaccard_index(mask_1: numpy.ndarray, mask_2: numpy.ndarray) -> float:
-    """_summary_
+    """Compute the Jaccard index between two binary masks.
 
     Args:
         mask_1 (numpy.ndarray): First binary mask as a numpy array where 1s represent the mask and 0s represent the background.
         mask_2 (numpy.ndarray): Second binary mask as a numpy array similar to mask_1.
 
-    Returns:
-        Jaccard (float): _description_
+    Returns
+    -------
+    float
+        Jaccard index value.
     """
-
     intersection = numpy.logical_and(mask_1, mask_2)
     union = numpy.logical_or(mask_1, mask_2)
     jaccard = numpy.sum(intersection) / numpy.sum(union)
