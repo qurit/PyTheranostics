@@ -4,7 +4,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import numpy
 import SimpleITK
@@ -202,6 +202,121 @@ class LongitudinalStudy:
             return True
         lesion_pattern = r"^Lesion_([1-9]\d*)$"
         return bool(re.match(lesion_pattern, mask_name))
+
+    # --- ROI name normalization & mapping helpers -----------------------------------------
+
+    @staticmethod
+    def canonical_roi_name(name: str) -> str:
+        """Return a best-effort canonical ROI name for pyTheranostics/Olinda.
+
+        This performs lightweight normalization of common suffixes and synonyms, keeping
+        unknown names as-is so users can decide later.
+
+        Rules applied:
+        - Drop training suffixes like "_m" (morphology/CT) and "_a" (activity/NM)
+        - Map frequent abbreviations to long-form organ names used across the codebase
+        """
+        base = name
+        if base.endswith("_m") or base.endswith("_a"):
+            base = base[:-2]
+
+        synonyms = {
+            "Kidney_L": "Kidney_Left",
+            "Kidney_R": "Kidney_Right",
+            "Parotid_L": "ParotidGland_Left",
+            "Parotid_R": "ParotidGland_Right",
+            "Submandibular_L": "SubmandibularGland_Left",
+            "Submandibular_R": "SubmandibularGland_Right",
+            "WBCT": "WholeBody",
+            "WB": "WholeBody",
+        }
+        return synonyms.get(base, base)
+
+    @classmethod
+    def propose_mapping_from_names(cls, names: Iterable[str]) -> Dict[str, str]:
+        """Propose a mapping from raw ROI names to canonical targets.
+
+        Parameters
+        ----------
+        names : Iterable[str]
+            Collection of raw ROI names (e.g., as found in RTSTRUCT files).
+
+        Returns
+        -------
+        Dict[str, str]
+            Proposed mapping {raw_name: canonical_name} using lightweight rules.
+        """
+        return {n: cls.canonical_roi_name(n) for n in set(names)}
+
+    @classmethod
+    def propose_mapping_from_studies(
+        cls, studies: Iterable["LongitudinalStudy"]
+    ) -> Dict[str, str]:
+        """Propose a mapping from all mask names found across multiple studies.
+
+        Parameters
+        ----------
+        studies : Iterable[LongitudinalStudy]
+            One or more LongitudinalStudy instances (e.g., SPECT and CT).
+
+        Returns
+        -------
+        Dict[str, str]
+            Proposed mapping {raw_name: canonical_name} across all timepoints.
+        """
+        raw: set[str] = set()
+        for study in studies:
+            for _, masks in study.masks.items():
+                raw.update(masks.keys())
+        return cls.propose_mapping_from_names(raw)
+
+    def rename_masks(
+        self, mapping: Dict[str, str], *, validate_targets: bool = True
+    ) -> None:
+        """Rename masks in-place according to a mapping.
+
+        Parameters
+        ----------
+        mapping : Dict[str, str]
+            Dictionary mapping source names to destination names.
+        validate_targets : bool, optional
+            If True, only apply renames where the destination is a valid mask name.
+        """
+        for time_id, masks in self.masks.items():
+            for src, dst in mapping.items():
+                if src in masks:
+                    if validate_targets and not self._is_valid_mask_name(dst):
+                        # Skip invalid targets to avoid breaking downstream
+                        continue
+                    masks[dst] = masks[src]
+                    if dst != src:
+                        try:
+                            del masks[src]
+                        except KeyError:
+                            pass
+        return None
+
+    def missing_targets(self, required: Iterable[str]) -> Dict[int, List[str]]:
+        """Report which required mask names are missing at each timepoint.
+
+        Parameters
+        ----------
+        required : Iterable[str]
+            Canonical ROI names expected to be present (e.g., from config).
+
+        Returns
+        -------
+        Dict[int, List[str]]
+            Per-timepoint list of missing ROI names (empty dict means all present).
+        """
+        req_set = set(required)
+        missing: Dict[int, List[str]] = {}
+        for tp in sorted(self.images.keys()):
+            have = set(self.masks.get(tp, {}).keys())
+            miss = sorted(list(req_set - have))
+            if miss:
+                missing[tp] = miss
+        return missing
 
     def array_at(self, time_id: int) -> NDArray[Any]:
         """Access Array Data.

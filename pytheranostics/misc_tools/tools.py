@@ -349,18 +349,33 @@ def initialize_biokinetics_from_prior_cycle(
     return config
 
 
-def plot_MIP(ax, SPECT, vmax=300000):
+def plot_MIP(SPECT=None, vmax=300000, figsize=(10, 5), ax=None):
     """Plot Maximum Intensity Projection (MIP) of SPECT data.
 
     Parameters
     ----------
-    ax : matplotlib.axes.Axes
-        Axes object to plot on.
+    ax : matplotlib.axes.Axes, optional
+        Axes object to plot on. If None, a new figure and axes will be created.
     SPECT : numpy.ndarray
         SPECT data array.
     vmax : int, optional
         Maximum value for display, by default 300000.
+    figsize : tuple, optional
+        Figure size (width, height) in inches, by default (10, 5).
+        Only used if ax is None.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure object.
+    ax : matplotlib.axes.Axes
+        Axes object with the plot.
     """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
     plt.sca(ax)
     plt.imshow(
         SPECT.max(axis=0).T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0
@@ -372,3 +387,5 @@ def plot_MIP(ax, SPECT, vmax=300000):
 
     plt.xticks([])
     plt.yticks([])
+
+    return fig, ax
