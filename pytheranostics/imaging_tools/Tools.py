@@ -40,8 +40,12 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
     ImagingMetadata
         Metadata object with imaging information.
     """
+    # Convert Path to string if needed
+    dir_str = str(dir)
+
     dicom_slices = [
-        pydicom.dcmread(fname) for fname in glob.glob(dir + "/*.dcm", recursive=False)
+        pydicom.dcmread(fname)
+        for fname in glob.glob(dir_str + "/*.dcm", recursive=False)
     ]
 
     if len(dicom_slices) == 0:
