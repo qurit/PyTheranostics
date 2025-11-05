@@ -250,6 +250,10 @@ class OrganSDosimetry(BaseDosimetry):
                 self.results_fitting_lesions = self.results[
                     self.results.index.str.contains("Lesion")
                 ]
+            elif "No" in self.config["OrganLevel"]["AdditionalOptions"].get(
+                "LesionDosimetry"
+            ):
+                self.results_fitting_organs = self.results_fitting.copy()
 
             if "TotalTumorBurden" in self.results_fitting.index:
                 self.results_fitting.drop("TotalTumorBurden", axis=0, inplace=True)
