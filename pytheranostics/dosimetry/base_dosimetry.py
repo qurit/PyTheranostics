@@ -122,9 +122,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         # DataFrame storing results
         self.results = self.initialize()
-        self.results_lesions = pandas.DataFrame()
-        self.results_salivaryglands = pandas.DataFrame()
-        self.df_ad = pandas.DataFrame()
+        self.results_dosimetry_lesions = pandas.DataFrame()
+        self.results_dosimetry_salivaryglands = pandas.DataFrame()
+        self.results_dosimetry_organs = pandas.DataFrame()
 
         # Sanity Checks:
         self.sanity_checks(metric="Volume_CT_mL")
@@ -459,23 +459,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def smart_fit_selection(
         self, region_data: pandas.Series, region: str
     ) -> lmfit.model.ModelResult:
-        """Select the best fit based on Akaike Information Criterion.
-
-        If enabled in self.config, iterates through different valid fits orders and select best fit based on Akaike Information Criterion.
-        If a fit order is specified by the user, then the method will just perform fit following user's selected order and configuration.
-
-        Parameters
-        ----------
-        region_data : pandas.Series
-                Series containing Time and Activity.
-        region : str
-                Region of Interest
-
-        Returns
-        -------
-        lmfit.model.ModelResult
-                The best fit model based on Akaike Information Criterion.
-        """
+        """Select the best fit based on Akaike Information Criterion."""
         # If fit_order is defined by user:
         if self.config["rois"][region]["fit_order"] is not None:
             fit_results, _ = exponential_fit_lmfit(
@@ -635,8 +619,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         RADIOBIOLOGY_DATA_FILE = Path(this_dir, "data", "radiobiology.json")
         with open(RADIOBIOLOGY_DATA_FILE) as f:
             self.radiobiology_dic = json.load(f)
-        bed_df = self.df_ad[
-            self.df_ad.index.isin(list(self.radiobiology_dic.keys()))
+        bed_df = self.results_dosimetry_organs[
+            self.results_dosimetry_organs.index.isin(list(self.radiobiology_dic.keys()))
         ]  # only organs that we know the radiobiology parameters
         organs = numpy.array(bed_df.index.unique())
         bed = {}
@@ -645,7 +629,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             t_repair = self.radiobiology_dic[organ]["t_repair"]
             alpha_beta = self.radiobiology_dic[organ]["alpha_beta"]
             AD = (
-                float(self.df_ad.loc[bed_df.index == organ]["AD[Gy/GBq]"].values[0])
+                float(bed_df.loc[bed_df.index == organ]["AD_total[Gy/GBq]"].values[0])
                 * float(self.config["InjectedActivity"])
                 / 1000
             )  # Gy
@@ -701,7 +685,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 )
             print(f"{organ}", bed[organ])
 
-        self.df_ad["BED[Gy]"] = self.df_ad.index.map(bed)
+        self.results_dosimetry_organs["BED[Gy]"] = (
+            self.results_dosimetry_organs.index.map(bed)
+        )
 
     def save_images_and_masks_at(self, time_id: int) -> None:
         """Save CT, NM and masks for a specific time point.
@@ -773,11 +759,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         cycle["InjectedActivity"] = self.config["InjectedActivity"]
         cycle["Weight_g"] = self.config["PatientWeight_g"]
         cycle["Level"] = self.config["Level"]
-        cycle["Method"] = self.config["Method"]
-        cycle["OutputFormat"] = self.config["OutputFormat"]
-        cycle["ScaleDoseByDensity"] = self.config.get(
-            "ScaleDoseByDensity", cycle.get("ScaleDoseByDensity", "NA")
-        )
+        if cycle["Level"] == "Organ":
+            cycle["Method"] = self.config["OrganLevel"]
+        elif cycle["Level"] == "Voxel":
+            cycle["Method"] = self.config["VoxelLevel"]
+            cycle["ScaleDoseByDensity"] = self.config.get(
+                "ScaleDoseByDensity", cycle.get("ScaleDoseByDensity", "NA")
+            )
         cycle["ReferenceTimePoint"] = self.config["ReferenceTimePoint"]
         cycle["TimePoints_h"] = self.results["Time_hr"][0]
 
@@ -884,24 +872,24 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             if "Lesion" in organ or "TTB" in organ:
                 cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
                 cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["density_gml"]["mean"] = self.results_lesions.loc[
-                    organ, "Density_g_per_mL"
-                ]
+                cycle["rois"][organ]["density_gml"]["mean"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Density_g_per_mL"]
+                )
                 cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
                 cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
                 cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["mass_g"]["mean"] = self.results_lesions.loc[
-                    organ, "Mass_g"
-                ]
+                cycle["rois"][organ]["mass_g"]["mean"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Mass_g"]
+                )
                 cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
-                cycle["rois"][organ]["composition"] = self.results_lesions.loc[
-                    organ, "Composition"
-                ]
-                cycle["rois"][organ]["total_s_value"] = self.results_lesions.loc[
-                    organ, "Total_S_Value"
-                ]
+                cycle["rois"][organ]["composition"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Composition"]
+                )
+                cycle["rois"][organ]["total_s_value"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Total_S_Value"]
+                )
                 cycle["rois"][organ]["total_s_value_uncertainty"] = "NA"
-                cycle["rois"][organ]["mean_AD_Gy"] = self.results_lesions.loc[
+                cycle["rois"][organ]["mean_AD_Gy"] = self.results_dosimetry_lesions.loc[
                     organ, "AD_Gy"
                 ]
                 cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
@@ -915,30 +903,30 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
                 cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
                 cycle["rois"][organ]["density_gml"]["mean"] = (
-                    self.results_salivaryglands.loc[organ, "Density_g_per_mL"]
+                    self.results_dosimetry_salivaryglands.loc[organ, "Density_g_per_mL"]
                 )
                 cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
                 cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
                 cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"
                 cycle["rois"][organ]["mass_g"]["mean"] = (
-                    self.results_salivaryglands.loc[organ, "Mass_g"]
+                    self.results_dosimetry_salivaryglands.loc[organ, "Mass_g"]
                 )
                 cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
-                cycle["rois"][organ]["composition"] = self.results_salivaryglands.loc[
-                    organ, "Composition"
-                ]
-                cycle["rois"][organ]["total_s_value"] = self.results_salivaryglands.loc[
-                    organ, "Total_S_Value"
-                ]
+                cycle["rois"][organ]["composition"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "Composition"]
+                )
+                cycle["rois"][organ]["total_s_value"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "Total_S_Value"]
+                )
                 cycle["rois"][organ]["total_s_value_uncertainty"] = "NA"
-                cycle["rois"][organ]["mean_AD_Gy"] = self.results_salivaryglands.loc[
-                    organ, "AD_Gy"
-                ]
+                cycle["rois"][organ]["mean_AD_Gy"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "AD_Gy"]
+                )
                 cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
 
         if self.config["Level"] == "Organ":
-            for organ in self.df_ad.index:
-                if organ in self.df_ad.index:
+            for organ in self.results_dosimetry_organs.index:
+                if organ in self.results_dosimetry_organs.index:
                     cycle["Organ-level_AD"][organ] = {
                         "AD[Gy/GBq]": {},
                         "AD[Gy/GBq]_uncertianty": {},
@@ -947,19 +935,21 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                         "BED[Gy]": {},
                         "BED[Gy]_uncertianty": {},
                     }
-                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]"] = self.df_ad.loc[
-                    organ, "AD[Gy/GBq]"
-                ]
+                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]"] = (
+                    self.results_dosimetry_organs.loc[organ, "AD_total[Gy/GBq]"]
+                )
                 cycle["Organ-level_AD"][organ]["AD[Gy/GBq]_uncertainty"] = "NA"
-                cycle["Organ-level_AD"][organ]["AD[Gy]"] = self.df_ad.loc[
-                    organ, "AD[Gy]"
-                ]
+                cycle["Organ-level_AD"][organ]["AD[Gy]"] = (
+                    self.results_dosimetry_organs.loc[organ, "AD_total[Gy]"]
+                )
                 cycle["Organ-level_AD"][organ]["AD[Gy]_uncertainty"] = "NA"
 
-                if "BED[Gy]" in self.df_ad.columns:
+                if "BED[Gy]" in self.results_dosimetry_organs.columns:
                     cycle["Organ-level_AD"][organ]["BED[Gy]"] = (
-                        self.df_ad.loc[organ, "BED[Gy]"]
-                        if pandas.notna(self.df_ad.loc[organ, "BED[Gy]"])
+                        self.results_dosimetry_organs.loc[organ, "BED[Gy]"]
+                        if pandas.notna(
+                            self.results_dosimetry_organs.loc[organ, "BED[Gy]"]
+                        )
                         else "NA"
                     )
                 else:
@@ -967,7 +957,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
                 cycle["Organ-level_AD"][organ]["BED[Gy]_uncertianty"] = "NA"
 
-        if "Yes" in self.config["LesionDosimetry"]:
+        if "Yes" in self.config["OrganLevel"]["AdditionalOptions"].get(
+            "LesionDosimetry"
+        ):
             cycle["Organ-level_AD"]["TTB"] = {
                 "mass_g": {},
                 "volumes_mL": {},
@@ -977,22 +969,23 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 "AD[Gy/GBq]": {},
                 "AD[Gy/GBq]_uncertianty": {},
             }
-            cycle["Organ-level_AD"]["TTB"]["mass_g"] = self.results_lesions.loc[
-                "TTB", "Mass_g"
-            ]
-            cycle["Organ-level_AD"]["TTB"]["volumes_mL"] = self.results_lesions.loc[
-                "TTB", "Volume_CT_mL"
-            ]
-            cycle["Organ-level_AD"]["TTB"]["TIA_h"] = self.results_lesions.loc[
-                "TTB", "TIA_h"
-            ]
-            cycle["Organ-level_AD"]["TTB"]["AD[Gy]"] = self.results_lesions.loc[
-                "TTB", "AD_Gy"
-            ]
+            cycle["Organ-level_AD"]["TTB"]["mass_g"] = (
+                self.results_dosimetry_lesions.loc["TTB", "Mass_g"]
+            )
+            cycle["Organ-level_AD"]["TTB"]["volumes_mL"] = (
+                self.results_dosimetry_lesions.loc["TTB", "Volume_CT_mL"]
+            )
+            cycle["Organ-level_AD"]["TTB"]["TIA_h"] = (
+                self.results_dosimetry_lesions.loc["TTB", "TIA_h"]
+            )
+            cycle["Organ-level_AD"]["TTB"]["AD[Gy]"] = (
+                self.results_dosimetry_lesions.loc["TTB", "AD_Gy"]
+            )
             cycle["Organ-level_AD"]["TTB"]["AD[Gy]_uncertainty"] = "NA"
-            cycle["Organ-level_AD"]["TTB"]["AD[Gy/GBq]"] = self.results_lesions.loc[
-                "TTB", "AD_Gy"
-            ] / (float(self.config["InjectedActivity"]) / 1000)
+            cycle["Organ-level_AD"]["TTB"]["AD[Gy/GBq]"] = (
+                self.results_dosimetry_lesions.loc["TTB", "AD_Gy"]
+                / (float(self.config["InjectedActivity"]) / 1000)
+            )
             cycle["Organ-level_AD"]["TTB"]["AD[Gy/GBq]_uncertianty"] = "NA"
 
         with open(file_path, "w") as file:
