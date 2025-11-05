@@ -389,3 +389,52 @@ def plot_MIP(SPECT=None, vmax=300000, figsize=(10, 5), ax=None):
     plt.yticks([])
 
     return fig, ax
+
+
+def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000):
+    """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
+
+    Parameters
+    ----------
+    ax : _type_
+        _description_
+    SPECT : _type_
+        _description_
+    masks : _type_, optional
+        _description_, by default None
+    vmax : int, optional
+        _description_, by default 300000
+    """
+    plt.sca(ax)
+    spect_mip = SPECT.max(axis=0)
+    plt.imshow(spect_mip.T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0)
+
+    if masks is not None:
+        for organ, mask in masks.items():
+            organ_lower = organ.lower()
+            if "kidney" in organ_lower:
+                color = "lime"
+            elif "gland" in organ_lower:
+                color = "red"
+            elif "lesion" in organ_lower:
+                color = "m"
+            else:
+                continue
+
+            mip_mask = mask.max(axis=0)
+            if mip_mask.shape != spect_mip.shape:
+                mip_mask = mip_mask.T
+
+            plt.contour(
+                numpy.transpose(mip_mask, (1, 0)),
+                levels=[0.5],
+                colors=[color],
+                linewidths=1.5,
+                alpha=0.5,
+            )
+
+    plt.xlim(30, 100)
+    plt.ylim(0, 234)
+    plt.axis("off")
+    plt.xticks([])
+    plt.yticks([])
