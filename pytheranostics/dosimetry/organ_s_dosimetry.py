@@ -117,22 +117,27 @@ class OrganSDosimetry(BaseDosimetry):
     def calculate_ttb(self):
         """Compute Total Tumor Burden (TTB) metrics and append to results_lesions."""
         metrics = {
-            "Mass_g": self.results_lesions["Mass_g"].sum(),
-            "Volume_CT_mL": self.results_lesions["Volume_CT_mL"].sum(),
-            "TIA_h": self.results_lesions["TIA_h"].sum(),
+            "Mass_g": self.results_dosimetry_lesions["Mass_g"].sum(),
+            "Volume_CT_mL": self.results_dosimetry_lesions["Volume_CT_mL"].sum(),
+            "TIA_h": self.results_dosimetry_lesions["TIA_h"].sum(),
             "AD_Gy": (
-                (self.results_lesions["Mass_g"] * self.results_lesions["AD_Gy"]).sum()
+                (
+                    self.results_dosimetry_lesions["Mass_g"]
+                    * self.results_dosimetry_lesions["AD_Gy"]
+                ).sum()
             )
             / (
-                self.results_lesions["Mass_g"].sum()
-                if self.results_lesions["Mass_g"].sum() > 0
+                self.results_dosimetry_lesions["Mass_g"].sum()
+                if self.results_dosimetry_lesions["Mass_g"].sum() > 0
                 else 0
             ),
         }
 
         TTB = pandas.DataFrame(metrics, index=["TTB"])
-        self.results_lesions = pandas.concat([self.results_lesions, TTB], axis=0)
-        return self.results_lesions
+        self.results_dosimetry_lesions = pandas.concat(
+            [self.results_dosimetry_lesions, TTB], axis=0
+        )
+        return self.results_dosimetry_lesions
 
     def prepare_data(self) -> None:
         """
@@ -223,6 +228,7 @@ class OrganSDosimetry(BaseDosimetry):
             self.results_fitting.loc["Red Marrow"][
                 "Volume_CT_mL"
             ] = 1170  # TODO volume hardcoded, think about alternatives
+
             self.results_fitting.loc["RemainderOfBody"]["Volume_CT_mL"] = (
                 self.config["PatientWeight_g"]
                 - self.results_fitting.loc[
@@ -241,9 +247,9 @@ class OrganSDosimetry(BaseDosimetry):
                 self.results_fitting_organs = self.results_fitting[
                     ~lesion_mask
                 ].copy()  # all non-lesion entries
-                self.results_fitting_lesions = self.results_fitting[
-                    lesion_mask
-                ].copy()  # only lesion entries
+                self.results_fitting_lesions = self.results[
+                    self.results.index.str.contains("Lesion")
+                ]
 
             if "TotalTumorBurden" in self.results_fitting.index:
                 self.results_fitting.drop("TotalTumorBurden", axis=0, inplace=True)
@@ -251,13 +257,13 @@ class OrganSDosimetry(BaseDosimetry):
             if output_type == "Export":
                 fmt = organ_conf["Output"]["ExportFormat"]
                 if fmt.lower() == "olinda":
-                    self.results_fitting = self.results_fitting.rename(
+                    self.results_fitting_organs = self.results_fitting_organs.rename(
                         index={"RemainderOfBody": "Total Body"}
                     )
-                    self.results_fitting.loc["Total Body"]["Volume_CT_mL"] = (
+                    self.results_fitting_organs.loc["Total Body"]["Volume_CT_mL"] = (
                         self.config["PatientWeight_g"]
-                        - self.results_fitting.loc[
-                            ~self.results_fitting.index.isin(
+                        - self.results_fitting_organs.loc[
+                            ~self.results_fitting_organs.index.isin(
                                 ["Total Body", "RemainderOfBody"]
                             ),
                             "Volume_CT_mL",
@@ -327,7 +333,7 @@ class OrganSDosimetry(BaseDosimetry):
             "LesionDosimetry"
         ):
             self.results_dosimetry_lesions = self.apply_sphere_method(
-                self.results_fitting_lesions.index.str.contains("Lesion")
+                self.results_fitting_lesions
             )
             self.results_dosimetry_lesions = self.calculate_ttb()
         if "Yes" in self.config["OrganLevel"]["AdditionalOptions"].get(
@@ -342,12 +348,12 @@ class OrganSDosimetry(BaseDosimetry):
         """Calculate absorbed dose per target organ based on model and disintegration data."""
         model_files = {
             "Female": {
-                "beta": f'177Lu_S_values_female_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_BETA.csv',
-                "gamma": f'177Lu_S_values_female_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_GAMMA.csv',
+                "gamma": f'{self.config["Radionuclide"]}_S_values_female_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_GAMMA.csv',
+                "beta": f'{self.config["Radionuclide"]}_S_values_female_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_BETA.csv',
             },
             "Male": {
-                "beta": f'177Lu_S_values_male_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_BETA.csv',
-                "gamma": f'177Lu_S_values_male_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_GAMMA.csv',
+                "gamma": f'{self.config["Radionuclide"]}_S_values_male_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_GAMMA.csv',
+                "beta": f'{self.config["Radionuclide"]}_S_values_male_{self.config["OrganLevel"]["Calculation"]["SValueSource"].lower()}_BETA.csv',
             },
         }
 
@@ -359,7 +365,7 @@ class OrganSDosimetry(BaseDosimetry):
         )
 
         print("Source organs available in the model:", svalues_beta.columns.tolist())
-        print("Source organs present :", self.results_fitting.index.tolist())
+        print("Source organs present :", self.results_fitting_organs.index.tolist())
 
         self.source_organs_missing = set(svalues_beta.columns) - set(
             self.results_fitting.index
@@ -391,7 +397,7 @@ class OrganSDosimetry(BaseDosimetry):
         )
 
         # Apply mass scaling
-        dose_df = self.perform_mass_scaling(dose_df, self.config["Gender"])
+        dose_df = self.perform_mass_scaling(dose_df)
 
         # Calculate absorbed dose in Gy for injected activity
         dose_df["AD_total[Gy/GBq]"] = (
@@ -403,7 +409,10 @@ class OrganSDosimetry(BaseDosimetry):
         dose_df["AD_total[Gy]"] = dose_df["AD_total[Gy/GBq]"] / 1000 * injected_activity
 
         dose_df = dose_df.reset_index(drop=True)
-        self.df_ad = dose_df.copy()
+        self.results_dosimetry_organs = dose_df.copy()
+        self.results_dosimetry_organs = self.results_dosimetry_organs.set_index(
+            "Target organ"
+        )
         return dose_df
 
     def hollow_organ_correction(self, df: pandas.DataFrame) -> pandas.DataFrame:
@@ -476,9 +485,12 @@ class OrganSDosimetry(BaseDosimetry):
     def apply_s_value(self, tia_df, s_values, radiation_type) -> pandas.DataFrame:
         """Multiply S-values by TIA to compute dose matrix for radiation type."""
         # Path to organ masses
-        masses_path = path.join(MASSES_PATH, "ICRP_mass_male.csv")
+        masses_path = path.join(
+            MASSES_PATH, f"ICRP_mass_{self.config['Gender'].lower()}.csv"
+        )
         self.organ_masses = pandas.read_csv(masses_path, index_col=0)
 
+        print(f"Applying S-values for {radiation_type} radiation...")
         # Handle remainder of the body
         # Redistribute ROB TIA into missing source organs if needed - approach consistent with MIRDcalc software
         if "RemainderOfBody" in tia_df.index:
@@ -545,38 +557,47 @@ class OrganSDosimetry(BaseDosimetry):
                 dose_df = s_values_subset.multiply(tia_series, axis=1)
 
                 # ROB
+
+                print("Calculating Remainder of Body contributions...")
                 dose_df["RemainderOfBody"] = 0
-                total_body_mass = self.config["PatientWeight_g"]
+                total_body_mass = self.organ_masses.loc["Total Body", "Mass_g"]
                 ROB_mass = tia_df.loc["RemainderOfBody", "Volume_CT_mL"]
+
                 if radiation_type == "beta":
                     organs = s_values_subset.index.difference(
                         tia_series.index.difference(["Red Marrow", "Osteogenic Cells"])
                     )
                 if radiation_type == "gamma":
                     organs = s_values_subset.index
-                # adjust source organs so that they are different for gamma and beta radiation (in beta it is total - source organs + bone + skeleton)
-
+                self.contribution_from_sources_dict = {radiation_type: {}}
                 for target_organ in organs:
                     contribution_from_sources = 0
-                    for source_organ in s_values.columns.difference(tia_series.index):
 
+                    self.contribution_from_sources_dict[radiation_type][
+                        target_organ
+                    ] = {"sources": {}}
+
+                    for source_organ in s_values.columns.difference(tia_series.index):
+                        if radiation_type == "beta":
+                            if target_organ == "Red Marrow" and source_organ in [
+                                "Trabecular Bone"
+                            ]:
+                                continue
+                            if target_organ == "Osteogenic Cells" and source_organ in [
+                                "Cortical Bone",
+                                "Trabecular Bone",
+                                "Red Marrow",
+                            ]:
+                                continue
+
+                        if source_organ == "Total Body":
+                            continue
                         if target_organ.split()[0] == source_organ.split()[0]:
-                            continue
-                        if target_organ == "Osteogenic Cells" and source_organ in [
-                            "Cortical Bone",
-                            "Trabecular Bone",
-                            "Red Marrow",
-                        ]:
-                            continue
-                        if target_organ == "Red Marrow" and source_organ in [
-                            "Trabecular Bone"
-                        ]:
                             continue
                         if target_organ == "Total Body":
                             continue
-                        if source_organ == "Total Body":
-                            continue
 
+                        print(f"  From source organ: {source_organ}")
                         source_organ_mass = self.organ_masses.loc[
                             source_organ, "Mass_g"
                         ]
@@ -587,6 +608,11 @@ class OrganSDosimetry(BaseDosimetry):
                         contribution_from_sources += s_value_source_to_target * (
                             source_organ_mass / ROB_mass
                         )
+                        self.contribution_from_sources_dict[radiation_type][
+                            target_organ
+                        ]["sources"][
+                            f"contribution_from_{source_organ}"
+                        ] = s_value_source_to_target
 
                     s_value_ROB_to_target = (
                         s_values.loc[target_organ, "Total Body"]
@@ -603,10 +629,13 @@ class OrganSDosimetry(BaseDosimetry):
         return dose_df
 
     def perform_mass_scaling(
-        self, df: pandas.DataFrame, gender: str
+        self,
+        df: pandas.DataFrame,
     ) -> pandas.DataFrame:
         """Apply mass scaling to absorbed dose calculations based on patient-specific organ masses."""
-        masses_path = path.join(MASSES_PATH, f"ICRP_mass_{gender.lower()}_target.csv")
+        masses_path = path.join(
+            MASSES_PATH, f"ICRP_mass_{self.config['Gender'].lower()}_target.csv"
+        )
         model_masses_df = pandas.read_csv(masses_path, index_col=0)
 
         print("Performing mass scaling...")
@@ -649,14 +678,9 @@ class OrganSDosimetry(BaseDosimetry):
         this_dir = path.dirname(__file__)
         TEMPLATE_PATH = path.join(this_dir, "olindaTemplates")
 
-        if self.config["Gender"] == "Male":
-            template = pandas.read_csv(path.join(TEMPLATE_PATH, "adult_male.cas"))
-        elif self.config["Gender"] == "Female":
-            template = pandas.read_csv(path.join(TEMPLATE_PATH, "adult_female.cas"))
-        else:
-            print(
-                "Ensure that you correctly wrote patient gender in config file. Olinda supports: Male and Female."
-            )
+        template = pandas.read_csv(
+            path.join(TEMPLATE_PATH, f"adult_{self.config['Gender'].lower()}.cas")
+        )
 
         template.columns = ["Data"]
         match = re.match(r"([a-zA-Z]+)([0-9]+)", self.config["Radionuclide"])
@@ -666,13 +690,13 @@ class OrganSDosimetry(BaseDosimetry):
         ind = template[template["Data"] == "[BEGIN NUCLIDES]"].index
         template.loc[ind[0] + 1, "Data"] = formatted_radionuclide + "|"
 
-        for organ in self.results_fitting.index:
+        for organ in self.results_fitting_organs.index:
             indices = template[template["Data"].str.contains(organ)].index
 
             source_organ = template.iloc[indices[0]].str.split("|")[0][0]
             mass_phantom = template.iloc[indices[0]].str.split("|")[0][1]
-            kinetic_data = self.results_fitting.loc[organ]["TIA_h"]
-            mass_data = round(self.results_fitting.loc[organ]["Volume_CT_mL"], 1)
+            kinetic_data = self.results_fitting_organs.loc[organ]["TIA_h"]
+            mass_data = round(self.results_fitting_organs.loc[organ]["Volume_CT_mL"], 1)
 
             # Update the template DataFrame
             template.iloc[indices[0]] = (
@@ -755,7 +779,7 @@ class OrganSDosimetry(BaseDosimetry):
         df_ad["Total"].fillna(0, inplace=True)
         df_ad["AD[Gy]"] = df_ad["Total"] * float(self.config["InjectedActivity"]) / 1000
         df_ad = df_ad.rename(columns={"Total": "AD[Gy/GBq]"})
-        self.df_ad = df_ad
+        self.results_dosimetry_organs = df_ad
 
     def compute_dose(self):
         """Compute Time Integrated Activity."""
