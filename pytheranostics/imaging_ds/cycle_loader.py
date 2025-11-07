@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import pydicom
 import SimpleITK
@@ -259,6 +259,7 @@ def create_studies_with_masks(
     auto_map: bool = False,
     ct_mask_mapping: Optional[Dict[str, str]] = None,
     spect_mask_mapping: Optional[Dict[str, str]] = None,
+    mapping_config: Optional[Union[str, Path, Dict[str, Dict[str, str]]]] = None,
 ) -> Tuple[
     LongitudinalStudy,
     LongitudinalStudy,
@@ -294,6 +295,12 @@ def create_studies_with_masks(
         Explicit mapping for CT masks; overrides auto mapping if provided.
     spect_mask_mapping : dict, optional
         Explicit mapping for SPECT masks; overrides auto mapping if provided.
+    mapping_config : str | Path | dict, optional
+        Either:
+        - Path to a JSON file containing 'ct_mappings' and 'spect_mappings' keys
+        - A dictionary with 'ct_mappings' and 'spect_mappings' keys
+        If provided, loads mappings from this config. Individual ct_mask_mapping and
+        spect_mask_mapping parameters override keys from the config.
 
     Returns
     -------
@@ -303,6 +310,29 @@ def create_studies_with_masks(
         - injection_info: Dict with InjectionDate, InjectionTime, InjectedActivity, PatientWeight_g
         - used_mappings: Dict[time_id, mapping_summary] of the mapping applied per timepoint
     """
+    # Load mappings from config if provided
+    config_ct_mapping = None
+    config_spect_mapping = None
+
+    if mapping_config is not None:
+        if isinstance(mapping_config, dict):
+            # Direct dict provided
+            config_ct_mapping = mapping_config.get("ct_mappings", {})
+            config_spect_mapping = mapping_config.get("spect_mappings", {})
+        else:
+            # Path to JSON file
+            loaded = LongitudinalStudy.load_mappings_from_json(mapping_config)
+            config_ct_mapping = loaded.get("ct_mappings", {})
+            config_spect_mapping = loaded.get("spect_mappings", {})
+
+    # Individual parameters override config
+    final_ct_mapping = (
+        ct_mask_mapping if ct_mask_mapping is not None else config_ct_mapping
+    )
+    final_spect_mapping = (
+        spect_mask_mapping if spect_mask_mapping is not None else config_spect_mapping
+    )
+
     # 1) Discover paths and injection metadata
     ct_paths, spect_paths, rtstruct_files, inj = prepare_cycle_inputs(
         storage_root, patient_id, cycle_no
@@ -347,16 +377,16 @@ def create_studies_with_masks(
         )
 
         # Decide whether to apply mappings now or import raw names
-        apply_ct_mapping = (ct_mask_mapping is not None) or auto_map
-        apply_spect_mapping = (spect_mask_mapping is not None) or auto_map
+        apply_ct_mapping = (final_ct_mapping is not None) or auto_map
+        apply_spect_mapping = (final_spect_mapping is not None) or auto_map
 
         if apply_ct_mapping:
-            # Build mappings: explicit overrides auto
-            ct_map = (
-                ct_mask_mapping
-                if ct_mask_mapping is not None
-                else _build_auto_mapping(list(ct_masks.keys()))
-            )
+            # Build mappings: explicit overrides auto, filtered to present keys
+            if final_ct_mapping is not None:
+                ct_map = {k: v for k, v in final_ct_mapping.items() if k in ct_masks}
+            else:
+                ct_map = _build_auto_mapping(list(ct_masks.keys()))
+
             longCT.add_masks_to_time_point(
                 time_id=time_id, masks=ct_masks, mask_mapping=ct_map
             )
@@ -367,11 +397,13 @@ def create_studies_with_masks(
 
         if target_img is not None:
             if apply_spect_mapping:
-                spect_map = (
-                    spect_mask_mapping
-                    if spect_mask_mapping is not None
-                    else _build_auto_mapping(list(nm_masks.keys()))
-                )
+                if final_spect_mapping is not None:
+                    spect_map = {
+                        k: v for k, v in final_spect_mapping.items() if k in nm_masks
+                    }
+                else:
+                    spect_map = _build_auto_mapping(list(nm_masks.keys()))
+
                 longSPECT.add_masks_to_time_point(
                     time_id=time_id, masks=nm_masks, mask_mapping=spect_map
                 )
