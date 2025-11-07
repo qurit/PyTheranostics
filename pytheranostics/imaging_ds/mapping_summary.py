@@ -13,31 +13,31 @@ from typing import Dict, Iterable, List, Tuple
 
 def _split_modalities(
     mapping: Dict[str, str],
-) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[str, str]]]:
-    ct = [(k, v) for k, v in mapping.items() if str(k).endswith("_m")]
-    spect = [(k, v) for k, v in mapping.items() if str(k).endswith("_a")]
-    other = [
-        (k, v)
-        for k, v in mapping.items()
-        if not (str(k).endswith("_m") or str(k).endswith("_a"))
-    ]
-    return ct, spect, other
+) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    """Split mapping into non-identity and identity pairs.
+
+    Returns (non_identity_pairs, identity_pairs).
+    """
+    non_identity = [(k, v) for k, v in mapping.items() if k != v]
+    identity = [(k, v) for k, v in mapping.items() if k == v]
+    return non_identity, identity
 
 
 def summarize_used_mappings(
-    used_mappings: Dict[int, Dict[str, str]],
+    used_mappings: Dict[int, Dict[str, Dict[str, str]]],
     *,
     verbose: bool = False,
     sample_limit: int = 20,
     save_json_path: str | Path | None = "mapping_applied_summary.json",
+    include_unmapped: bool = True,
 ) -> None:
     """Print a compact mapping summary and optionally save full details to JSON.
 
     Parameters
     ----------
-    used_mappings : Dict[int, Dict[str, str]]
+    used_mappings : Dict[int, Dict[str, Dict[str, str]]]
         The mapping dictionary returned by create_studies_with_masks()
-        where each timepoint maps {raw_name -> canonical_name}.
+        where each timepoint has {"ct": {raw->canonical}, "spect": {raw->canonical}}.
     verbose : bool, optional
         If True, print up to `sample_limit` non-identity pairs per modality.
     sample_limit : int, optional
@@ -45,41 +45,74 @@ def summarize_used_mappings(
     save_json_path : str | Path | None, optional
         When provided, save the full per-timepoint mapping details to this JSON file.
         Set to None to skip saving.
+    include_unmapped : bool, optional
+        If True, also report identity (unmapped) pairs separately for CT and SPECT.
     """
     per_tp = {}
-    for tp, mp in sorted(used_mappings.items()):
-        ct, spect, other = _split_modalities(mp)
-        per_tp[tp] = {"ct": ct, "spect": spect, "other": other}
+    for tp, studies in sorted(used_mappings.items()):
+        ct_mapping = studies.get("ct", {})
+        spect_mapping = studies.get("spect", {})
+
+        ct_mapped, ct_unmapped = _split_modalities(ct_mapping)
+        spect_mapped, spect_unmapped = _split_modalities(spect_mapping)
+
+        entry = {
+            "ct": ct_mapped,
+            "spect": spect_mapped,
+        }
+
+        if include_unmapped:
+            entry["unmapped_ct"] = sorted([k for k, v in ct_unmapped])
+            entry["unmapped_spect"] = sorted([k for k, v in spect_unmapped])
+
+        per_tp[tp] = entry
 
     # Compact counts
     for tp, parts in per_tp.items():
-        ct_n = sum(1 for k, v in parts["ct"] if k != v)
-        sp_n = sum(1 for k, v in parts["spect"] if k != v)
-        ot_n = sum(1 for k, v in parts["other"] if k != v)
-        print(f"tp{tp}: CT {ct_n} | SPECT {sp_n} | Other {ot_n} non-identity mappings")
+        ct_n = len(parts["ct"])
+        sp_n = len(parts["spect"])
+        msg = f"tp{tp}: CT {ct_n} | SPECT {sp_n} non-identity mappings"
+        if include_unmapped:
+            unmapped_ct_n = len(parts.get("unmapped_ct", []))
+            unmapped_sp_n = len(parts.get("unmapped_spect", []))
+            msg += f" | Unmapped: CT {unmapped_ct_n}, SPECT {unmapped_sp_n}"
+        print(msg)
 
         if verbose:
 
             def _print_pairs(label: str, pairs: Iterable[Tuple[str, str]]) -> None:
                 shown = 0
                 for k, v in pairs:
-                    if k != v:
-                        print(f"  {label}: {k} -> {v}")
-                        shown += 1
-                        if shown >= sample_limit:
-                            break
+                    print(f"  {label}: {k} -> {v}")
+                    shown += 1
+                    if shown >= sample_limit:
+                        break
 
             _print_pairs("CT", parts["ct"])
             _print_pairs("SPECT", parts["spect"])
-            if parts["other"]:
-                _print_pairs("Other", parts["other"])
+
+        # Optionally list a small sample of unmapped names per modality
+        if include_unmapped:
+            if parts.get("unmapped_ct"):
+                sample_ct = parts["unmapped_ct"][:sample_limit]
+                print(f"  Unmapped CT (identity): {sample_ct}")
+            if parts.get("unmapped_spect"):
+                sample_sp = parts["unmapped_spect"][:sample_limit]
+                print(f"  Unmapped SPECT (identity): {sample_sp}")
 
     if save_json_path is not None:
         out = {
             int(tp): {
                 "ct": [{"from": k, "to": v} for k, v in parts["ct"]],
                 "spect": [{"from": k, "to": v} for k, v in parts["spect"]],
-                "other": [{"from": k, "to": v} for k, v in parts["other"]],
+                **(
+                    {
+                        "unmapped_ct": parts.get("unmapped_ct", []),
+                        "unmapped_spect": parts.get("unmapped_spect", []),
+                    }
+                    if include_unmapped
+                    else {}
+                ),
             }
             for tp, parts in per_tp.items()
         }
