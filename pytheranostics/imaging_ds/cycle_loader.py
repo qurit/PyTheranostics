@@ -381,12 +381,12 @@ def create_studies_with_masks(
         apply_spect_mapping = (final_spect_mapping is not None) or auto_map
 
         if apply_ct_mapping:
-            # Build mappings: explicit overrides auto
-            ct_map = (
-                final_ct_mapping
-                if final_ct_mapping is not None
-                else _build_auto_mapping(list(ct_masks.keys()))
-            )
+            # Build mappings: explicit overrides auto, filtered to present keys
+            if final_ct_mapping is not None:
+                ct_map = {k: v for k, v in final_ct_mapping.items() if k in ct_masks}
+            else:
+                ct_map = _build_auto_mapping(list(ct_masks.keys()))
+
             longCT.add_masks_to_time_point(
                 time_id=time_id, masks=ct_masks, mask_mapping=ct_map
             )
@@ -397,11 +397,13 @@ def create_studies_with_masks(
 
         if target_img is not None:
             if apply_spect_mapping:
-                spect_map = (
-                    final_spect_mapping
-                    if final_spect_mapping is not None
-                    else _build_auto_mapping(list(nm_masks.keys()))
-                )
+                if final_spect_mapping is not None:
+                    spect_map = {
+                        k: v for k, v in final_spect_mapping.items() if k in nm_masks
+                    }
+                else:
+                    spect_map = _build_auto_mapping(list(nm_masks.keys()))
+
                 longSPECT.add_masks_to_time_point(
                     time_id=time_id, masks=nm_masks, mask_mapping=spect_map
                 )
