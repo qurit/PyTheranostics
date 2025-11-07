@@ -357,7 +357,8 @@ def create_studies_with_masks(
     )
 
     # 3) Load and resample masks per timepoint, add to both studies
-    used_mappings: Dict[int, Dict[str, str]] = {}
+    # Track mappings separately by study origin
+    used_mappings: Dict[int, Dict[str, Dict[str, str]]] = {}
     for time_id, rt_file in enumerate(rtstruct_files):
         ct_dir = ct_paths[time_id]
         if ct_dir is None or rt_file is None:
@@ -380,16 +381,45 @@ def create_studies_with_masks(
         apply_ct_mapping = (final_ct_mapping is not None) or auto_map
         apply_spect_mapping = (final_spect_mapping is not None) or auto_map
 
-        if apply_ct_mapping:
-            # Build mappings: explicit overrides auto, filtered to present keys
-            if final_ct_mapping is not None:
-                ct_map = {k: v for k, v in final_ct_mapping.items() if k in ct_masks}
-            else:
-                ct_map = _build_auto_mapping(list(ct_masks.keys()))
+        def _is_valid_target(name: str) -> bool:
+            if name in LongitudinalStudy._VALID_ORGAN_NAMES:
+                return True
+            return re.match(r"^Lesion_([1-9]\d*)$", name) is not None
 
-            longCT.add_masks_to_time_point(
-                time_id=time_id, masks=ct_masks, mask_mapping=ct_map
-            )
+        # --- CT masks
+        if apply_ct_mapping:
+            ct_map_valid: Dict[str, str] = {}
+            ct_raw_keys: List[str] = []
+            if final_ct_mapping is not None:
+                for k in ct_masks.keys():
+                    dst = final_ct_mapping.get(k)
+                    if dst is not None and _is_valid_target(dst):
+                        ct_map_valid[k] = dst
+                    else:
+                        ct_raw_keys.append(k)
+            else:
+                # auto map
+                for k in ct_masks.keys():
+                    dst = _canonical_mask_name(k)
+                    if _is_valid_target(dst):
+                        ct_map_valid[k] = dst
+                    else:
+                        ct_raw_keys.append(k)
+
+            if ct_map_valid:
+                longCT.add_masks_to_time_point(
+                    time_id=time_id, masks=ct_masks, mask_mapping=ct_map_valid
+                )
+            if ct_raw_keys:
+                longCT.add_raw_masks_to_time_point(
+                    time_id=time_id,
+                    masks={k: ct_masks[k] for k in ct_raw_keys},
+                )
+            # Track used mapping (identity for raw keys)
+            ct_map = {
+                **{k: v for k, v in ct_map_valid.items()},
+                **{k: k for k in ct_raw_keys},
+            }
         else:
             # Import as-is
             longCT.add_raw_masks_to_time_point(time_id=time_id, masks=ct_masks)
@@ -397,22 +427,45 @@ def create_studies_with_masks(
 
         if target_img is not None:
             if apply_spect_mapping:
+                spect_map_valid: Dict[str, str] = {}
+                spect_raw_keys: List[str] = []
                 if final_spect_mapping is not None:
-                    spect_map = {
-                        k: v for k, v in final_spect_mapping.items() if k in nm_masks
-                    }
+                    for k in nm_masks.keys():
+                        dst = final_spect_mapping.get(k)
+                        if dst is not None and _is_valid_target(dst):
+                            spect_map_valid[k] = dst
+                        else:
+                            spect_raw_keys.append(k)
                 else:
-                    spect_map = _build_auto_mapping(list(nm_masks.keys()))
+                    # auto map
+                    for k in nm_masks.keys():
+                        dst = _canonical_mask_name(k)
+                        if _is_valid_target(dst):
+                            spect_map_valid[k] = dst
+                        else:
+                            spect_raw_keys.append(k)
 
-                longSPECT.add_masks_to_time_point(
-                    time_id=time_id, masks=nm_masks, mask_mapping=spect_map
-                )
+                if spect_map_valid:
+                    longSPECT.add_masks_to_time_point(
+                        time_id=time_id, masks=nm_masks, mask_mapping=spect_map_valid
+                    )
+                if spect_raw_keys:
+                    longSPECT.add_raw_masks_to_time_point(
+                        time_id=time_id,
+                        masks={k: nm_masks[k] for k in spect_raw_keys},
+                    )
+                # Track used mapping (identity for raw keys)
+                spect_map = {
+                    **{k: v for k, v in spect_map_valid.items()},
+                    **{k: k for k in spect_raw_keys},
+                }
             else:
                 longSPECT.add_raw_masks_to_time_point(time_id=time_id, masks=nm_masks)
                 spect_map = {k: k for k in nm_masks.keys()}
         else:
             spect_map = {}
 
-        used_mappings[time_id] = {**ct_map, **spect_map}
+        # Store with study origin labels
+        used_mappings[time_id] = {"ct": ct_map, "spect": spect_map}
 
     return longCT, longSPECT, inj, used_mappings
