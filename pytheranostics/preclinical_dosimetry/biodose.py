@@ -19,11 +19,6 @@ from pytheranostics.plots.plots import plot_tac_residuals
 from pytheranostics.shared.resources import resource_path
 
 
-def _preclinical_resource(relative_path: str):
-    """Resolve a path inside the packaged preclinical data directory."""
-    return resource_path("pytheranostics.data", f"preclinical/{relative_path}")
-
-
 def _data_resource(relative_path: str):
     return resource_path("pytheranostics.data", relative_path)
 
@@ -415,8 +410,8 @@ class BioDose:
     def phantom_data(self):
         """Load the reference phantom masses and reconcile them with biodistribution organs."""
         if "mouse" in self.phantom.lower():
-            with _preclinical_resource(
-                "phantomdata/mouse_phantom_masses.csv"
+            with _data_resource(
+                "phantom/mouse/mouse_phantom_masses.csv"
             ) as phantom_path:
                 self.phantom_mass = pd.read_csv(phantom_path)
         #        elif 'human' in self.phantom.lower():
@@ -475,14 +470,14 @@ class BioDose:
 
         # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
         if "mouse" in self.phantom.lower():
-            with _preclinical_resource(
-                "phantomdata/mouse_notinphantom_masses.csv"
+            with _data_resource(
+                "phantom/mouse/mouse_notinphantom_masses.csv"
             ) as lit_path:
                 self.literature_mass = pd.read_csv(lit_path)
 
         elif "human" in self.phantom.lower():
-            with _preclinical_resource(
-                "phantomdata/human_notinphantom_masses.csv"
+            with _data_resource(
+                "phantom/human/human_notinphantom_masses.csv"
             ) as lit_path:
                 self.literature_mass = pd.read_csv(lit_path)
 
@@ -722,7 +717,7 @@ class BioDose:
         The result is stored in ``self.mousecase`` and can optionally be persisted.
         """
         filename = self.phantom.lower() + ".cas"
-        with _preclinical_resource(f"olindaTemplates/{filename}") as template_path:
+        with _data_resource(f"olinda/templates/mouse/{filename}") as template_path:
             template = pd.read_csv(template_path)
         template.columns = ["Data"]
 
@@ -855,15 +850,15 @@ class BioDose:
                 "Tumor", axis=0
             )
 
-        with _preclinical_resource(
-            "phantomdata/human_phantom_masses.csv"
+        with _data_resource(
+            "phantom/human/human_phantom_masses.csv"
         ) as human_mass_path:
             human.phantom_mass = pd.read_csv(human_mass_path)
         human.phantom_mass.set_index("Organ", inplace=True)
         human.phantom_mass.sort_index(inplace=True)
 
-        with _preclinical_resource(
-            "phantomdata/human_notinphantom_masses.csv"
+        with _data_resource(
+            "phantom/human/human_notinphantom_masses.csv"
         ) as human_lit_path:
             human.literature_mass = pd.read_csv(human_lit_path)
         human.literature_mass.set_index("Organ", inplace=True)
@@ -943,7 +938,7 @@ class BioDose:
 
     def apply_relative_mass_scaling(self, mouse_mass=25):
         """Apply relative mass scaling factors to mouse disintegrations."""
-        with _preclinical_resource("phantomdata/rMSF_factor.csv") as rmsf_path:
+        with _data_resource("phantom/mouse/rMSF_factor.csv") as rmsf_path:
             rMSF_data = pd.read_csv(rmsf_path, index_col=0)
 
         female_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, "Female"].sum()
@@ -987,8 +982,8 @@ class BioDose:
         template_filename = (
             "adult_male.cas" if self.sex == "Male" else "adult_female.cas"
         )
-        with _preclinical_resource(
-            f"olindaTemplates/{template_filename}"
+        with _data_resource(
+            f"olinda/templates/human/{template_filename}"
         ) as template_path:
             template = pd.read_csv(template_path)
 

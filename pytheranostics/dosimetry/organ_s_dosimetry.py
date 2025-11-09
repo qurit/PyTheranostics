@@ -58,7 +58,7 @@ class OrganSDosimetry(BaseDosimetry):
     def _load_human_mass_table() -> pandas.DataFrame:
         """Load the reference human phantom masses."""
         with resource_path(
-            "pytheranostics.data", "dosimetry/phantomdata/human_phantom_masses.csv"
+            "pytheranostics.data", "phantom/human/human_phantom_masses.csv"
         ) as masses_path:
             masses = pandas.read_csv(masses_path, index_col=0)
         return masses
@@ -662,7 +662,7 @@ class OrganSDosimetry(BaseDosimetry):
             return
 
         with resource_path(
-            "pytheranostics.data", f"dosimetry/olindaTemplates/{template_file}"
+            "pytheranostics.data", f"olinda/templates/human/{template_file}"
         ) as template_path:
             template = pandas.read_csv(template_path)
 

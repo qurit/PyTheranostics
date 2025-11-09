@@ -78,6 +78,9 @@ dev = [
     "flake8-docstrings>=1.7"
 ]
 
+[tool.hatch.build]
+include = ["pytheranostics/data/**/*"]
+
 [tool.hatch.build.targets.wheel]
 packages = [
     "pytheranostics",
