@@ -84,6 +84,7 @@ else:
 
 
 def setup(app):
+    """Register a fallback contributors directive when the extension is missing."""
     if _contributors_available:
         return
 

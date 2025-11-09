@@ -8,7 +8,6 @@ import pytest
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection to run smoke tests first."""
-
     # Separate smoke tests from other tests
     smoke_tests = []
     other_tests = []

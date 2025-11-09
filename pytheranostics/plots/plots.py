@@ -1,3 +1,5 @@
+"""Plotting utilities for PyTheranostics workflows."""
+
 from pathlib import Path
 from typing import Optional
 
@@ -30,7 +32,6 @@ def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
     - Colorbars are added to each subplot.
     - The layout is automatically adjusted using tight_layout().
     """
-
     plt.figure(figsize=(22, 6))
     for ind, i in enumerate(range(0, int(img.shape[0]), 2)):
         keys = list(ewin.keys())
@@ -58,22 +59,8 @@ def plot_tac_residuals(
     y_label: str = "Activity [MBq]",
     output_dir: Optional[Path] = None,
 ) -> None:
-    """Plot Time activity curve and residuals.
-
-    Parameters
-    ----------
-    result : lmfit.model.ModelResult
-        The fitted lmfit model results.
-    region : str
-        The region (e.g., organ, tumor) where fit happened.
-    x_label: str
-        The label in X Axis. Defaults to "Time [hr]"
-    y_label: str
-        The label in Y Axis. Defaults to "Activity [MBq]"
-    output_dir: Optional[str]
-        A path to a directory where figure will be saved.
-    """
-
+    """Plot time-activity curve and residuals."""
+    # Create a figure with 3 subplots
     # Create a figure with 3 subplots
     _, axs = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
 
@@ -109,15 +96,15 @@ def plot_tac_residuals(
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color="red")
     ax1.set_xlim(left=0)  # Start x-axis from zero
-    ax1.set_xlim(right = x_data[-1] * 2)  # Start y-axis from zero
+    ax1.set_xlim(right=x_data[-1] * 2)  # Start y-axis from zero
     ax1.set_ylim(bottom=0)  # Start y-axis from zero
     ax1.set_title(region)
     ax1.set_xlabel(x_label)
     ax1.set_ylabel(y_label)
     # Add R-squared and AIC as text
     try:
-        ax1.text(0.7, 0.9, f'$R^2={result.rsquared:.3f}$', transform=ax1.transAxes)
-        ax1.text(0.7, 0.85, f'AIC={result.aic:.3f}', transform=ax1.transAxes)
+        ax1.text(0.7, 0.9, f"$R^2={result.rsquared:.3f}$", transform=ax1.transAxes)
+        ax1.text(0.7, 0.85, f"AIC={result.aic:.3f}", transform=ax1.transAxes)
     except AttributeError:
         pass
     # Remove legend if present
@@ -150,7 +137,12 @@ def plot_tac_residuals(
     ax3.set_ylabel("Residuals")
 
     if output_dir is not None:
-        plt.savefig(output_dir / f"{region}_fit_Cycle_0{cycle}.png", format="png", bbox_inches="tight", dpi=300)
+        plt.savefig(
+            output_dir / f"{region}_fit_Cycle_0{cycle}.png",
+            format="png",
+            bbox_inches="tight",
+            dpi=300,
+        )
 
     plt.show()
 
