@@ -92,7 +92,7 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
                 f"Injected activity found in DICOM Header: {injected_activity:2.1f} MBq. Please verify."
             )
 
-        except AttributeError:
+        except (AttributeError, IndexError):
             print(
                 "Injected activity not found in DICOM header. Using default: 7400 MBq"
             )
