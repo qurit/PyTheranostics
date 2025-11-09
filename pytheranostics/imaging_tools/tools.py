@@ -79,15 +79,17 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
 
         # This only applies to Q-SPECT TODO: replace for something more generic.
         injected_activity = None
-        
+
         if hasattr(dicom_slices[0], "RadiopharmaceuticalInformationSequence"):
             rp_seq = dicom_slices[0].RadiopharmaceuticalInformationSequence
             if len(rp_seq) > 0:
                 try:
                     injected_activity = rp_seq[0].RadionuclideTotalDose
-                    
+
                     # Currently we don't have a way to know the units ... so we use common sense.
-                    if injected_activity > 20000:  # Activity likely in Bq instead of MBq
+                    if (
+                        injected_activity > 20000
+                    ):  # Activity likely in Bq instead of MBq
                         injected_activity /= 1e6
                     print(
                         f"Injected activity found in DICOM Header: {injected_activity:2.1f} MBq. Please verify."
@@ -102,7 +104,7 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
                 print(
                     "Warning: RadiopharmaceuticalInformationSequence is empty. This may indicate a data quality issue."
                 )
-        
+
         if injected_activity is None:
             print("Using default injected activity: 7400 MBq")
             injected_activity = 7400.0
