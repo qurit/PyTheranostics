@@ -4,6 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
+sys.path.insert(0, os.path.abspath("."))
 
 
 # -- Project information -----------------------------------------------------
@@ -25,10 +26,20 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.githubpages",
     "sphinx.ext.mathjax",
+    "myst_parser",
+    "nbsphinx",
+    "sphinx_copybutton",
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = []
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/.ipynb_checkpoints"]
+
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
+
+autodoc_mock_imports = ["radiomics", "gatetools", "itk"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
@@ -52,3 +63,44 @@ napoleon_use_ivar = True
 napoleon_use_param = True
 napoleon_use_rtype = True
 napoleon_type_aliases = None
+
+nbsphinx_execute = "never"
+nbsphinx_allow_errors = False
+nbsphinx_codecell_lexer = "python"
+
+myst_enable_extensions = [
+    "colon_fence",
+    "deflist",
+]
+
+_CONTRIB_EXTENSION = "sphinxcontrib.contributors"
+try:
+    __import__(_CONTRIB_EXTENSION)
+except ImportError:  # pragma: no cover - optional dependency
+    _contributors_available = False
+else:
+    _contributors_available = True
+    extensions.append(_CONTRIB_EXTENSION)
+
+
+def setup(app):
+    if _contributors_available:
+        return
+
+    from docutils import nodes
+    from docutils.parsers.rst import Directive
+
+    class _ContributorsDirective(Directive):
+        has_content = False
+        required_arguments = 1
+
+        def run(self):
+            repo = self.arguments[0]
+            paragraph = nodes.paragraph()
+            paragraph += nodes.Text(
+                "Install 'sphinx-contributors' to render the contributors list. "
+                f"In the meantime see https://github.com/{repo}/graphs/contributors."
+            )
+            return [paragraph]
+
+    app.add_directive("contributors", _ContributorsDirective)
