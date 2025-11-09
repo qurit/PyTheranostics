@@ -2,7 +2,6 @@
 
 import abc
 import json
-from os import path
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,6 +15,7 @@ from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
 from pytheranostics.imaging_tools.tools import extract_masks
 from pytheranostics.misc_tools.tools import calculate_time_difference
 from pytheranostics.plots.plots import plot_tac_residuals
+from pytheranostics.shared.resources import resource_path
 
 
 class BaseDosimetry(metaclass=abc.ABCMeta):
@@ -101,10 +101,11 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         self.clinical_data = clinical_data
 
-        with open(
-            path.dirname(__file__) + "/../data/s-values/spheres.json", "r"
-        ) as file:
-            self.mass_and_s_values = json.load(file)
+        with resource_path(
+            "pytheranostics.data", "s-values/spheres.json"
+        ) as spheres_path:
+            with spheres_path.open("r", encoding="utf-8") as file:
+                self.mass_and_s_values = json.load(file)
 
         if (
             self.clinical_data is not None
@@ -322,9 +323,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         Also verify that radionuclide data (e.g., half-life) is available in internal database.
         """
         # Load Radionuclide data
-        rad_data_path = path.dirname(__file__) + "/../data/isotopes.json"
-        with open(rad_data_path, "r") as rad_data:
-            radionuclide_data = json.load(rad_data)
+        with resource_path("pytheranostics.data", "isotopes.json") as rad_data_path:
+            with rad_data_path.open("r", encoding="utf-8") as rad_data:
+                radionuclide_data = json.load(rad_data)
 
         if self.nm_data.meta[0].Radionuclide is None:
             raise ValueError("Nuclear Medicine Data missing radionuclide")
@@ -742,11 +743,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """
         # Open empty json to load its structure:
         if create_new:
-            json_path = path.dirname(__file__) + "/../data/output.json"
+            with resource_path("pytheranostics.data", "output.json") as template_json:
+                with template_json.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
         else:
-            json_path = file_path
-        with open(json_path, "r") as file:
-            data = json.load(file)
+            with open(file_path, "r", encoding="utf-8") as file:
+                data = json.load(file)
 
         data["PatientID"] = self.config["PatientID"]
         data["InstitutionName"] = InstitutionName
