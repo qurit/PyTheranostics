@@ -20,7 +20,8 @@ from pytheranostics.shared.resources import resource_path
 
 
 def _preclinical_resource(relative_path: str):
-    return resource_path("pytheranostics.preclinical_dosimetry", relative_path)
+    """Resolve a path inside the packaged preclinical data directory."""
+    return resource_path("pytheranostics.data", f"preclinical/{relative_path}")
 
 
 def _data_resource(relative_path: str):

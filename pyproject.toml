@@ -84,6 +84,7 @@ packages = [
     "pytheranostics.calibrations",
     "pytheranostics.dicomtools",
     "pytheranostics.dosimetry",
+    "pytheranostics.data",
     "pytheranostics.fits",
     "pytheranostics.plots",
     "pytheranostics.qc",
