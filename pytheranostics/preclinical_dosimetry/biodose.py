@@ -1,3 +1,5 @@
+"""Preclinical biodistribution analysis helpers for BioDose workflows."""
+
 import datetime
 from copy import deepcopy
 from os import makedirs, path
@@ -14,25 +16,24 @@ from pytheranostics.fits.fits import (
     monoexp_fun,
 )
 from pytheranostics.plots.plots import plot_tac_residuals
+from pytheranostics.shared.resources import resource_path
 
-this_dir = path.dirname(__file__)
-parent_dir = path.dirname(this_dir)
-TEMPLATE_PATH = path.join(this_dir, "olindaTemplates")
-PHANTOM_PATH = path.join(
-    this_dir, "phantomdata"
-)  # These variables use only lowercases so "PhantomData" is in lowercase
-SVALUES_PATH = path.join(parent_dir, "data", "s-values")
+
+def _preclinical_resource(relative_path: str):
+    return resource_path("pytheranostics.preclinical_dosimetry", relative_path)
+
+
+def _data_resource(relative_path: str):
+    return resource_path("pytheranostics.data", relative_path)
 
 
 class BioDose:
-    """
-    This is a class for the analysis of biodistribution data in preclinical experiments
-    """
+    """Analyze biodistribution data gathered from preclinical experiments."""
 
     def __init__(
         self, isotope, half_life, phantom, mouse_mass, sex, uptake=None, timepoints=None
     ):
-        "half_life in hours"
+        """Initialize the biodistribution analysis (half_life expressed in hours)."""
         if uptake is None:
             uptake = []
         if timepoints is None:
@@ -49,7 +50,7 @@ class BioDose:
         self.wb_m = int(self.mouse_mass[:-1])
 
     def read_biodi(self, biodi_file):
-        """This method reads a biodi file and sets the data as a pandas dataframe in self.biodi"""
+        """Read a biodistribution CSV and populate ``self.biodi``."""
         print(
             "Reading biodistribution information from the file: {}".format(biodi_file)
         )
@@ -102,9 +103,7 @@ class BioDose:
         print("Decayed biodistribution stored in self.biodi")
 
     def initialize_results_df(self):
-        """
-        This method initializes the results dataframe with the organ list and columns for the different fits.
-        """
+        """Initialize the results DataFrame with the expected columns."""
         columns = [
             "Mono-Exponential",
             "Bi-Exponential",
@@ -128,9 +127,7 @@ class BioDose:
         area_bi=None,
         area_uptake=None,
     ):
-        """
-        This method updates the fit results for a given organ.
-        """
+        """Update the stored fit parameters and AUC metrics for one organ."""
         area_mono_val = (
             area_mono[0] if isinstance(area_mono, (tuple, list)) else area_mono
         )
@@ -180,10 +177,7 @@ class BioDose:
         append_zero=True,
         tps_to_skip_fit=0,
     ):
-        """
-        This method fits the curves using lmfit and stores the results in self.fit_results.
-        The results can be seen in self.area organized in a pandas dataframe.
-        """
+        """Fit exponential models (with optional uptake) using lmfit."""
         decayconst = log(2) / self.half_life
 
         if organlist is None:
@@ -359,7 +353,7 @@ class BioDose:
             print(f"Error creating fitting parameters DataFrame: {e}")
 
     def num_decays(self, fit_accepted):
-        """Sets the number of decays in each of the organ based on the accepted fit (e.g. exponential or bi-exponential)"""
+        """Compute organ decays based on the accepted fit type."""
         self.disintegrations = pd.DataFrame(index=self.biodi.index, columns=["%ID/g*h"])
         self.fit_accepted = fit_accepted
 
@@ -397,6 +391,7 @@ class BioDose:
         self.disintegrations.loc["Remainder Body"] = np.nan
 
     def calculate_tumor_sink_effect(self):
+        """Compute the tumor sink effect factor for downstream corrections."""
         tumor_value = self.disintegrations["h"]["Tumor"]
 
         wb_value = self.disintegrations["h"].sum()
@@ -407,6 +402,7 @@ class BioDose:
         print(f"Tumor sink effect: {self.tumor_sink_effect_factor}")
 
     def tumor_sink_effect_correction(self, df):
+        """Apply the tumor sink effect factor to a biodistribution DataFrame."""
         df_corrected = df.copy()
 
         for organ in df_corrected.columns:
@@ -416,11 +412,12 @@ class BioDose:
         return df_corrected
 
     def phantom_data(self):
-        print(PHANTOM_PATH)
+        """Load the reference phantom masses and reconcile them with biodistribution organs."""
         if "mouse" in self.phantom.lower():
-            self.phantom_mass = pd.read_csv(
-                path.join(PHANTOM_PATH, "mouse_phantom_masses.csv")
-            )  # TODO: CHANGE PATH
+            with _preclinical_resource(
+                "phantomdata/mouse_phantom_masses.csv"
+            ) as phantom_path:
+                self.phantom_mass = pd.read_csv(phantom_path)
         #        elif 'human' in self.phantom.lower():
         #            self.phantom_mass = pd.read_csv(path.join(PHANTOM_PATH,'human_phantom_masses.csv'))
         self.phantom_mass.set_index("Organ", inplace=True)
@@ -463,7 +460,7 @@ class BioDose:
         )
 
     def remainder_body_uptake(self, tumor_name=None):
-
+        """Redistribute activity from organs that are not modeled in the phantom."""
         print("At this point we are ignoring the tumor")
         if tumor_name:
             self.not_inphantom_notumor = [
@@ -477,14 +474,16 @@ class BioDose:
 
         # These organs that are not modelled in the phantom are now going to be scaled using mass information from the literature:
         if "mouse" in self.phantom.lower():
-            self.literature_mass = pd.read_csv(
-                path.join(PHANTOM_PATH, "mouse_notinphantom_masses.csv")
-            )  # TODO: CHANGE PATH
+            with _preclinical_resource(
+                "phantomdata/mouse_notinphantom_masses.csv"
+            ) as lit_path:
+                self.literature_mass = pd.read_csv(lit_path)
 
         elif "human" in self.phantom.lower():
-            self.literature_mass = pd.read_csv(
-                path.join(PHANTOM_PATH, "human_notinphantom_masses.csv")
-            )  # TODO: CHANGE PATH
+            with _preclinical_resource(
+                "phantomdata/human_notinphantom_masses.csv"
+            ) as lit_path:
+                self.literature_mass = pd.read_csv(lit_path)
 
         print(self.phantom.lower())
         print(self.literature_mass)
@@ -585,25 +584,29 @@ class BioDose:
         )  # Only organs that are in the phantom will be kept in the disintegrations dataframe and passed to olinda
 
     def not_inphantom_notumor_fun(self):
+        """Drop leftover organs that the phantom model does not include."""
         self.disintegrations.drop(self.not_inphantom_notumor, inplace=True)
 
     def add_tumor_mass(self, tumor_name, tumor_mass):
-        self.phantom_mass.loc[tumor_name] = (
-            tumor_mass  # grams   Provided by average of biodi from Etienne
-        )
+        """Register a tumor entry with the provided mass (grams)."""
+        self.phantom_mass.loc[tumor_name] = tumor_mass
 
     def calculate_absorbed_dose(self, model, disintegrations):
         """
-        Calculate absorbed dose per target organ based on selected model and disintegration data.
+        Calculate absorbed dose per target organ based on the selected model.
 
-        Args:
-            model (str): One of 'mouse25g', 'mouse30g', or 'mouse35g'
-            disintegrations (pd.DataFrame): DataFrame with source organ disintegrations in hours
+        Parameters
+        ----------
+        model : str
+            One of ``mouse25g``, ``mouse30g``, ``mouse35g``, ``Female``, or ``Male``.
+        disintegrations : pandas.DataFrame
+            Source-organ disintegrations expressed in hours.
 
-        Returns:
-            pd.DataFrame: Absorbed dose in mGy and Gy for each target organ
+        Returns
+        -------
+        pandas.DataFrame
+            Absorbed dose in mGy and Gy for each target organ.
         """
-
         disintegrations = disintegrations.copy()
 
         model_files = {
@@ -619,8 +622,8 @@ class BioDose:
                 f"Invalid model '{model}'. Expected one of: {list(model_files.keys())}"
             )
 
-        svalues_path = path.join(SVALUES_PATH, model_files[model])
-        svalues_df = pd.read_csv(svalues_path, index_col=0)  # S-values in mSv/MBq-s
+        with _data_resource(f"s-values/{model_files[model]}") as svalues_path:
+            svalues_df = pd.read_csv(svalues_path, index_col=0)  # S-values in mSv/MBq-s
         print(f"Loaded S-values from: {svalues_path}")
         print("Target organs (S-value index):", svalues_df.index.tolist())
 
@@ -675,16 +678,20 @@ class BioDose:
 
     def apply_s_value(self, tia_df, s_values):
         """
-        Multiply S-values by TIA to compute dose matrix.
+        Multiply S-values by TIA to compute a dose matrix.
 
-        Args:
-            tia_df (pd.DataFrame): Disintegration times in seconds
-            s_values (pd.DataFrame): S-values table (target organs as index, source organs as columns)
+        Parameters
+        ----------
+        tia_df : pandas.DataFrame
+            Disintegration times in seconds.
+        s_values : pandas.DataFrame
+            S-value table with target organs as rows and source organs as columns.
 
-        Returns:
-            pd.DataFrame: Dose matrix (target organ x source organ)
+        Returns
+        -------
+        pandas.DataFrame
+            Dose matrix indexed by target organ.
         """
-
         common_source_organs = tia_df.index.intersection(s_values.columns)
 
         print(f"{len(common_source_organs)} source organs: {common_source_organs}")
@@ -708,11 +715,14 @@ class BioDose:
         savefile=False,
         dirname="./",
     ):
-        """This function creates a pandas dataframe that looks exactly as the case files generated by OLINDA for the g mouse.
-        The result can be viewed under self.mousecase, and the pandas methods can be used to finally save it if wanted.
+        """
+        Create a pandas representation of the mouse case file used by OLINDA.
+
+        The result is stored in ``self.mousecase`` and can optionally be persisted.
         """
         filename = self.phantom.lower() + ".cas"
-        template = pd.read_csv(path.join(TEMPLATE_PATH, filename))
+        with _preclinical_resource(f"olindaTemplates/{filename}") as template_path:
+            template = pd.read_csv(template_path)
         template.columns = ["Data"]
 
         # modify the isotope in the template
@@ -779,6 +789,7 @@ class BioDose:
         print(f"The case file {filename} has been saved in\n{format(dirname)}")
 
     def rename_organ(self, oldname, newname):
+        """Rename an organ across biodistribution and disintegration tables."""
         ind_list = self.disintegrations_all_organs.index.tolist()
         ind_pos = ind_list.index(oldname)
         ind_list[ind_pos] = newname
@@ -790,6 +801,7 @@ class BioDose:
         self.biodi.index = ind_list
 
     def create_human(self, tumor_name=None):
+        """Convert the current biodistribution into the human phantom domain."""
         # We are mostly using the disintegrations_all_organs dataframe, but we adjust the biodi dataframe as well to match the human phantom structure
         human = deepcopy(self)
         human.phantom = "AdultHuman"
@@ -842,15 +854,17 @@ class BioDose:
                 "Tumor", axis=0
             )
 
-        human.phantom_mass = pd.read_csv(
-            path.join(PHANTOM_PATH, "human_phantom_masses.csv")
-        )
+        with _preclinical_resource(
+            "phantomdata/human_phantom_masses.csv"
+        ) as human_mass_path:
+            human.phantom_mass = pd.read_csv(human_mass_path)
         human.phantom_mass.set_index("Organ", inplace=True)
         human.phantom_mass.sort_index(inplace=True)
 
-        human.literature_mass = pd.read_csv(
-            path.join(PHANTOM_PATH, "human_notinphantom_masses.csv")
-        )
+        with _preclinical_resource(
+            "phantomdata/human_notinphantom_masses.csv"
+        ) as human_lit_path:
+            human.literature_mass = pd.read_csv(human_lit_path)
         human.literature_mass.set_index("Organ", inplace=True)
 
         human.disintegrations_all_organs.sort_index(inplace=True)
@@ -927,9 +941,9 @@ class BioDose:
         return human
 
     def apply_relative_mass_scaling(self, mouse_mass=25):
-        rMSF_data = pd.read_csv(
-            path.join(PHANTOM_PATH, "rMSF_factor.csv"), index_col=0
-        )  # TODO: CHANGE PATH
+        """Apply relative mass scaling factors to mouse disintegrations."""
+        with _preclinical_resource("phantomdata/rMSF_factor.csv") as rmsf_path:
+            rMSF_data = pd.read_csv(rmsf_path, index_col=0)
 
         female_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, "Female"].sum()
         male_mass_sum = rMSF_data.loc[self.not_inphantom_notumor, "Male"].sum()
@@ -964,14 +978,18 @@ class BioDose:
                 ] *= remainder_correction_male
 
     def create_humancase(self, df, method, savefile=False, dirname="./"):
-        """This function creates a pandas dataframe that looks exactly as the case files generated by OLINDA for the human.
-        The result can be viewed under self.humancas, and the pandas methods can be used to finally save it if wanted.
         """
+        Create a pandas representation of the human case file used by OLINDA.
 
-        if self.sex == "Male":
-            template = pd.read_csv(path.join(TEMPLATE_PATH, "adult_male.cas"))
-        else:
-            template = pd.read_csv(path.join(TEMPLATE_PATH, "adult_female.cas"))
+        The result is stored in ``self.humancas`` and can optionally be saved.
+        """
+        template_filename = (
+            "adult_male.cas" if self.sex == "Male" else "adult_female.cas"
+        )
+        with _preclinical_resource(
+            f"olindaTemplates/{template_filename}"
+        ) as template_path:
+            template = pd.read_csv(template_path)
 
         template.columns = ["Data"]
 
@@ -1035,7 +1053,7 @@ class BioDose:
         )
 
     def scale_biexponential_tiac(self, row, biol_lambda_SF=0.25):
-
+        """Scale biexponential fits to enforce biological clearance constraints."""
         Cm_organ_t0_1 = row["bi_exp1:%ID"] / 100
         Cm_organ_t0_2 = row["bi_exp2:%ID"] / 100
 
@@ -1076,7 +1094,7 @@ class BioDose:
         return TIAC_h_bi_male, TIAC_h_bi_female
 
     def scale_monoexponential_tiac(self, row, biol_lambda_SF=0.25):
-
+        """Scale monoexponential fits to enforce biological clearance constraints."""
         lambda_effective = row["mono_exp:lambda_effective_1/h"]
         lambda_physical = log(2) / self.half_life  # 1/h
 
@@ -1099,7 +1117,7 @@ class BioDose:
         return TIAC_h_mono_male, TIAC_h_mono_female
 
     def lambda_biological_scaling(self, biol_lambda_SF=0.25, tumor_name=None):
-
+        """Apply biological lambda scaling to the stored fits and return a new BioDose instance."""
         print("At this point we are ignoring the tumor")
         if tumor_name:
             self.not_inphantom_notumor = [
