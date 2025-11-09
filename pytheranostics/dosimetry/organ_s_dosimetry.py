@@ -136,24 +136,14 @@ class OrganSDosimetry(BaseDosimetry):
 
     def prepare_data(self) -> None:
         """
-        Prepare data for dosimetry calculations or export based on the current configuration.
+        Prepare data for dosimetry calculations or export based on the configuration.
 
-        The behavior depends on the 'Level' setting:
-
-        1. Organ-level:
-           - If Output Type is 'Export':
-               - Generates files compatible with the selected software:
-                   - 'Olinda' → creates a .cas file for Olinda/EXM.
-                   - 'MirdCalc' → creates files compatible with MIRDcalc.
-           - If Output Type is 'Calculate':
-               - Performs organ-level dosimetry calculations using the specified method.
-               - Uses S-values from the chosen source (e.g., Olinda, MirdCalc, OpenDDose).
-           - Additional options like ROB, lesion dosimetry, or salivary gland handling are applied as configured.
-
-        2. Voxel-level:
-           - Prepares voxel-based dosimetry data.
-           - The chosen calculation method (e.g., Dose Kernel) is applied.
-           - Output is formatted according to the specified voxel-level output format (e.g., NIfTI).
+        For organ-level workflows the method either exports data compatible with
+        Olinda/MIRDcalc or performs the configured calculation, sourcing S-values
+        from the selected tables and honoring options such as ROB, lesions, or
+        salivary gland handling. For voxel-level workflows it assembles the inputs
+        for kernel-based calculations and writes the data using the requested
+        voxel-level format (for example, NIfTI).
         """
         self.results_fitting = self.results[["Volume_CT_mL", "TIA_h"]].copy()
         # Average Volume over time points.
