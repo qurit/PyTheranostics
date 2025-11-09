@@ -7,7 +7,7 @@ from pytheranostics.shared.resources import resource_path
 
 def load_s_values(gender: str, radionuclide: str) -> pandas.DataFrame:
     """Load the S-value table for a gender/radionuclide pair."""
-    relative_path = f"dosimetry/phantomdata/{radionuclide}-{gender}-Svalues.csv"
+    relative_path = f"s-values/organ/{radionuclide}-{gender}-Svalues.csv"
     try:
         with resource_path("pytheranostics.data", relative_path) as path_to_sv:
             s_df = pandas.read_csv(path_to_sv)
@@ -25,7 +25,7 @@ def load_s_values(gender: str, radionuclide: str) -> pandas.DataFrame:
 def load_phantom_mass(gender: str, organ: str) -> float:
     """Return the ICRP phantom mass for the requested organ and gender."""
     with resource_path(
-        "pytheranostics.data", "dosimetry/phantomdata/human_phantom_masses.csv"
+        "pytheranostics.data", "phantom/human/human_phantom_masses.csv"
     ) as phantom_data_path:
         masses = pandas.read_csv(phantom_data_path)
 
