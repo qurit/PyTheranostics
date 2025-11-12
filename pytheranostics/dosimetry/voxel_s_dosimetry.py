@@ -14,6 +14,7 @@ from pytheranostics.dosimetry.dvk import DoseVoxelKernel
 from pytheranostics.fits.fits import get_exponential
 from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
 from pytheranostics.imaging_tools.tools import itk_image_from_array, resample_to_target
+from pytheranostics.shared.resources import resource_path
 
 
 class VoxelSDosimetry(BaseDosimetry):
@@ -173,14 +174,11 @@ class VoxelSDosimetry(BaseDosimetry):
         # =============================================================================
         n_primaries_per_mac = int(n_primaries / n_cpu)
 
-        file_path = os.path.join(
-            os.path.dirname(__file__), "../data/monte_carlo/main_template.mac"
-        )
-
-        mac_file = numpy.fromfile(file_path, dtype=numpy.float32)
-
-        with open(file_path, "r") as mac_file:
-            filedata = mac_file.read()
+        with resource_path(
+            "pytheranostics.data", "monte_carlo/main_template.mac"
+        ) as template_path:
+            with template_path.open("r", encoding="utf-8") as mac_file:
+                filedata = mac_file.read()
 
         for i in range(0, n_cpu):
             new_mac = filedata
@@ -198,17 +196,13 @@ class VoxelSDosimetry(BaseDosimetry):
         os.makedirs(os.path.join(output_dir, "data"), exist_ok=True)
         os.makedirs(os.path.join(output_dir, "output"), exist_ok=True)
 
-        folder_path = os.path.join(
-            os.path.dirname(__file__), "../data/monte_carlo/data"
-        )
-        # Copy files from the source directory to the destination directory
-        for file_name in os.listdir(folder_path):
-            full_file_name = os.path.join(folder_path, file_name)
-            if os.path.isfile(full_file_name):
-                shutil.copy(full_file_name, os.path.join(output_dir, "data"))
-
-        # List the files in the destination directory to confirm the copy operation
-        os.listdir(os.path.join(output_dir, "data"))
+        with resource_path("pytheranostics.data", "monte_carlo/data") as folder_path:
+            for entry in folder_path.iterdir():
+                if entry.is_file():
+                    shutil.copy(
+                        entry,
+                        os.path.join(output_dir, "data", entry.name),
+                    )
 
         # TODO: Below is still work in progress
 

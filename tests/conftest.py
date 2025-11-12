@@ -1,6 +1,6 @@
 """Test configuration and fixtures for PyTheranostics."""
 
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -8,7 +8,6 @@ import pytest
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection to run smoke tests first."""
-
     # Separate smoke tests from other tests
     smoke_tests = []
     other_tests = []
@@ -30,12 +29,6 @@ def sample_image():
 
 
 @pytest.fixture
-def sample_dicom_path():
-    """Return path to sample DICOM file."""
-    return os.path.join(os.path.dirname(__file__), "data", "sample.dcm")
-
-
-@pytest.fixture
 def sample_activity():
     """Create sample activity data."""
     return np.array([1000, 800, 600, 400, 200])
@@ -45,3 +38,17 @@ def sample_activity():
 def sample_time_points():
     """Create sample time points."""
     return np.array([0, 1, 2, 3, 4])
+
+
+@pytest.fixture(scope="session")
+def docs_examples_dir() -> Path:
+    """Return the path to the documentation example data directory."""
+    return (
+        Path(__file__).resolve().parent.parent / "docs" / "source" / "examples" / "data"
+    )
+
+
+@pytest.fixture(scope="session")
+def spect_example_dir(docs_examples_dir: Path) -> Path:
+    """Directory containing sample SPECT DICOM images."""
+    return docs_examples_dir / "testimages"

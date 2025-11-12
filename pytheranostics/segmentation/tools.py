@@ -1,7 +1,10 @@
+"""Helpers for working with RT structure sets."""
+
 from rt_utils import RTStructBuilder
 
 
 def rtst_to_mask(dicom_series_path, rt_struct_path):
+    """Load an RTSTRUCT and return a dict of ROI masks keyed by ROI name."""
     # Load existing RT Struct. Requires the series path and existing RT Struct path
     rtstruct = RTStructBuilder.create_from(
         dicom_series_path=dicom_series_path, rt_struct_path=rt_struct_path
