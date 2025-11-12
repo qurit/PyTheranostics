@@ -1,13 +1,19 @@
+"""Helpers to orchestrate Monte Carlo batch jobs."""
+
 import os
 
 
 class MonteCarlo:
+    """Split and execute Monte Carlo runs across multiple CPUs."""
+
     def __init__(self, n_cpu, n_primaries, output_dir):
+        """Store execution parameters for the simulation batch."""
         self.n_cpu = n_cpu
         self.n_primaries = n_primaries
         self.output_dir = output_dir
 
     def split_simulations(self):
+        """Split total primaries across CPUs and write per-core macro files."""
         n_primaries_per_mac = int(self.n_primaries / self.n_cpu)
 
         with open("./main_template.mac", "r") as mac_file:
@@ -26,6 +32,7 @@ class MonteCarlo:
                 output_mac.write(new_mac)
 
     def run_MC(self):
+        """Invoke the shell script that runs the Monte Carlo jobs."""
         os.system(
             f"bash {self.output_dir}/runsimulation1.sh {self.output_dir} {self.n_cpu}"
         )
