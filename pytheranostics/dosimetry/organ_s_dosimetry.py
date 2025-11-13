@@ -561,28 +561,30 @@ class OrganSDosimetry(BaseDosimetry):
                 dose_df = s_values_subset.multiply(tia_series, axis=1)
 
                 # ROB
-
                 print("Calculating Remainder of Body contributions...")
                 dose_df["RemainderOfBody"] = 0
                 total_body_mass = self.organ_masses.loc["Total Body", "Mass_g"]
-                ROB_mass = tia_df.loc["RemainderOfBody", "Volume_CT_mL"]
-
+                source_organs = tia_series.index
                 if radiation_type == "beta":
-                    organs = s_values_subset.index.difference(
+                    target_organs = s_values_subset.index.difference(
                         tia_series.index.difference(["Red Marrow", "Osteogenic Cells"])
                     )
+                    ROB_mass = tia_df.loc["RemainderOfBody", "Volume_CT_mL"]
                 if radiation_type == "gamma":
-                    organs = s_values_subset.index
-                self.contribution_from_sources_dict = {radiation_type: {}}
-                for target_organ in organs:
+                    target_organs = s_values_subset.index
+                    total_mass_source_organs = self.organ_masses.loc[
+                        self.organ_masses.index.intersection(tia_series.index), "Mass_g"
+                    ].sum()
+
+                    ROB_mass = total_body_mass - total_mass_source_organs
+
+                for target_organ in target_organs:
                     contribution_from_sources = 0
 
-                    self.contribution_from_sources_dict[radiation_type][
-                        target_organ
-                    ] = {"sources": {}}
-
-                    for source_organ in s_values.columns.difference(tia_series.index):
+                    for source_organ in source_organs:
                         if radiation_type == "beta":
+                            if target_organ.split()[0] == source_organ.split()[0]:
+                                continue
                             if target_organ == "Red Marrow" and source_organ in [
                                 "Trabecular Bone"
                             ]:
@@ -596,12 +598,10 @@ class OrganSDosimetry(BaseDosimetry):
 
                         if source_organ == "Total Body":
                             continue
-                        if target_organ.split()[0] == source_organ.split()[0]:
-                            continue
+
                         if target_organ == "Total Body":
                             continue
 
-                        print(f"  From source organ: {source_organ}")
                         source_organ_mass = self.organ_masses.loc[
                             source_organ, "Mass_g"
                         ]
@@ -612,16 +612,18 @@ class OrganSDosimetry(BaseDosimetry):
                         contribution_from_sources += s_value_source_to_target * (
                             source_organ_mass / ROB_mass
                         )
-                        self.contribution_from_sources_dict[radiation_type][
-                            target_organ
-                        ]["sources"][
-                            f"contribution_from_{source_organ}"
-                        ] = s_value_source_to_target
 
-                    s_value_ROB_to_target = (
-                        s_values.loc[target_organ, "Total Body"]
-                        * (total_body_mass / ROB_mass)
-                    ) - contribution_from_sources
+                    if target_organ == "Total Body":
+                        s_value_ROB_to_target = (
+                            s_values.loc[target_organ, "Total Body"]
+                            # * (total_body_mass / ROB_mass) since it is a target organ, the scaling will happen at mass scaling method, so not to have it twice its not performed here
+                        ) - contribution_from_sources
+                    else:
+                        s_value_ROB_to_target = (
+                            s_values.loc[target_organ, "Total Body"]
+                            * (total_body_mass / ROB_mass)
+                        ) - contribution_from_sources
+
                     dose_df.at[target_organ, "RemainderOfBody"] = (
                         s_value_ROB_to_target * tia_df.loc["RemainderOfBody", "TIA_s"]
                     )
@@ -645,10 +647,14 @@ class OrganSDosimetry(BaseDosimetry):
         print("Performing mass scaling...")
 
         for organ in df["Target organ"]:
-
-            if organ in model_masses_df.index and organ in self.results_fitting.index:
-                model_mass = model_masses_df.loc[organ, "Mass_g"]
-                patient_mass = self.results_fitting.loc[organ, "Volume_CT_mL"]
+            # Temporary mapping just for internal calculations
+            organ_internal = "RemainderOfBody" if organ == "Total Body" else organ
+            if (
+                organ_internal in model_masses_df.index
+                and organ_internal in self.results_fitting.index
+            ):
+                model_mass = model_masses_df.loc[organ_internal, "Mass_g"]
+                patient_mass = self.results_fitting.loc[organ_internal, "Volume_CT_mL"]
 
                 if (
                     pandas.notna(patient_mass)
