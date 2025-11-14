@@ -1,3 +1,5 @@
+"""QC checks for SPECT projections and reconstructions."""
+
 import numpy as np
 import pydicom
 
@@ -5,14 +7,16 @@ from pytheranostics.qc.qc import QC
 
 
 class SPECTQC(QC):
+    """QC checks for raw SPECT projections and reconstructed images."""
 
     def __init__(self, isotope, projections_file, recon_file, db_dic, cal_type="spect"):
+        """Load projection and reconstruction DICOM datasets for QC."""
         super().__init__(isotope, db_dic=db_dic, cal_type=cal_type)
         self.proj_ds = pydicom.dcmread(projections_file)
         self.recon_ds = pydicom.dcmread(recon_file)
 
     def check_projs(self):
-
+        """Run the full QC pipeline for projections and reconstructed images."""
         self.window_check_df = {}
 
         self.append_to_summary(f"QC for SPECT RAW DATA of {self.isotope}:\n\n")
@@ -26,6 +30,7 @@ class SPECTQC(QC):
         self.print_summary()
 
     def check_camera_parameters(self, ds, projs=True):
+        """Append camera parameter checks for either projection or reconstruction."""
         camera_manufacturer = ds.Manufacturer
         camera_model = ds.ManufacturerModelName
         acquisition_date = ds.AcquisitionDate

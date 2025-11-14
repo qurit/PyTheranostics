@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Development environment setup script.
+
 Activate a virtual environment or conda environment before running.
 """
 

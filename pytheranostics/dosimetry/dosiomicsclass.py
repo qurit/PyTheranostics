@@ -1,3 +1,5 @@
+"""Radiomics feature extraction utilities."""
+
 from __future__ import print_function
 
 import os
@@ -9,7 +11,10 @@ from radiomics import featureextractor
 
 
 class Radiomics:
+    """Generate radiomics features for longitudinal studies."""
+
     def __init__(self, imagemodality, patient_id, cycle, image, mask, organslist):
+        """Store study metadata, image arrays, and ROI masks."""
         self.imagemodality = imagemodality
         self.patient_id = patient_id
         self.cycle = cycle
@@ -18,6 +23,7 @@ class Radiomics:
         self.organslist = organslist
 
     def prepareimages(self):
+        """Export the image and ROI masks to NRRD files for PyRadiomics."""
         img = sitk.GetImageFromArray(self.image)
 
         sitk.WriteImage(
@@ -33,6 +39,7 @@ class Radiomics:
             )
 
     def featureextractor(self):
+        """Run PyRadiomics using the configured parameter set."""
         paramPath = os.path.join("..", "data", "Params.yaml")
 
         extractor = featureextractor.RadiomicsFeatureExtractor(paramPath)

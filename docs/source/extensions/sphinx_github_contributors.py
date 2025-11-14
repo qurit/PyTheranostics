@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_github_contributors(app):
+    """Fetch contributors via the GitHub API and write a simple RST list."""
     username = app.config.github_username
     repository = app.config.github_repository
     output_file = app.config.contributors_output_file
@@ -40,6 +41,7 @@ def fetch_github_contributors(app):
 
 
 def setup(app):
+    """Register config values and connect the fetch hook."""
     app.add_config_value("github_username", None, "env")
     app.add_config_value("github_repository", None, "env")
     app.add_config_value("contributors_output_file", "../contributors.rst", "env")

@@ -1,9 +1,12 @@
+"""Radioactive decay helpers shared across modules."""
+
 from datetime import datetime
 
 import numpy as np
 
 
 def decay_act(a_initial, delta_t, half_life):
+    """Return decayed activity after `delta_t` given the half-life."""
     if np.any(np.asarray(a_initial) < 0):
         raise ValueError("a_initial must be positive")
     if np.any(np.asarray(delta_t) < 0):
@@ -23,7 +26,7 @@ def get_activity_at_injection(
     injection_time,
     half_life,
 ):
-
+    """Compute injection datetime and activity from pre/post syringe readings."""
     # Pass half-life in seconds
 
     # Set the times and the time deltas to injection time

@@ -1,3 +1,5 @@
+"""Gamma camera calibration utilities."""
+
 import json
 import math
 import pprint
@@ -17,11 +19,14 @@ CALIBRATIONS_DATA_FILE = Path(this_dir, "data", "gamma_camera_sensitivities.json
 
 
 class GammaCamera(PlanarQC):
+    """Encapsulate gamma camera QC and sensitivity calculations."""
 
     def __init__(self, isotope, dicomfile, db_dic, cal_type="planar"):
+        """Initialize the planar QC base class and load site metadata."""
         super().__init__(isotope, dicomfile, db_dic=db_dic, cal_type=cal_type)
 
     def get_sensitivity(self, source_id="C", **kwargs):
+        """Calculate camera sensitivity for the provided calibration source."""
         # ser_date = self.ds.SeriesDate
         # ser_time = self.ds.SeriesTime
 
@@ -195,7 +200,7 @@ class GammaCamera(PlanarQC):
         pprint.pprint(self.cal_dic)
 
     def calculate_uncertainty(self, site_id, camera_model, uncertainty_activity):
-
+        """Compute calibration factor and sensitivity uncertainties."""
         u_prim_list = []
         for detector in ["Detector1", "Detector2"]:
             u_pw = math.sqrt(self.win_check["photopeak"]["counts"][detector])
@@ -231,6 +236,7 @@ class GammaCamera(PlanarQC):
         return uncertainty_cf, uncertainty_sensitivity
 
     def calfactor_to_database(self, **kwargs):
+        """Persist calibration factors to the shared JSON database."""
         if "site_id" in kwargs:
             site_id = kwargs["site_id"]
 

@@ -1,16 +1,20 @@
+"""QC checks for planar acquisitions."""
+
 import pydicom
 
 from pytheranostics.qc.qc import QC
 
 
 class PlanarQC(QC):
+    """QC checks specific to planar acquisitions."""
 
     def __init__(self, isotope, dicomfile, db_dic, cal_type="planar"):
+        """Load the planar DICOM file and associated calibration forms."""
         super().__init__(isotope, db_dic=db_dic, cal_type=cal_type)
         self.ds = pydicom.dcmread(dicomfile)
 
     def check_windows_energy(self):
-
+        """Run the planar QC workflow and populate the summary."""
         self.append_to_summary(f"QC for planar scan of {self.isotope}:\n\n")
 
         self.check_camera_parameters()
@@ -18,6 +22,7 @@ class PlanarQC(QC):
         self.print_summary()
 
     def check_camera_parameters(self):
+        """Verify DICOM acquisition parameters match the expected protocol."""
         camera_manufacturer = self.ds.Manufacturer
         camera_model = self.ds.ManufacturerModelName
         acquisition_date = self.ds.AcquisitionDate
