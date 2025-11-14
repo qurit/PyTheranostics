@@ -1,3 +1,5 @@
+"""Shared utilities for QC workflows."""
+
 import json
 from io import StringIO
 from pathlib import Path
@@ -13,17 +15,10 @@ ISOTOPE_DATA_FILE = Path(this_dir, "data", "isotopes.json")
 
 
 class QC:
+    """Base class for QC workflows (planar, SPECT, dose calibrator)."""
+
     def __init__(self, isotope, **kwargs):
-        """
-
-        **kwargs:
-            db_dic: containing three keys
-                    db_file
-                    sheet_names (list)
-                    header
-                    site_id
-        """
-
+        """Load isotope metadata and qualifying site data required for QC."""
         self.db_df = {}
 
         with open(ISOTOPE_DATA_FILE) as f:
@@ -82,7 +77,7 @@ class QC:
                     self.db_df["shipped_data"] = ref_shipped
 
     def window_check(self, win_perdiff_max=2, type="planar"):
-
+        """Compare configured energy windows against protocol tolerances."""
         if type == "planar":
             ds = self.ds
         elif type == "spect":
@@ -205,9 +200,11 @@ class QC:
         return window_check_df
 
     def append_to_summary(self, text):
+        """Append formatted text to the QC summary buffer."""
         self.summary = self.summary + text
 
     def print_summary(self):
+        """Convert the text summary into a styled pandas DataFrame."""
         # print(self.summary)
         summary = StringIO(self.summary)
         self.summary_df = pd.read_csv(summary, sep="\t")
@@ -221,6 +218,7 @@ class QC:
         # print(self.summary)
 
     def update_db(self, syringe_name="syringe_20_mL"):
+        """Refresh calibration tables with decay-corrected references and recoveries."""
         sources = self.db_df["shipped_data"].source_id.unique()
         centres = self.db_df["shipped_data"].site_id.unique()
 

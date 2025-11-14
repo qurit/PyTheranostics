@@ -1,3 +1,5 @@
+"""Visualization and summary utilities for volumetric dosimetry images."""
+
 import gatetools as gt
 import itk
 import matplotlib.pyplot as plt
@@ -5,7 +7,10 @@ import numpy as np
 
 
 class Image:
+    """Convenience wrapper to compute statistics on organ masks."""
+
     def __init__(self, df, patient_id, cycle, image, roi_masks_resampled):
+        """Store metadata, image array, and resampled ROI masks."""
         self.df = df
         self.patient_id = patient_id
         self.cycle = int(cycle)
@@ -14,6 +19,7 @@ class Image:
         self.organlist = self.roi_masks_resampled.keys()
 
     def SPECT_image_array(self, SPECT, scalefactor, xspacing, yspacing, zspacing):
+        """Convert a DICOM SPECT series into an MBq volume and cache it."""
         SPECT_image = SPECT.pixel_array
         SPECT_image = np.transpose(
             SPECT_image, (1, 2, 0)
@@ -35,6 +41,7 @@ class Image:
         return SPECTMBq
 
     def image_visualisation(self, image):
+        """Display three orthogonal slices for quick sanity checks."""
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
         axs[0].imshow(image[:, :, 50])
@@ -48,7 +55,7 @@ class Image:
         plt.show()
 
     def show_mean_statistics(self, output):
-
+        """Compute mean activity per organ and store in the dataframe."""
         self.ad_mean = {}
         for organ in self.organlist:
             mask = self.roi_masks_resampled[organ]
@@ -58,12 +65,14 @@ class Image:
         self.df[output] = self.df["Contour"].map(self.ad_mean)
 
     def show_max_statistics(self):
+        """Print the maximum activity observed within each organ mask."""
         for organ in self.organlist:
             mask = self.roi_masks_resampled[organ]
             x = self.image[mask].max()
             print(f"{organ}", x)
 
     def add(self, output):
+        """Compute total activity per organ and map it back into the dataframe."""
         self.sum = {}
         for organ in self.organlist:
             mask = self.roi_masks_resampled[organ]
@@ -73,6 +82,7 @@ class Image:
         self.df[output] = self.df["Contour"].map(self.sum)
 
     def voxels_and_volume(self, output1, output2, voxel_volume):
+        """Record nonzero voxel counts and physical volumes per organ."""
         self.no_voxels = {}
         self.volume = {}
         for organ in self.organlist:
@@ -84,6 +94,7 @@ class Image:
         self.df[output2] = self.df["Contour"].map(self.volume)
 
     def dose_volume_histogram(self):
+        """Generate and log dose-volume histograms for each organ."""
         doseimage = self.image.astype(float)
         doseimage = itk.image_from_array(doseimage)
 

@@ -1,5 +1,8 @@
-def tew_scatt(window_dic):
+"""Scatter-correction helpers."""
 
+
+def tew_scatt(window_dic):
+    """Apply triple-energy-window scatter correction to window counts."""
     Cp = {}
 
     ls_width = window_dic["low_scatter"]["width"]

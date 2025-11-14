@@ -1,3 +1,5 @@
+"""Utility functions for reading and modifying nuclear medicine DICOM files."""
+
 import time
 from datetime import datetime
 from pathlib import Path
@@ -14,8 +16,10 @@ from pytheranostics.shared.radioactive_decay import get_activity_at_injection
 
 
 class DicomModify:
+    """Helper that edits DICOM headers/pixel data for quantitative SPECT studies."""
 
     def __init__(self, fname, CF):
+        """Load the DICOM file and store calibration info."""
         self.ds = pydicom.dcmread(fname)
         self.CF = CF
         self.fname = fname
@@ -35,6 +39,7 @@ class DicomModify:
         radiopharmaceutical="Lutetium-PSMA-617",
         n_detectors=2,
     ):
+        """Convert raw counts to BQML/SUV units and update the header accordingly."""
         # Half-life is in seconds
 
         # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
@@ -186,30 +191,18 @@ class DicomModify:
         return inj_df
 
     def save(self):
+        """Persist the modified dataset alongside the original file."""
         self.ds.save_as(f"{self.fname.split('.dcm')[0]}_out.dcm")
 
 
 def dicom_slope_intercept(img):
-    """This function calculates the slope and intercept for a DICOM image in the way that GE does it.
+    """Calculate GE-style slope/intercept for converting floats to signed int16.
 
-        GE PET images are stored in DICOM files that are signed int16.  This allows for a maximum value of 32767.
-        The slope is calculated such that the maximum value in the pixel array (before multiplying by slope) is 32767.
-
-    Parameters
-    ----------
-        img: numpy array
-          contains the float values of the image (e.g. MBq/ml in our case)
-
-    Returns
-    -------
-        slope: float
-            The slope to be set in the dicom header
-
-        intercept: float
-            The intercept for the dicom header
-
+    GE PET images are stored as signed int16 values with magnitude limited to
+    32767. The computed slope ensures the largest absolute voxel value in the
+    floating-point array (e.g., MBq/mL) maps to this range once quantized, while
+    the intercept remains zero (GE convention).
     """
-
     max_val = np.max(img)
     min_val = np.min(img)
 
@@ -228,26 +221,7 @@ def generate_basic_dcm_tags(
     date: str,
     time: str,
 ) -> List[Any]:
-    """This function generates basic DICOM tags. Useful to build simple DICOM datasets from images.
-
-    Parameters
-    ----------
-        img_size:
-
-        slice_thickness:
-
-        name:
-
-        direction:
-
-        date:
-
-        time:
-
-    Returns
-    -------
-        series_tag_values:
-    """
+    """Generate the minimal tag set needed for a synthetic DICOM series."""
     series_tag_values = [
         ("0008|0031", time),  # Series Time
         ("0008|0021", date),  # Series Date
@@ -293,26 +267,14 @@ def numpy_to_dcm_basic(
     patien_name: str = "Patient",
     scale: int = 1,
 ) -> None:
-    """Write a numpy array as a .dcm image for visualization purposes. Borrowed from:
+    """Write a NumPy array as a basic DICOM series for visualization/testing.
 
-    R. Fedrigo, et al., “Development of the Lymphatic System in the 4D XCAT Phantom for
-    Improved Multimodality Imaging Research”, J. Nuc. Med., vol. 62, publication 113, 2021.
-
-    Parameters
-    ----------
-        array:
-
-        voxel_spacing:
-
-        output_dir:
-
-        scale:
-
-    Returns:
-        None
-
+    Notes
+    -----
+    Adapted from: R. Fedrigo et al., "Development of the Lymphatic System in the
+    4D XCAT Phantom for Improved Multimodality Imaging Research," J. Nucl. Med.,
+    62, 113 (2021).
     """
-
     # Create SimpleITK image from array
     array = array * scale
     sitk_image = SimpleITK.GetImageFromArray(array.astype(np.int16))
@@ -371,17 +333,7 @@ def numpy_to_dcm_basic(
 
 
 def sitk_load_dcm_series(dcm_dir: Path) -> SimpleITK.Image:
-    """Load Series from DICOM folder, and return SITK image
-
-    Parameters
-    ----------
-        dcm_dir:
-
-    Returns
-    --------
-        dicom_dataset:
-    """
-
+    """Load a DICOM series using SimpleITK and return it as an image volume."""
     reader = SimpleITK.ImageSeriesReader()
     dcm_file_names = reader.GetGDCMSeriesFileNames(str(dcm_dir))
     reader.SetFileNames(dcm_file_names)
