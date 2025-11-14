@@ -1,3 +1,5 @@
+"""Quality-control routines for dose calibrator submissions."""
+
 import numpy as np
 
 from pytheranostics.qc.qc import QC
@@ -6,12 +8,14 @@ from pytheranostics.shared.radioactive_decay import decay_act
 
 
 class DosecalQC(QC):
+    """Perform QC checks for dose calibrator calibration data."""
 
     def __init__(self, isotope, db_dic, cal_type="dc"):
+        """Initialize the QC helper with isotope metadata and DB extracts."""
         super().__init__(isotope, db_dic=db_dic, cal_type=cal_type)
 
     def check_calibration(self, accepted_percent=1.5, accepted_recovery=(97, 103)):
-
+        """Run the full calibration workflow and append findings to the summary."""
         # keep a flag to accept or reject depending on the different tests. Default is to accept (1):
         # If something fails it will be changed to 2 if needs to verify and 3 if it completely fails
 
@@ -131,6 +135,7 @@ class DosecalQC(QC):
         self.print_summary()
 
     def check_source_decay(self, accepted_percent):
+        """Validate decay corrections for each shipped source."""
         # find the shipped sources
         sources = self.db_df["shipped_data"].source_id.unique()
 
@@ -194,7 +199,7 @@ class DosecalQC(QC):
             )
 
     def check_syringe_recovery(self, syringe_name="syringe_20_mL"):
-
+        """Verify the syringe recovery curve stays within allowed tolerances."""
         self.db_df["cal_data"].loc[
             self.db_df["cal_data"].source_id == syringe_name,
             "syringe_activity_calculated",

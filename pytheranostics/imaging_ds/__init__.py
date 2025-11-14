@@ -7,6 +7,7 @@ from .cycle_loader import (
     prepare_cycle_inputs,
 )
 from .longitudinal_study import LongitudinalStudy
+from .mapping_summary import summarize_used_mappings
 from .metadata import ImagingMetadata
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "list_cycle_timepoints",
     "extract_injection_from_first_tp_spect",
     "create_studies_with_masks",
+    "summarize_used_mappings",
 ]

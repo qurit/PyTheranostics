@@ -1,3 +1,5 @@
+"""Curve-fitting utilities built on top of lmfit."""
+
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import lmfit
@@ -69,7 +71,6 @@ def exponential_fit_lmfit(
     - For bi-exponential: B1 = -A1
     - For tri-exponential: C1 = -(A1 + B1)
     """
-
     if num_exponentials not in [1, 2, 3]:
         raise ValueError(
             f"num_exponentials must be 1, 2, or 3., found {num_exponentials}"
@@ -172,8 +173,7 @@ def exponential_fit_lmfit(
 def calculate_r_squared(
     time: numpy.ndarray, activity: numpy.ndarray, popt: numpy.ndarray, func: Callable
 ) -> Tuple[float, numpy.ndarray]:
-    """Calculate r_squared and residuals between fit and data-points."""
-
+    """Calculate r-squared and residuals between the fit and data points."""
     residuals = activity - func(time, *popt)
 
     ss_res = numpy.sum(residuals**2)
@@ -186,9 +186,7 @@ def calculate_r_squared(
 def get_exponential(
     order: int, param_init: Optional[Tuple[float, ...]], decayconst: float
 ) -> Tuple[Callable, Tuple[float, ...], Optional[Tuple[Any, ...]]]:
-    """Retrieve an exponential function given an input order 'order', initial parameters and a decay-constant
-    value (for defatult constrains)"""
-
+    """Retrieve an exponential model, default parameters, and bounds."""
     # Default initial parameters:
     default_initial = {
         1: (1, 1),

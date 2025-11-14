@@ -1,15 +1,10 @@
+"""Multiscale Demons registration helpers."""
+
 import SimpleITK
 
 
 def smooth_and_resample(image, shrink_factor, smoothing_sigma):
-    """
-    Args:
-        image: The image we want to resample.
-        shrink_factor: A number greater than one, such that the new image's size is original_size/shrink_factor.
-        smoothing_sigma: Sigma for Gaussian smoothing, this is in physical (image spacing) units, not pixels.
-    Return:
-        Image which is a result of smoothing the input and then resampling it using the given sigma and shrink factor.
-    """
+    """Gaussian smooth an image and resample it by the given shrink factor."""
     smoothed_image = SimpleITK.SmoothingRecursiveGaussian(image, smoothing_sigma)
 
     original_spacing = image.GetSpacing()
@@ -42,21 +37,7 @@ def multiscale_demons(
     shrink_factors=None,
     smoothing_sigmas=None,
 ):
-    """
-    Run the given registration algorithm in a multiscale fashion. The original scale should not be given as input as the
-    original images are implicitly incorporated as the base of the pyramid.
-    Args:
-        registration_algorithm: Any registration algorithm that has an Execute(fixed_image, moving_image, displacement_field_image)
-                                method.
-        fixed_image: Resulting transformation maps points from this image's spatial domain to the moving image spatial domain.
-        moving_image: Resulting transformation maps points from the fixed_image's spatial domain to this image's spatial domain.
-        initial_transform: Any SimpleITK transform, used to initialize the displacement field.
-        shrink_factors: Shrink factors relative to the original image's size.
-        smoothing_sigmas: Amount of smoothing which is done prior to resmapling the image using the given shrink factor. These
-                          are in physical (image spacing) units.
-    Returns:
-        SimpleITK.DisplacementFieldTransform
-    """
+    """Run a multiscale Demons registration on the provided fixed/moving pair."""
     # Create image pyramid.
     fixed_images = [fixed_image]
     moving_images = [moving_image]

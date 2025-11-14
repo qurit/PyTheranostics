@@ -11,6 +11,7 @@ import SimpleITK
 from SimpleITK.SimpleITK import Transform
 
 from pytheranostics.registration.demons import multiscale_demons
+from pytheranostics.shared.resources import resource_path
 
 
 class PhantomToCTBoneReg:
@@ -32,7 +33,7 @@ class PhantomToCTBoneReg:
     def __init__(
         self,
         CT: SimpleITK.Image,
-        phantom_skeleton_path: Path = Path("../data/phantom/skeleton/Skeleton.nii.gz"),
+        phantom_skeleton_path: Optional[Path] = None,
         verbose: bool = False,
     ) -> None:
         """Initialize the Phantom-to-CT registration helper.
@@ -42,13 +43,19 @@ class PhantomToCTBoneReg:
         CT : SimpleITK.Image
             The reference patient CT image.
         phantom_skeleton_path : Path, optional
-            Path to the XCAT phantom skeleton image (NIfTI), by default
-            "../data/phantom/skeleton/Skeleton.nii.gz".
+            Path to the XCAT phantom skeleton image (NIfTI). If omitted, the
+            bundled phantom skeleton distributed with PyTheranostics is used.
         verbose : bool, optional
             Enable verbose logging during registration, by default False.
         """
         self.CT = SimpleITK.Image(CT)  # Make a Copy.
-        self.Phantom = SimpleITK.ReadImage(fileName=phantom_skeleton_path)
+        if phantom_skeleton_path is None:
+            with resource_path(
+                "pytheranostics.data", "phantom/skeleton/Skeleton.nii.gz"
+            ) as skeleton_path:
+                self.Phantom = SimpleITK.ReadImage(fileName=str(skeleton_path))
+        else:
+            self.Phantom = SimpleITK.ReadImage(fileName=str(phantom_skeleton_path))
 
         # Set Origin for Phantom to that of reference CT.
         self.Phantom.SetOrigin(self.CT.GetOrigin())
@@ -267,7 +274,7 @@ class PhantomToCTBoneReg:
     def register_mask(
         self,
         fixed_image: SimpleITK.Image,
-        mask_path: Path = Path("../data/phantom/bone_marrow/Marrow.nii.gz"),
+        mask_path: Optional[Path] = None,
     ) -> SimpleITK.Image:
         """Register a phantom mask (e.g., bone marrow) to patient CT.
 
@@ -276,14 +283,21 @@ class PhantomToCTBoneReg:
         fixed_image : SimpleITK.Image
             The reference CT image.
         mask_path : Path, optional
-            Path to the phantom mask file, by default "../data/phantom/bone_marrow/Marrow.nii.gz"
+            Path to the phantom mask file. If omitted, the packaged bone marrow
+            mask is used.
 
         Returns
         -------
         SimpleITK.Image
             The registered mask in CT space.
         """
-        mask_image = SimpleITK.ReadImage(fileName=mask_path)
+        if mask_path is None:
+            with resource_path(
+                "pytheranostics.data", "phantom/bone_marrow/Marrow.nii.gz"
+            ) as default_mask:
+                mask_image = SimpleITK.ReadImage(fileName=str(default_mask))
+        else:
+            mask_image = SimpleITK.ReadImage(fileName=str(mask_path))
         mask_image.SetOrigin(fixed_image.GetOrigin())
         mask_image = SimpleITK.Cast(mask_image, SimpleITK.sitkFloat32)
 
