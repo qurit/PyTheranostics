@@ -15,10 +15,7 @@ from scipy.interpolate import PchipInterpolator
 
 from pytheranostics.dosimetry.base_dosimetry import BaseDosimetry
 from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
-
-parent_dir = path.dirname(path.dirname(__file__))
-SVALUES_PATH = path.join(parent_dir, "data", "s-values")
-MASSES_PATH = path.join(parent_dir, "data", "ICRP_phantom_masses")
+from pytheranostics.shared.resources import resource_path
 
 
 class OrganSDosimetry(BaseDosimetry):
@@ -56,6 +53,15 @@ class OrganSDosimetry(BaseDosimetry):
             print("Verify the level on which dosimetry should be performed.")
 
         return None
+
+    @staticmethod
+    def _load_human_mass_table() -> pandas.DataFrame:
+        """Load the reference human phantom masses."""
+        with resource_path(
+            "pytheranostics.data", "phantom/human/human_phantom_masses.csv"
+        ) as masses_path:
+            masses = pandas.read_csv(masses_path, index_col=0)
+        return masses
 
     def composition_and_density_from_HU(self, density: float) -> Tuple[str, float]:
         """Determine composition and density for a given CT HU value."""
@@ -141,24 +147,14 @@ class OrganSDosimetry(BaseDosimetry):
 
     def prepare_data(self) -> None:
         """
-        Prepare data for dosimetry calculations or export based on the current configuration.
+        Prepare data for dosimetry calculations or export based on the configuration.
 
-        The behavior depends on the 'Level' setting:
-
-        1. Organ-level:
-           - If Output Type is 'Export':
-               - Generates files compatible with the selected software:
-                   - 'Olinda' → creates a .cas file for Olinda/EXM.
-                   - 'MirdCalc' → creates files compatible with MIRDcalc.
-           - If Output Type is 'Calculate':
-               - Performs organ-level dosimetry calculations using the specified method.
-               - Uses S-values from the chosen source (e.g., Olinda, MirdCalc, OpenDDose).
-           - Additional options like ROB, lesion dosimetry, or salivary gland handling are applied as configured.
-
-        2. Voxel-level:
-           - Prepares voxel-based dosimetry data.
-           - The chosen calculation method (e.g., Dose Kernel) is applied.
-           - Output is formatted according to the specified voxel-level output format (e.g., NIfTI).
+        For organ-level workflows the method either exports data compatible with
+        Olinda/MIRDcalc or performs the configured calculation, sourcing S-values
+        from the selected tables and honoring options such as ROB, lesions, or
+        salivary gland handling. For voxel-level workflows it assembles the inputs
+        for kernel-based calculations and writes the data using the requested
+        voxel-level format (for example, NIfTI).
         """
         self.results_fitting = self.results[["Volume_CT_mL", "TIA_h"]].copy()
         # Average Volume over time points.
@@ -361,12 +357,16 @@ class OrganSDosimetry(BaseDosimetry):
             },
         }
 
-        svalues_beta = self.load_svalues(
-            path.join(SVALUES_PATH, model_files[self.config["Gender"]]["beta"])
-        )
-        svalues_gamma = self.load_svalues(
-            path.join(SVALUES_PATH, model_files[self.config["Gender"]]["gamma"])
-        )
+        with resource_path(
+            "pytheranostics.data",
+            f"s-values/{model_files[self.config['Gender']]['beta']}",
+        ) as beta_path:
+            svalues_beta = self.load_svalues(beta_path)
+        with resource_path(
+            "pytheranostics.data",
+            f"s-values/{model_files[self.config['Gender']]['gamma']}",
+        ) as gamma_path:
+            svalues_gamma = self.load_svalues(gamma_path)
 
         print("Source organs available in the model:", svalues_beta.columns.tolist())
         print("Source organs present :", self.results_fitting_organs.index.tolist())

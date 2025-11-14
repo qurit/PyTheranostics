@@ -1,10 +1,11 @@
 """Module for longitudinal medical imaging studies."""
 
+import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy
 import SimpleITK
@@ -317,6 +318,223 @@ class LongitudinalStudy:
             if miss:
                 missing[tp] = miss
         return missing
+
+    @staticmethod
+    def apply_per_modality_mappings(
+        ct_study: "LongitudinalStudy",
+        spect_study: "LongitudinalStudy",
+        ct_mask_mapping: Optional[Dict[str, str]] = None,
+        spect_mask_mapping: Optional[Dict[str, str]] = None,
+        manual_overrides: Optional[Dict[str, str]] = None,
+        validate_targets: bool = True,
+    ) -> Dict[str, Any]:
+        """Apply modality-specific mask mappings to CT and SPECT studies.
+
+        This helper automates the workflow:
+        1. Merge user-provided mappings with manual overrides.
+        2. Filter each mapping to keys actually present in each study.
+        3. Check for conflicts (multiple sources mapping to the same target within a study).
+        4. Apply renames in-place to both studies.
+        5. Return diagnostic info (applied mappings, absent keys, conflicts).
+
+        Parameters
+        ----------
+        ct_study : LongitudinalStudy
+            The CT longitudinal study (used for volume/morphology).
+        spect_study : LongitudinalStudy
+            The SPECT/NM longitudinal study (used for activity).
+        ct_mask_mapping : Optional[Dict[str, str]], optional
+            User-provided mapping {raw_name: canonical_name} for CT masks.
+            If None, proposes a mapping automatically from CT mask names.
+        spect_mask_mapping : Optional[Dict[str, str]], optional
+            User-provided mapping {raw_name: canonical_name} for SPECT masks.
+            If None, proposes a mapping automatically from SPECT mask names.
+        manual_overrides : Optional[Dict[str, str]], optional
+            Additional mappings to override both CT and SPECT proposals (e.g., lesion mappings).
+        validate_targets : bool, optional
+            If True, only apply renames where the destination is a valid mask name (default: True).
+
+        Returns
+        -------
+        Dict[str, Any]
+            Diagnostic dictionary with keys:
+            - 'ct_applied': Dict[str, str] - mappings applied to CT
+            - 'spect_applied': Dict[str, str] - mappings applied to SPECT
+            - 'ct_absent': List[str] - CT mapping keys not found in CT masks
+            - 'spect_absent': List[str] - SPECT mapping keys not found in SPECT masks
+            - 'ct_conflicts': Dict[str, List[str]] - CT conflicts (target: [sources])
+            - 'spect_conflicts': Dict[str, List[str]] - SPECT conflicts (target: [sources])
+
+        Example
+        -------
+        >>> ct_mapping = {
+        ...     "Kidney_L_m": "Kidney_Left",
+        ...     "Kidney_R_m": "Kidney_Right",
+        ...     "Liver": "Liver",
+        ... }
+        >>> spect_mapping = {
+        ...     "Kidney_L_a": "Kidney_Left",
+        ...     "Kidney_R_a": "Kidney_Right",
+        ...     "Liver": "Liver",
+        ... }
+        >>> result = LongitudinalStudy.apply_per_modality_mappings(
+        ...     ct_study=longCT,
+        ...     spect_study=longSPECT,
+        ...     ct_mask_mapping=ct_mapping,
+        ...     spect_mask_mapping=spect_mapping,
+        ... )
+        >>> print(result['ct_applied'])
+        """
+        manual = manual_overrides or {}
+
+        # Default to auto-proposal if no explicit mapping provided
+        if ct_mask_mapping is None:
+            ct_names = set()
+            for masks in ct_study.masks.values():
+                ct_names.update(masks.keys())
+            ct_mask_mapping = LongitudinalStudy.propose_mapping_from_names(ct_names)
+
+        if spect_mask_mapping is None:
+            spect_names = set()
+            for masks in spect_study.masks.values():
+                spect_names.update(masks.keys())
+            spect_mask_mapping = LongitudinalStudy.propose_mapping_from_names(
+                spect_names
+            )
+
+        # Merge manual overrides (take precedence)
+        mapping_ct = dict(ct_mask_mapping)
+        mapping_ct.update(manual)
+
+        mapping_spect = dict(spect_mask_mapping)
+        mapping_spect.update(manual)
+
+        # Gather which source keys actually exist in each study
+        def _keys_in_study(study: "LongitudinalStudy") -> set:
+            present = set()
+            for masks in study.masks.values():
+                present.update(masks.keys())
+            return present
+
+        ct_present_keys = _keys_in_study(ct_study)
+        spect_present_keys = _keys_in_study(spect_study)
+
+        # Filter mappings to present keys
+        filtered_ct = {k: v for k, v in mapping_ct.items() if k in ct_present_keys}
+        filtered_spect = {
+            k: v for k, v in mapping_spect.items() if k in spect_present_keys
+        }
+
+        # Track absent keys (provided but not present)
+        absent_ct = sorted([k for k in mapping_ct.keys() if k not in ct_present_keys])
+        absent_spect = sorted(
+            [k for k in mapping_spect.keys() if k not in spect_present_keys]
+        )
+
+        # Check for conflicts (multiple sources -> same target within a study)
+        def _check_conflicts(mapping: Dict[str, str]) -> Dict[str, List[str]]:
+            inv: Dict[str, List[str]] = {}
+            for src, dst in mapping.items():
+                inv.setdefault(dst, []).append(src)
+            return {dst: srcs for dst, srcs in inv.items() if len(srcs) > 1}
+
+        conflicts_ct = _check_conflicts(filtered_ct)
+        conflicts_spect = _check_conflicts(filtered_spect)
+
+        # Apply renames in-place
+        ct_study.rename_masks(filtered_ct, validate_targets=validate_targets)
+        spect_study.rename_masks(filtered_spect, validate_targets=validate_targets)
+
+        return {
+            "ct_applied": filtered_ct,
+            "spect_applied": filtered_spect,
+            "ct_absent": absent_ct,
+            "spect_absent": absent_spect,
+            "ct_conflicts": conflicts_ct,
+            "spect_conflicts": conflicts_spect,
+        }
+
+    @staticmethod
+    def load_mappings_from_json(
+        json_path: Union[str, Path],
+    ) -> Dict[str, Dict[str, str]]:
+        """Load CT and SPECT mask mappings from a JSON configuration file.
+
+        The JSON file should contain a dictionary with keys 'ct_mappings' and/or
+        'spect_mappings', each mapping to a dictionary of {raw_name: canonical_name}.
+
+        Parameters
+        ----------
+        json_path : Union[str, Path]
+            Path to the JSON configuration file.
+
+        Returns
+        -------
+        Dict[str, Dict[str, str]]
+            Dictionary with keys:
+            - 'ct_mappings': Dict[str, str] - CT mask name mappings
+            - 'spect_mappings': Dict[str, str] - SPECT mask name mappings
+
+        Raises
+        ------
+        FileNotFoundError
+            If the JSON file does not exist.
+        json.JSONDecodeError
+            If the JSON file is malformed.
+        KeyError
+            If the JSON file does not contain expected keys.
+
+        Example
+        -------
+        >>> mappings = LongitudinalStudy.load_mappings_from_json("roi_mappings.json")
+        >>> result = LongitudinalStudy.apply_per_modality_mappings(
+        ...     ct_study=longCT,
+        ...     spect_study=longSPECT,
+        ...     ct_mask_mapping=mappings['ct_mappings'],
+        ...     spect_mask_mapping=mappings['spect_mappings'],
+        ... )
+
+        Example JSON format
+        -------------------
+        {
+            "ct_mappings": {
+                "Kidney_L_m": "Kidney_Left",
+                "Kidney_R_m": "Kidney_Right",
+                "Liver": "Liver"
+            },
+            "spect_mappings": {
+                "Kidney_L_a": "Kidney_Left",
+                "Kidney_R_a": "Kidney_Right",
+                "Liver": "Liver"
+            }
+        }
+        """
+        path = Path(json_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Mapping config file not found: {json_path}")
+
+        with open(path, "r") as f:
+            config = json.load(f)
+
+        # Validate structure
+        if not isinstance(config, dict):
+            raise ValueError(
+                f"Expected JSON to contain a dictionary, got {type(config).__name__}"
+            )
+
+        result = {
+            "ct_mappings": config.get("ct_mappings", {}),
+            "spect_mappings": config.get("spect_mappings", {}),
+        }
+
+        # Validate that each mapping is a dict
+        for key in ["ct_mappings", "spect_mappings"]:
+            if not isinstance(result[key], dict):
+                raise ValueError(
+                    f"Expected '{key}' to be a dictionary, got {type(result[key]).__name__}"
+                )
+
+        return result
 
     def array_at(self, time_id: int) -> NDArray[Any]:
         """Access Array Data.

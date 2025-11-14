@@ -1,0 +1,49 @@
+{
+  "_comment": "Template ROI mapping configuration for PyTheranostics",
+  "_description": "Copy and customize this file for your project. CT mappings use '_m' suffix (morphology/mass), SPECT mappings use '_a' suffix (activity). Adjust source names to match your RTSTRUCT ROI naming conventions.",
+
+  "ct_mappings": {
+    "Liver": "Liver",
+    "Skeleton": "Skeleton",
+    "Kidney_L_m": "Kidney_Left",
+    "Kidney_R_m": "Kidney_Right",
+    "Spleen": "Spleen",
+    "Bladder": "Bladder",
+    "Parotid_L_m": "ParotidGland_Left",
+    "Parotid_R_m": "ParotidGland_Right",
+    "Submandibular_L_m": "SubmandibularGland_Left",
+    "Submandibular_R_m": "SubmandibularGland_Right",
+    "WBCT": "WholeBody",
+    "WB": "WholeBody",
+    "BoneMarrow": "BoneMarrow",
+    "RemainderOfBody": "RemainderOfBody"
+  },
+
+  "spect_mappings": {
+    "Liver": "Liver",
+    "Skeleton": "Skeleton",
+    "Kidney_L_a": "Kidney_Left",
+    "Kidney_R_a": "Kidney_Right",
+    "Spleen": "Spleen",
+    "Bladder": "Bladder",
+    "Parotid_L_a": "ParotidGland_Left",
+    "Parotid_R_a": "ParotidGland_Right",
+    "Submandibular_L_a": "SubmandibularGland_Left",
+    "Submandibular_R_a": "SubmandibularGland_Right",
+    "WBCT": "WholeBody",
+    "WB": "WholeBody"
+  },
+
+  "_usage_examples": {
+    "option1_in_notebook": "mappings = LongitudinalStudy.load_mappings_from_json('roi_mappings.json'); result = LongitudinalStudy.apply_per_modality_mappings(ct_study=longCT, spect_study=longSPECT, ct_mask_mapping=mappings['ct_mappings'], spect_mask_mapping=mappings['spect_mappings'])",
+    "option2_in_loader": "longCT, longSPECT, inj, used = tx.imaging_ds.create_studies_with_masks(storage_root=root, patient_id=pid, cycle_no=1, mapping_config='roi_mappings.json')",
+    "option3_inline_dict": "result = LongitudinalStudy.apply_per_modality_mappings(ct_study=longCT, spect_study=longSPECT, ct_mask_mapping={'Kidney_L_m': 'Kidney_Left'}, spect_mask_mapping={'Kidney_L_a': 'Kidney_Left'})"
+  },
+
+  "_lesion_example": {
+    "_comment": "For lesions, add entries like below. Use modality-agnostic names or add to both mappings.",
+    "Lesion1_CT": "Lesion_1",
+    "Lesion1_SPECT": "Lesion_1",
+    "Lesion2": "Lesion_2"
+  }
+}

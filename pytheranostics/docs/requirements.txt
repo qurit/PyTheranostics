@@ -1,7 +1,0 @@
-sphinx-autodoc-typehints
-sphinx_rtd_theme
-nbsphinx
-nbconvert
-pandoc
-sphinx-contributors
-sphinx-copybutton

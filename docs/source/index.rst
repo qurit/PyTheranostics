@@ -3,20 +3,30 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to PyTheranostics's documentation!
-=======================================
+PyTheranostics Documentation
+============================
 
 PyTheranostics is a comprehensive Python library for nuclear medicine image processing and dosimetry calculations. It provides a complete workflow from image processing to absorbed dose calculations in target organs.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Getting Started
 
-   installation
-   quickstart
-   modules
-   api
-   contributing
+   intro/overview
+   intro/installation
+   usage/basic_usage
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Tutorials
+
+   tutorials/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   API/modules
    changelog
 
 Features
@@ -31,7 +41,7 @@ Features
 * Visualization and plotting capabilities
 
 Installation
------------
+------------
 
 You can install PyTheranostics using pip:
 
@@ -46,7 +56,7 @@ For development installation:
    pip install -e ".[dev]"
 
 Quick Start
-----------
+-----------
 
 .. code-block:: python
 
@@ -76,11 +86,9 @@ This project is licensed under the terms of the MIT license. See the `LICENSE <h
 Acknowledgements
 ----------------
 
-We would like to thank the following contributors for their work on this project:
-
-..  contributors:: qurit/PyTheranostics
-   .. :avatars:
-   .. :exclude: dependabot[bot]
+We would like to thank everyone who has contributed to PyTheranostics. Visit the
+`GitHub contributors graph <https://github.com/qurit/PyTheranostics/graphs/contributors>`_
+for the up-to-date list of collaborators.
 
 .. footer::
 
