@@ -171,12 +171,19 @@ def extract_injection_from_first_tp_spect(
             weight_g = int(round(float(pw) * 1000.0))
         except Exception:
             pass
-
+    height_cm: Optional[int] = None
+    pw = getattr(ds, "PatientSize", None)  # cm
+    if pw is not None:
+        try:
+            height_cm = int(round(float(pw) * 100.0))
+        except Exception:
+            pass
     return {
         "InjectionDate": inj_date or "",
         "InjectionTime": inj_time or "",
         "InjectedActivity": injected_activity,  # Bq (int) or None
         "PatientWeight_g": weight_g,
+        "PatientHeight_cm": height_cm,
     }
 
 
