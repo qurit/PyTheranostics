@@ -23,6 +23,7 @@ def exponential_fit_lmfit(
     bounds: Optional[Dict[str, Tuple[float, float]]] = None,
     params_init: Optional[Dict[str, float]] = None,
     with_uptake: bool = False,
+    washout_ratio: Optional[int] = None,
 ) -> Tuple[lmfit.model.ModelResult, Callable]:
     """Fit data to a sum of exponentials with flexible parameter fixing using lmfit.
 
@@ -105,6 +106,8 @@ def exponential_fit_lmfit(
             will_have_expr = True
         if num_exponentials == 3 and with_uptake and amp_name == "C1":
             will_have_expr = True
+        if num_exponentials == 2 and washout_ratio and amp_name == "B2":
+            will_have_expr = True
 
         if amp_name in fixed_params:
             params.add(amp_name, value=fixed_params[amp_name], vary=False)
@@ -158,6 +161,18 @@ def exponential_fit_lmfit(
                 "Parameters 'A1', 'B1', and 'C1' must be present to apply the constraint 'C1 = -(A1 + B1)'."
             )
 
+    if num_exponentials == 2 and washout_ratio is not None:
+        if "B2" in params and "A2" in params:
+            print(
+                f"Applying constant ratio between decay constants of washout phases: B2 = {washout_ratio} * A2"
+            )
+            params["B2"].set(expr=f"{washout_ratio} * A2")
+        else:
+            raise ValueError(
+                "Parameters 'A2' and 'B2' must be present to apply the constraint 'B2 = washout_ratio * A2'."
+            )
+
+    print(y_data, params)
     # Perform the fit
     result = model.fit(
         y_data, params, x=x_data, weights=None if sigma is None else 1.0 / sigma
