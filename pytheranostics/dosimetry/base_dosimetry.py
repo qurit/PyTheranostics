@@ -151,6 +151,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             "with_uptake": False,
             "fit_order": 1,
             "bounds": None,
+            "washout_ratio": None,
         }
 
         for key, value in defaults.items():
@@ -232,10 +233,19 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         if "Organ" in self.config["Level"]:
             if "WholeBody" not in self.config["VOIs"]:
-                raise ValueError("Missing 'WholeBody' region parameters.")
+                if "No" in self.config["OrganLevel"]["AdditionalOptions"]["WholeBody"]:
+                    pass
+                else:
+                    raise ValueError("Missing 'WholeBody' region parameters.")
 
             if "RemainderOfBody" not in self.config["VOIs"]:
-                raise ValueError("Missing 'RemainderOfBody' region parameters.")
+                if (
+                    "No"
+                    in self.config["OrganLevel"]["AdditionalOptions"]["RemainderOfBody"]
+                ):
+                    pass
+                else:
+                    raise ValueError("Missing 'RemainderOfBody' region parameters.")
 
         return None
 
@@ -469,6 +479,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 bounds=self.config["VOIs"][region]["bounds"],
                 params_init=self.config["VOIs"][region]["param_init"],
                 with_uptake=self.config["VOIs"][region]["with_uptake"],
+                washout_ratio=self.config["VOIs"][region]["washout_ratio"],
             )
 
             return fit_results
@@ -852,9 +863,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             cycle["VOIs"][organ]["fit_params"] = list(
                 self.results.loc[organ, "Fit_params"]
             )
+            cycle["VOIs"][organ]["washout_ratio"] = self.config["VOIs"][organ][
+                "washout_ratio"
+            ]
             cycle["VOIs"][organ]["fit_params_uncertainty"] = "NA"
-            cycle["VOIs"][organ]["R_2"] = self.results.loc[organ, "R_squared_AIC"][0]
-            cycle["VOIs"][organ]["AIC"] = self.results.loc[organ, "R_squared_AIC"][1]
+            cycle["VOIs"][organ]["R_2"] = (
+                "NA"
+                if pandas.isna(self.results.loc[organ, "R_squared_AIC"][0])
+                else self.results.loc[organ, "R_squared_AIC"][0]
+            )
+            cycle["VOIs"][organ]["AIC"] = (
+                "NA"
+                if pandas.isna(self.results.loc[organ, "R_squared_AIC"][1])
+                else self.results.loc[organ, "R_squared_AIC"][1]
+            )
             cycle["VOIs"][organ]["TIA_MBqh"] = self.results.loc[organ, "TIA_MBq_h"]
             cycle["VOIs"][organ]["TIA_MBqh_uncertainty"] = "NA"
             cycle["VOIs"][organ]["TIA_h"] = self.results.loc[organ, "TIA_h"]
