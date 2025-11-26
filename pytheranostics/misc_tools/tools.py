@@ -199,9 +199,9 @@ def extract_exponential_params_from_json(
         and all the parameters of the fit.
     """
     with_uptake = False
-
     # Determine order:
-    parameters = json_data[cycle][0]["rois"][region]["fit_params"]
+    parameters = json_data[cycle][0]["VOIs"][region]["fit_params"]
+    washout_ratio = json_data[cycle][0]["VOIs"][region]["washout_ratio"]
 
     # Handle Legacy:
     if len(parameters) in [3, 5]:
@@ -214,7 +214,6 @@ def extract_exponential_params_from_json(
 
     fixed_parameters: Dict[str, float] = {}
     all_parameters: Dict[str, float] = {}
-
     for order in range(fit_order):
         fixed_parameters[f"{param_name_base[order]}2"] = parameters[
             exponential_idxs[order]
@@ -226,14 +225,16 @@ def extract_exponential_params_from_json(
         all_parameters[f"{param_name_base[order]}2"] = parameters[
             exponential_idxs[order]
         ]
-
+    if washout_ratio is not None:
+        # Fix A1 ONLY
+        if "B1" in all_parameters:
+            fixed_parameters["B1"] = all_parameters["B1"]
     if fit_order == 2 and parameters[0] == -parameters[2]:
         with_uptake = True
 
     if fit_order == 3 and parameters[4] == -(parameters[0] + parameters[2]):
         with_uptake = True
-
-    return fixed_parameters, with_uptake, all_parameters
+    return fixed_parameters, with_uptake, all_parameters, washout_ratio
 
 
 def extract_exponential_params_from_json_legacy(
@@ -266,7 +267,7 @@ def extract_exponential_params_from_json_legacy(
         When the parameter configuration is incompatible with new format.
     """
     # Read Parameters:
-    parameters = json_data[cycle][0]["rois"][region]["fit_params"]
+    parameters = json_data[cycle][0]["VOIs"][region]["fit_params"]
 
     if len(parameters) not in [3, 5]:
         raise AssertionError(
@@ -321,7 +322,7 @@ def initialize_biokinetics_from_prior_cycle(
     dict
         Updated configuration dictionary.
     """
-    for roi, roi_info in config["rois"].items():
+    for roi, roi_info in config["VOIs"].items():
 
         if (
             "biokinectics_from_previous_cycle" in roi_info
@@ -329,15 +330,18 @@ def initialize_biokinetics_from_prior_cycle(
         ):
 
             # Get previous cycle parameters:
-            fixed_param, with_uptake, all_params = extract_exponential_params_from_json(
-                json_data=prior_treatment_data, cycle=cycle, region=roi
+            fixed_param, with_uptake, all_params, washout_ratio = (
+                extract_exponential_params_from_json(
+                    json_data=prior_treatment_data, cycle=cycle, region=roi
+                )
             )
 
-            config["rois"][roi] = {
+            config["VOIs"][roi] = {
                 "fixed_parameters": fixed_param,
                 "fit_order": len(all_params) // 2,
                 "param_init": all_params,
                 "with_uptake": with_uptake,
+                "washout_ratio": washout_ratio,
             }
 
             print(
@@ -391,7 +395,7 @@ def plot_MIP(SPECT=None, vmax=300000, figsize=(10, 5), ax=None):
     return fig, ax
 
 
-def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000):
+def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000, label=None):
     """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
 
     Parameters
@@ -412,14 +416,20 @@ def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000):
     if masks is not None:
         for organ, mask in masks.items():
             organ_lower = organ.lower()
-            if "kidney" in organ_lower:
-                color = "lime"
-            elif "gland" in organ_lower:
-                color = "red"
-            elif "lesion" in organ_lower:
-                color = "m"
-            else:
+            print(organ_lower)
+            if "peak" in organ_lower:
                 continue
+            else:
+                if "kidney" in organ_lower:
+                    color = "lime"
+                elif "parotid" in organ_lower:
+                    color = "red"
+                elif "submandibular" in organ_lower:
+                    color = "red"
+                elif "lesion" in organ_lower:
+                    color = "m"
+                else:
+                    continue
 
             mip_mask = mask.max(axis=0)
             if mip_mask.shape != spect_mip.shape:
@@ -432,6 +442,26 @@ def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000):
                 linewidths=1.5,
                 alpha=0.5,
             )
+
+            # --- Add label at mask center ---
+            if label is True:
+                ys, xs = numpy.where(mip_mask > 0)
+
+                if len(xs) > 0:
+                    # Corrected for transpose in contour
+                    x_center = ys.mean() - 0.2 * ys.mean()  # was xs
+                    y_center = xs.mean()  # was ys
+
+                    plt.text(
+                        x_center,
+                        y_center,
+                        organ,
+                        color=color,
+                        fontsize=8,
+                        ha="center",
+                        va="center",
+                        alpha=0.7,
+                    )
 
     plt.xlim(30, 100)
     plt.ylim(0, 234)
