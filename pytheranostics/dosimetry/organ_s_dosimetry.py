@@ -54,7 +54,7 @@ class OrganSDosimetry(BaseDosimetry):
 
         return None
 
-    @staticmethod
+    # @staticmethod
     def _load_human_mass_target_organs_table(self) -> pandas.DataFrame:
         """Load the reference human phantom masses."""
         with resource_path(
