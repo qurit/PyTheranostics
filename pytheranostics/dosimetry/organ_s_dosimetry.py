@@ -180,7 +180,9 @@ class OrganSDosimetry(BaseDosimetry):
             ].apply(lambda x: numpy.mean(x))
 
             # Combine Kidneys.
-            kidneys = ["Kidney_Left", "Kidney_Right"]
+            kidneys = [
+                s for s in self.results_fitting.index if s.startswith("Kidney_")
+            ]  # e.g., Kidney_Left, Kidney_Right, or one kidney only
             self.results_fitting.loc["Kidneys"] = self.results_fitting.loc[
                 kidneys
             ].sum()
