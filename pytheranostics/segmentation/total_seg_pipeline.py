@@ -39,10 +39,25 @@ def _discover_ct_series(root_dir: str | Path) -> List[Path]:
     """
     root = Path(root_dir)
     candidates: List[Path] = []
+
+    # Include the root itself if it looks like a CT folder
+    root_name = root.name.lower()
+    if (
+        root.is_dir()
+        and "ct" in root_name
+        and "rtst" not in root_name
+        and "nm" not in root_name
+    ):
+        candidates.append(root)
+
     for p in root.rglob("*"):
         if p.is_dir():
-            name = p.name
-            if "CT" in name and "RTst" not in name and "NM" not in name:
+            name_lower = p.name.lower()
+            if (
+                "ct" in name_lower
+                and "rtst" not in name_lower
+                and "nm" not in name_lower
+            ):
                 candidates.append(p)
     return candidates
 

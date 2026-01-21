@@ -40,6 +40,11 @@ class SegmentationProcessor:
         if match:
             timepoint = match.group(1).replace(".", "p")
             return timepoint
+
+        # Fallback: use parent folder name (e.g., scan1/ct -> timepoint 'scan1')
+        parent_name = folder_path.parent.name
+        if parent_name:
+            return parent_name
         return "unknown"
 
     def process_folder(self, input_folder: str) -> str:
