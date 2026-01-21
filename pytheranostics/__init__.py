@@ -28,6 +28,7 @@ _SUBPACKAGES = {
     "shared": "pytheranostics.shared",
     "plots": "pytheranostics.plots",
     "qc": "pytheranostics.qc",
+    "data_fetchers": "pytheranostics.data_fetchers",
     "dicomtools": "pytheranostics.dicomtools",
     "fits": "pytheranostics.fits",
     "calibrations": "pytheranostics.calibrations",
