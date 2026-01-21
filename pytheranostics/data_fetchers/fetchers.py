@@ -246,6 +246,7 @@ def fetch_snmmi_dosimetry_challenge(
 
         print(f"\nData ready at: {patient_dir.parent}")
         print("\nDataset citation:")
+        print(". SNMMI Lu-177 Dosimetry Challenge Dataset")
         print("  DOI: https://doi.org/10.7302/864r-tb45")
         print("  Repository: University of Michigan Deep Blue")
     else:
