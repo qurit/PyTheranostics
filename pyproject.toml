@@ -42,6 +42,7 @@ totalsegmentator = [
     "torch",
     "torchvision",
     "TotalSegmentator",
+    "nibabel",
 ]
 test = [
     "pytest>=7.0",
