@@ -41,9 +41,22 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
 
    This script will:
    - Verify you're in a virtual environment
-   - Install the package in editable mode
-   - Install all development dependencies (pytest, black, flake8, mypy, etc.)
+   - Install the package in editable mode with all development dependencies
+   - Install dependencies for segmentation tools (TotalSegmentator, torch, torchvision)
+   - Install testing, linting, and type checking tools (pytest, black, flake8, mypy, etc.)
    - Set up pre-commit hooks for automated code quality checks
+
+### Segmentation Support
+
+Developers can test segmentation features using TotalSegmentator. The development setup automatically includes the required dependencies (torch, torchvision, TotalSegmentator), so you can immediately work with and test segmentation tools:
+
+```python
+from pytheranostics.segmentation import total_seg_pipeline
+
+# You can now use TotalSegmentator without additional installation
+```
+
+If you prefer a lightweight installation without segmentation support, manually install the package without the `dev` extras (though this is not recommended for development).
 
 ### Pre-commit Hooks
 

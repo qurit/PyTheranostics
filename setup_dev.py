@@ -48,8 +48,9 @@ def main():
         [sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True
     )
 
-    # Install package in editable mode with dev dependencies
+    # Install package in editable mode with dev dependencies (includes segmentation tools)
     print("\n🔧 Installing PyTheranostics in editable mode with dev dependencies...")
+    print("   This includes segmentation tools (TotalSegmentator, torch, torchvision)")
     subprocess.run([sys.executable, "-m", "pip", "install", "-e", ".[dev]"], check=True)
 
     # Install and setup pre-commit hooks
