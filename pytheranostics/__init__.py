@@ -12,7 +12,8 @@ from pytheranostics.plots.plots import ewin_montage, plot_tac_residuals  # Visua
 from pytheranostics.qc.dosecal_qc import DosecalQC  # Core
 from pytheranostics.qc.planar_qc import PlanarQC  # Core
 from pytheranostics.qc.spect_qc import SPECTQC  # Core
-from pytheranostics.segmentation.tools import rtst_to_mask  # Image processing
+
+# Note: segmentation tools require optional dependencies - import from pytheranostics.segmentation
 from pytheranostics.shared.corrections import tew_scatt
 from pytheranostics.shared.evaluation_metrics import perc_diff
 from pytheranostics.shared.radioactive_decay import decay_act, get_activity_at_injection
