@@ -38,6 +38,11 @@ dependencies = [
 "Bug Tracker" = "https://github.com/qurit/PyTheranostics/issues"
 
 [project.optional-dependencies]
+totalsegmentator = [
+    "torch",
+    "torchvision",
+    "TotalSegmentator",
+]
 test = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -75,7 +80,10 @@ dev = [
     "pandoc>=2.4",
     "ipython>=8.0",
     "pydocstyle>=6.0",
-    "flake8-docstrings>=1.7"
+    "flake8-docstrings>=1.7",
+    "torch",
+    "torchvision",
+    "TotalSegmentator"
 ]
 
 [tool.hatch.build]
