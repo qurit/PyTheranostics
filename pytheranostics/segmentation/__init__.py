@@ -10,15 +10,13 @@ from .rtst_utilities import (
     get_rtstruct_roi_names,
     print_rtstruct_info,
 )
-from .total_seg_pipeline import (
+from .total_segmentator import (
     convert_masks_to_rtstruct,
     run_full_pipeline,
     run_segmentation_pipeline,
 )
-from .total_seg_segmentation import SegmentationProcessor
 
 __all__ = [
-    "SegmentationProcessor",
     "RTStructConverter",
     "get_rtstruct_roi_names",
     "print_rtstruct_info",
