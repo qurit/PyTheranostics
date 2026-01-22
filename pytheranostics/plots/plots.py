@@ -149,48 +149,6 @@ def plot_tac_residuals(
     return None
 
 
-def plot_MIP(SPECT=None, vmax=300000, figsize=(10, 5), ax=None):
-    """Plot Maximum Intensity Projection (MIP) of SPECT data.
-
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes, optional
-        Axes object to plot on. If None, a new figure and axes will be created.
-    SPECT : numpy.ndarray
-        SPECT data array.
-    vmax : int, optional
-        Maximum value for display, by default 300000.
-    figsize : tuple, optional
-        Figure size (width, height) in inches, by default (10, 5).
-        Only used if ax is None.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Figure object.
-    ax : matplotlib.axes.Axes
-        Axes object with the plot.
-    """
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.get_figure()
-
-    plt.sca(ax)
-    plt.imshow(
-        SPECT.max(axis=0).T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0
-    )
-    plt.xlim(30, 100)
-    plt.ylim(0, 234)
-
-    plt.axis("off")
-
-    plt.xticks([])
-    plt.yticks([])
-
-    return fig, ax
-
-
 def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000, label=None):
     """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
 
