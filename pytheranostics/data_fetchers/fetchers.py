@@ -8,29 +8,29 @@ from typing import Optional
 from urllib.request import Request, urlopen
 
 
-def get_data_home(data_home: Optional[str] = None) -> Path:
+def get_data_dir(data_dir: Optional[str] = None) -> Path:
     """Return the path to the pytheranostics example data directory.
 
     By default, data is stored in the user's cache directory.
 
     Parameters
     ----------
-    data_home : str, optional
+    data_dir : str, optional
         The path to the pytheranostics example data directory. If None, the default
         path is used: `~/.pytheranostics_example_data`.
 
     Returns
     -------
     Path
-        The path to the data home directory.
+        The path to the data directory.
     """
-    if data_home is None:
-        data_home = Path.home() / ".pytheranostics_example_data"
+    if data_dir is None:
+        data_dir = Path.home() / ".pytheranostics_example_data"
     else:
-        data_home = Path(data_home)
+        data_dir = Path(data_dir)
 
-    data_home.mkdir(parents=True, exist_ok=True)
-    return data_home
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
 
 
 def _verify_checksum(filepath: Path, expected_md5: str) -> bool:
@@ -55,12 +55,12 @@ def _verify_checksum(filepath: Path, expected_md5: str) -> bool:
     return md5_hash.hexdigest() == expected_md5
 
 
-def clear_data_cache(data_home: Optional[str] = None):
+def clear_data_cache(data_dir: Optional[str] = None):
     """Remove all cached example data.
 
     Parameters
     ----------
-    data_home : str, optional
+    data_dir : str, optional
         The path to the pytheranostics data directory. If None, uses default.
 
     Examples
@@ -68,20 +68,20 @@ def clear_data_cache(data_home: Optional[str] = None):
     >>> from pytheranostics.data import clear_data_cache
     >>> clear_data_cache()
     """
-    data_home = get_data_home(data_home)
-    if data_home.exists():
-        shutil.rmtree(data_home)
-        print(f"Cleared data cache at: {data_home}")
+    data_dir = get_data_dir(data_dir)
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
+        print(f"Cleared data cache at: {data_dir}")
     else:
         print("No cached data to clear")
 
 
-def list_cached_data(data_home: Optional[str] = None):
+def list_cached_data(data_dir: Optional[str] = None):
     """List all cached example datasets.
 
     Parameters
     ----------
-    data_home : str, optional
+    data_dir : str, optional
         The path to the pytheranostics data directory. If None, uses default.
 
     Examples
@@ -89,13 +89,13 @@ def list_cached_data(data_home: Optional[str] = None):
     >>> from pytheranostics.data import list_cached_data
     >>> list_cached_data()
     """
-    data_home = get_data_home(data_home)
-    if not data_home.exists():
+    data_dir = get_data_dir(data_dir)
+    if not data_dir.exists():
         print("No cached data found")
         return
 
-    print(f"Cached data in {data_home}:")
-    for item in data_home.iterdir():
+    print(f"Cached data in {data_dir}:")
+    for item in data_dir.iterdir():
         if item.is_dir():
             size = sum(f.stat().st_size for f in item.rglob("*") if f.is_file())
             size_mb = size / (1024 * 1024)
@@ -183,7 +183,7 @@ def fetch_snmmi_dosimetry_challenge(
     Dataset DOI: https://doi.org/10.7302/864r-tb45
     Repository: https://deepblue.lib.umich.edu/
     """
-    home = get_data_home(str(data_home) if data_home else None)
+    home = get_data_dir(str(data_home) if data_home else None)
 
     dataset_base = "snmmi_dose_challenge"
     patient_dir = home / dataset_base / "Patient_004"
@@ -246,7 +246,8 @@ def fetch_snmmi_dosimetry_challenge(
 
         print(f"\nData ready at: {patient_dir.parent}")
         print("\nDataset citation:")
-        print(". SNMMI Lu-177 Dosimetry Challenge Dataset")
+        print("  SNMMI Lu-177 Dosimetry Challenge Dataset")
+        print("  Creators: Dewaraja, Yuni K and Van, Benjamin J")
         print("  DOI: https://doi.org/10.7302/864r-tb45")
         print("  Repository: University of Michigan Deep Blue")
     else:
