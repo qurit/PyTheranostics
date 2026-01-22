@@ -9,11 +9,12 @@ from pytheranostics.calibrations.gamma_camera import GammaCamera  # Calibration
 from pytheranostics.dicomtools.dicomtools import DicomModify  # DICOM handling
 from pytheranostics.fits.fits import biexp_fun, monoexp_fun, triexp_fun  # Analysis
 from pytheranostics.plots.plots import ewin_montage, plot_tac_residuals  # Visualization
+
+# Note: segmentation tools require optional dependencies - import from pytheranostics.segmentation
+from pytheranostics.project import init_project, list_templates
 from pytheranostics.qc.dosecal_qc import DosecalQC  # Core
 from pytheranostics.qc.planar_qc import PlanarQC  # Core
 from pytheranostics.qc.spect_qc import SPECTQC  # Core
-
-# Note: segmentation tools require optional dependencies - import from pytheranostics.segmentation
 from pytheranostics.shared.corrections import tew_scatt
 from pytheranostics.shared.evaluation_metrics import perc_diff
 from pytheranostics.shared.radioactive_decay import decay_act, get_activity_at_injection
@@ -32,6 +33,7 @@ _SUBPACKAGES = {
     "dicomtools": "pytheranostics.dicomtools",
     "fits": "pytheranostics.fits",
     "calibrations": "pytheranostics.calibrations",
+    "project": "pytheranostics.project",
 }
 
 
@@ -72,6 +74,8 @@ __all__ = [
     "biexp_fun",
     "triexp_fun",
     "DicomModify",
+    "init_project",
+    "list_templates",
     # Expose subpackage names at the package level for discoverability
     "imaging_ds",
     "imaging_tools",
@@ -85,6 +89,7 @@ __all__ = [
     "dicomtools",
     "fits",
     "calibrations",
+    "project",
     # Legacy aliases
     "MiscTools",
     "ImagingTools",
