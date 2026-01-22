@@ -115,7 +115,7 @@ def _sanitize_id(text: str) -> str:
     ).strip("_")
 
 
-def run_segmentation_pipeline(
+def totalseg_segment(
     input_folders: Optional[List[str]] = None,
     base_output_dir: str | Path = ".",
     *,
@@ -124,10 +124,10 @@ def run_segmentation_pipeline(
     parallel: bool = False,
     max_workers: int = 2,
 ) -> Dict[str, Dict[str, Path]]:
-    """Run CT segmentation with TotalSegmentator.
+    """Run TotalSegmentator segmentation (steps 1-2 only).
 
-    This performs steps 1-2: discovery and segmentation. The output masks can then
-    be converted to RT-STRUCT multiple times with different configurations.
+    Discovers CT series and runs TotalSegmentator. Outputs can be reused for
+    multiple RT-STRUCT conversions with different configs.
 
     Parameters
     ----------
@@ -332,7 +332,7 @@ def run_full_pipeline(
     """Run the complete workflow (segmentation + RT-STRUCT conversion).
 
     Convenience function that runs both segmentation and RT-STRUCT conversion.
-    For more control, use run_segmentation_pipeline() and convert_masks_to_rtstruct()
+    For more control, use totalseg_segment() and convert_masks_to_rtstruct()
     separately.
 
     Parameters
@@ -360,7 +360,7 @@ def run_full_pipeline(
         Mapping {patient_id -> {timepoint -> rtstruct_path}}.
     """
     # Step 1-2: Run segmentation
-    result = run_segmentation_pipeline(
+    result = totalseg_segment(
         input_folders=input_folders,
         base_output_dir=base_output_dir,
         root_dir=root_dir,

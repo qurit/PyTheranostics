@@ -51,7 +51,7 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
 Developers can test segmentation features using TotalSegmentator. The development setup automatically includes the required dependencies (torch, torchvision, TotalSegmentator), so you can immediately work with and test segmentation tools:
 
 ```python
-from pytheranostics.segmentation import total_seg_pipeline
+from pytheranostics.segmentation import run_full_pipeline
 
 # You can now use TotalSegmentator without additional installation
 ```
