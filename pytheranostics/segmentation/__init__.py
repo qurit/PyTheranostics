@@ -13,7 +13,7 @@ from .rtst_utilities import (
 from .total_segmentator import (
     convert_masks_to_rtstruct,
     run_full_pipeline,
-    run_segmentation_pipeline,
+    totalseg_segment,
 )
 
 __all__ = [
@@ -23,6 +23,6 @@ __all__ = [
     "export_rtstruct_rois_to_csv",
     "export_multiple_rtstructs_to_csv",
     "run_full_pipeline",
-    "run_segmentation_pipeline",
+    "totalseg_segment",
     "convert_masks_to_rtstruct",
 ]
