@@ -213,6 +213,14 @@ def run_full_pipeline(
 
     # 3) Convert masks to RT-STRUCT per patient/timepoint
     patient_map: Dict[str, Dict[str, Path]] = {}
+
+    # Check for config file in current working directory
+    config_path = Path.cwd() / "total_seg_config.json"
+    use_config = config_path.exists()
+
+    if use_config:
+        print(f"Found config at: {config_path}")
+
     for ct_path, patient_id, tp, out_dir in tasks:
         if not out_dir.exists():
             print(f"⚠️  Skipping RT-STRUCT for {patient_id}/{tp}: {out_dir} not found")
@@ -222,7 +230,16 @@ def run_full_pipeline(
         out_file = rt_out_dir / f"rtstruct_{tp}.dcm"
         print(f"RT-STRUCT: patient={patient_id} timepoint={tp} -> {out_file}")
         converter = RTStructConverter(ct_dicom_folder=str(ct_path))
-        converter.add_masks_from_folder(str(out_dir), permute_axes=True, flip_x=True)
+
+        if use_config:
+            converter.add_masks_from_folder_with_config(
+                str(out_dir), str(config_path), permute_axes=True, flip_x=True
+            )
+        else:
+            converter.add_masks_from_folder(
+                str(out_dir), permute_axes=True, flip_x=True
+            )
+
         converter.save(str(out_file))
         patient_map.setdefault(patient_id, {})[tp] = out_file
 
