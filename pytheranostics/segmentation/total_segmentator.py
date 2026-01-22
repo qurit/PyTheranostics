@@ -9,7 +9,33 @@ from typing import Dict, List, Optional, Tuple
 import pydicom
 
 from .rtst_utilities import RTStructConverter, export_multiple_rtstructs_to_csv
-from .total_seg_segmentation import SegmentationProcessor
+
+
+def _extract_timepoint(folder_path: Path) -> str:
+    """Extract timepoint from folder name using regex.
+
+    Parameters
+    ----------
+    folder_path : Path
+        Path to the input folder.
+
+    Returns
+    -------
+    str
+        Timepoint string (e.g., '0p5h', '6h', '24h', or parent folder name).
+    """
+    import re
+
+    match = re.search(r"CT\.(\d+(?:\.\d+)?h)", folder_path.name)
+    if match:
+        timepoint = match.group(1).replace(".", "p")
+        return timepoint
+
+    # Fallback: use parent folder name (e.g., scan1/ct -> timepoint 'scan1')
+    parent_name = folder_path.parent.name
+    if parent_name:
+        return parent_name
+    return "unknown"
 
 
 def _seg_one_worker(args: Tuple[str, str, str, str, str]):
@@ -167,11 +193,10 @@ def run_segmentation_pipeline(
         input_paths = [Path(p) for p in input_folders]
 
     # 1) Prepare segmentation tasks
-    sp = SegmentationProcessor(str(base_output_dir), device=resolved_device)
     tasks: List[Tuple[Path, str, str, Path]] = []
 
     for ct_path in input_paths:
-        tp = sp.extract_timepoint(ct_path)
+        tp = _extract_timepoint(ct_path)
         if tp == "unknown":
             continue
         patient_id = _read_patient_id_from_series(ct_path) or _sanitize_id(
