@@ -3,7 +3,6 @@
 from datetime import datetime
 from typing import Dict, Tuple
 
-import matplotlib.pyplot as plt
 import numpy
 from scipy.ndimage import median_filter
 
