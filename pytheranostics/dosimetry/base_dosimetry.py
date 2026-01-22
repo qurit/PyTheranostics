@@ -123,9 +123,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         # DataFrame storing results
         self.results = self.initialize()
-        self.results_lesions = pandas.DataFrame()
-        self.results_salivaryglands = pandas.DataFrame()
-        self.df_ad = pandas.DataFrame()
+        self.results_dosimetry_lesions = pandas.DataFrame()
+        self.results_dosimetry_salivaryglands = pandas.DataFrame()
+        self.results_dosimetry_organs = pandas.DataFrame()
 
         # Sanity Checks:
         self.sanity_checks(metric="Volume_CT_mL")
@@ -151,12 +151,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             "with_uptake": False,
             "fit_order": 1,
             "bounds": None,
+            "washout_ratio": None,
         }
 
         for key, value in defaults.items():
             for region, _ in self.results.iterrows():
-                if key not in self.config["rois"][region]:
-                    self.config["rois"][region][key] = value
+                if key not in self.config["VOIs"][region]:
+                    self.config["VOIs"][region][key] = value
                     print(
                         f"For {region}, the parameter '{key}' was not defined by the user, set to {value}."
                     )
@@ -165,7 +166,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         """Extract masks and correct overlaps between regions."""
         # Inform the user if some masks are unused and therefore excluded.
         for roi_name in self.nm_data.masks[0]:
-            if roi_name not in self.config["rois"] and roi_name != "BoneMarrow":
+            if roi_name not in self.config["VOIs"] and roi_name != "BoneMarrow":
                 print(
                     f"Although mask for {roi_name} is present, we are ignoring it because this region was not included in the"
                     " configuration input file.\n"
@@ -176,7 +177,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id: extract_masks(
                 time_id=time_id,
                 mask_dataset=self.nm_data.masks,
-                requested_rois=list(self.config["rois"].keys()),
+                requested_rois=list(self.config["VOIs"].keys()),
             )
             for time_id in self.nm_data.masks.keys()
         }
@@ -185,13 +186,13 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id: extract_masks(
                 time_id=time_id,
                 mask_dataset=self.ct_data.masks,
-                requested_rois=list(self.config["rois"].keys()),
+                requested_rois=list(self.config["VOIs"].keys()),
             )
             for time_id in self.ct_data.masks.keys()
         }
 
         # Check availability of requested rois in existing masks
-        for roi_name in self.config["rois"]:
+        for roi_name in self.config["VOIs"]:
             if roi_name not in self.nm_data.masks[0] and roi_name != "BoneMarrow":
                 raise AssertionError(f"The following mask was NOT found: {roi_name}\n")
 
@@ -231,11 +232,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.config["ReferenceTimePoint"] = 0
 
         if "Organ" in self.config["Level"]:
-            if "WholeBody" not in self.config["rois"]:
-                raise ValueError("Missing 'WholeBody' region parameters.")
+            if "WholeBody" not in self.config["VOIs"]:
+                if "No" in self.config["OrganLevel"]["AdditionalOptions"]["WholeBody"]:
+                    pass
+                else:
+                    raise ValueError("Missing 'WholeBody' region parameters.")
 
-            if "RemainderOfBody" not in self.config["rois"]:
-                raise ValueError("Missing 'RemainderOfBody' region parameters.")
+            if "RemainderOfBody" not in self.config["VOIs"]:
+                if (
+                    "No"
+                    in self.config["OrganLevel"]["AdditionalOptions"]["RemainderOfBody"]
+                ):
+                    pass
+                else:
+                    raise ValueError("Missing 'RemainderOfBody' region parameters.")
 
         return None
 
@@ -244,7 +254,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         tmp_results: Dict[str, List[float]] = {
             roi_name: []
             for roi_name in self.nm_data.masks[0].keys()
-            if roi_name in self.config["rois"]
+            if roi_name in self.config["VOIs"]
         }
 
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq", "Density_HU"]
@@ -294,7 +304,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     ) -> Dict[str, List[float]]:
         """Initialize activity and times for Bone-Marrow blood-based measurements."""
         if (
-            "BoneMarrow" in self.config["rois"]
+            "BoneMarrow" in self.config["VOIs"]
             and self.clinical_data is not None
             and "BoneMarrow" not in self.nm_data.masks[0]
         ):
@@ -387,8 +397,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
     def compute_tia(self) -> None:
         """Compute Time-Integrated Activity over each source-organ."""
-        # decay_constant = math.log(2) / (self.radionuclide["half_life"])  # 1/h  # TODO: Check how to incorporate into bounds? (flake8)
-
         if self.radionuclide["half_life_units"] != "hours":
             raise AssertionError(
                 "Radionuclide Half-Life in Database should be in hours."
@@ -403,7 +411,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         }
 
         for region, region_data in self.results.iterrows():
-
             fit_results = self.smart_fit_selection(
                 region_data=region_data, region=region
             )
@@ -443,7 +450,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             tmp_tia_data["Lambda_eff"].append(
                 [
                     fit_params[exp_params[i]]
-                    for i in range(self.config["rois"][region]["fit_order"])
+                    for i in range(self.config["VOIs"][region]["fit_order"])
                 ]
             )
 
@@ -460,33 +467,19 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
     def smart_fit_selection(
         self, region_data: pandas.Series, region: str
     ) -> lmfit.model.ModelResult:
-        """Select the best fit based on Akaike Information Criterion.
-
-        If enabled in self.config, iterates through different valid fits orders and select best fit based on Akaike Information Criterion.
-        If a fit order is specified by the user, then the method will just perform fit following user's selected order and configuration.
-
-        Parameters
-        ----------
-        region_data : pandas.Series
-                Series containing Time and Activity.
-        region : str
-                Region of Interest
-
-        Returns
-        -------
-        lmfit.model.ModelResult
-                The best fit model based on Akaike Information Criterion.
-        """
+        """Select the best fit based on Akaike Information Criterion."""
         # If fit_order is defined by user:
-        if self.config["rois"][region]["fit_order"] is not None:
+        if self.config["VOIs"][region]["fit_order"] is not None:
+            print(region)
             fit_results, _ = exponential_fit_lmfit(
                 x_data=numpy.array(region_data["Time_hr"]),
                 y_data=numpy.array(region_data["Activity_MBq"]),
-                fixed_params=self.config["rois"][region]["fixed_parameters"],
-                num_exponentials=self.config["rois"][region]["fit_order"],
-                bounds=self.config["rois"][region]["bounds"],
-                params_init=self.config["rois"][region]["param_init"],
-                with_uptake=self.config["rois"][region]["with_uptake"],
+                fixed_params=self.config["VOIs"][region]["fixed_parameters"],
+                num_exponentials=self.config["VOIs"][region]["fit_order"],
+                bounds=self.config["VOIs"][region]["bounds"],
+                params_init=self.config["VOIs"][region]["param_init"],
+                with_uptake=self.config["VOIs"][region]["with_uptake"],
+                washout_ratio=self.config["VOIs"][region]["washout_ratio"],
             )
 
             return fit_results
@@ -515,7 +508,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     y_data=numpy.array(region_data["Activity_MBq"]),
                     fixed_params=None,
                     num_exponentials=order,
-                    bounds=self.config["rois"][region]["bounds"],
+                    bounds=self.config["VOIs"][region]["bounds"],
                     params_init={"A1": activity_init},
                     with_uptake=with_uptake,
                 )
@@ -529,8 +522,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
         # If only one model fit, that is the winner.
         if len(aic_results) == 1:
-            self.config["rois"][region]["with_uptake"] = fit_config[0][0]
-            self.config["rois"][region]["fit_order"] = fit_config[0][1]
+            self.config["VOIs"][region]["with_uptake"] = fit_config[0][0]
+            self.config["VOIs"][region]["fit_order"] = fit_config[0][1]
             return all_fits[0]
 
         # If there are two more models, we check the top two models and compare their AIC. If the difference
@@ -544,8 +537,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         ):
             best_model_idx = aic_results[1][0]
 
-        self.config["rois"][region]["with_uptake"] = fit_config[best_model_idx][0]
-        self.config["rois"][region]["fit_order"] = fit_config[best_model_idx][1]
+        self.config["VOIs"][region]["with_uptake"] = fit_config[best_model_idx][0]
+        self.config["VOIs"][region]["fit_order"] = fit_config[best_model_idx][1]
 
         return all_fits[best_model_idx]
 
@@ -636,8 +629,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         RADIOBIOLOGY_DATA_FILE = Path(this_dir, "data", "radiobiology.json")
         with open(RADIOBIOLOGY_DATA_FILE) as f:
             self.radiobiology_dic = json.load(f)
-        bed_df = self.df_ad[
-            self.df_ad.index.isin(list(self.radiobiology_dic.keys()))
+        bed_df = self.results_dosimetry_organs[
+            self.results_dosimetry_organs.index.isin(list(self.radiobiology_dic.keys()))
         ]  # only organs that we know the radiobiology parameters
         organs = numpy.array(bed_df.index.unique())
         bed = {}
@@ -646,7 +639,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             t_repair = self.radiobiology_dic[organ]["t_repair"]
             alpha_beta = self.radiobiology_dic[organ]["alpha_beta"]
             AD = (
-                float(self.df_ad.loc[bed_df.index == organ]["AD[Gy/GBq]"].values[0])
+                float(bed_df.loc[bed_df.index == organ]["AD_total[Gy/GBq]"].values[0])
                 * float(self.config["InjectedActivity"])
                 / 1000
             )  # Gy
@@ -702,7 +695,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 )
             print(f"{organ}", bed[organ])
 
-        self.df_ad["BED[Gy]"] = self.df_ad.index.map(bed)
+        self.results_dosimetry_organs["BED[Gy]"] = (
+            self.results_dosimetry_organs.index.map(bed)
+        )
 
     def save_images_and_masks_at(self, time_id: int) -> None:
         """Save CT, NM and masks for a specific time point.
@@ -718,7 +713,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             time_id=time_id, out_path=self.db_dir, name="SPECT"
         )
         self.nm_data.save_masks_to_nii_at(
-            time_id=time_id, out_path=self.db_dir, regions=self.config["rois"]
+            time_id=time_id, out_path=self.db_dir, regions=self.config["VOIs"]
         )
 
         return None
@@ -774,18 +769,21 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         cycle["InjectionTime"] = self.config["InjectionTime"]
         cycle["InjectedActivity"] = self.config["InjectedActivity"]
         cycle["Weight_g"] = self.config["PatientWeight_g"]
+        cycle["Height_cm"] = self.config["PatientHeight_cm"]
         cycle["Level"] = self.config["Level"]
-        cycle["Method"] = self.config["Method"]
-        cycle["OutputFormat"] = self.config["OutputFormat"]
-        cycle["ScaleDoseByDensity"] = self.config.get(
-            "ScaleDoseByDensity", cycle.get("ScaleDoseByDensity", "NA")
-        )
+        if cycle["Level"] == "Organ":
+            cycle["Method"] = self.config["OrganLevel"]
+        elif cycle["Level"] == "Voxel":
+            cycle["Method"] = self.config["VoxelLevel"]
+            cycle["ScaleDoseByDensity"] = self.config.get(
+                "ScaleDoseByDensity", cycle.get("ScaleDoseByDensity", "NA")
+            )
         cycle["ReferenceTimePoint"] = self.config["ReferenceTimePoint"]
         cycle["TimePoints_h"] = self.results["Time_hr"][0]
 
-        for organ in self.config["rois"].keys():
-            if organ not in cycle["rois"]:
-                cycle["rois"][organ] = {
+        for organ in self.config["VOIs"].keys():
+            if organ not in cycle["VOIs"]:
+                cycle["VOIs"][organ] = {
                     "volumes_mL": {},
                     "activity_MBq": {},
                     "timepoints_h": {},
@@ -817,32 +815,32 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     "BED_Gy_uncertainty": {},
                 }
 
-            cycle["rois"][organ]["volumes_mL"]["different_tps"] = self.results.loc[
+            cycle["VOIs"][organ]["volumes_mL"]["different_tps"] = self.results.loc[
                 organ, "Volume_CT_mL"
             ]
-            cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
-            cycle["rois"][organ]["volumes_mL"]["mean"] = numpy.mean(
+            cycle["VOIs"][organ]["volumes_mL"]["uncertainty"] = "NA"
+            cycle["VOIs"][organ]["volumes_mL"]["mean"] = numpy.mean(
                 self.results.loc[organ, "Volume_CT_mL"]
             )
-            cycle["rois"][organ]["volumes_mL"]["mean_uncertainty"] = "NA"
-            cycle["rois"][organ]["activity_MBq"]["values"] = self.results.loc[
-                organ, "Activity_MBq"
+            cycle["VOIs"][organ]["volumes_mL"]["mean_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["activity_MBq"]["values"] = [
+                float(x) for x in self.results.loc[organ, "Activity_MBq"]
             ]
-            cycle["rois"][organ]["activity_MBq"]["uncertainty"] = "NA"
-            cycle["rois"][organ]["timepoints_h"]["values"] = self.results.loc[
+            cycle["VOIs"][organ]["activity_MBq"]["uncertainty"] = "NA"
+            cycle["VOIs"][organ]["timepoints_h"]["values"] = self.results.loc[
                 organ, "Time_hr"
             ]
-            cycle["rois"][organ]["doserate_MBq_per_h"]["values"] = "NA"
-            cycle["rois"][organ]["doserate_MBq_per_h"]["uncertainty"] = "NA"
+            cycle["VOIs"][organ]["doserate_MBq_per_h"]["values"] = "NA"
+            cycle["VOIs"][organ]["doserate_MBq_per_h"]["uncertainty"] = "NA"
             try:
-                cycle["rois"][organ]["density_HU"]["different_tps"] = self.results.loc[
+                cycle["VOIs"][organ]["density_HU"]["different_tps"] = self.results.loc[
                     organ, "Density_HU"
                 ]
             except (KeyError, AttributeError):  # TODO: Handle errors explicitly
                 pass
-            cycle["rois"][organ]["density_HU"]["uncertainty"] = "NA"
+            cycle["VOIs"][organ]["density_HU"]["uncertainty"] = "NA"
             try:
-                cycle["rois"][organ]["density_HU"]["mean"] = numpy.mean(
+                cycle["VOIs"][organ]["density_HU"]["mean"] = numpy.mean(
                     self.results.loc[organ, "Density_HU"]
                 )
             except (
@@ -851,96 +849,107 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 TypeError,
             ):  # TODO: Handle errors explicitly
                 pass
-            cycle["rois"][organ]["density_HU"]["mean_uncertainty"] = "NA"
-            cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
-            cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
-            cycle["rois"][organ]["density_gml"]["mean"] = "NA"
-            cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
-            cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
-            cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"
-            cycle["rois"][organ]["mass_g"]["mean"] = "NA"
-            cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
-            cycle["rois"][organ]["fitting_eq"] = self.config["rois"][organ]["fit_order"]
-            cycle["rois"][organ]["no_of_fit_params"] = "NA"
-            cycle["rois"][organ]["fit_params"] = list(
+            cycle["VOIs"][organ]["density_HU"]["mean_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["density_gml"]["different_tps"] = "NA"
+            cycle["VOIs"][organ]["density_gml"]["uncertainty"] = "NA"
+            cycle["VOIs"][organ]["density_gml"]["mean"] = "NA"
+            cycle["VOIs"][organ]["density_gml"]["mean_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["mass_g"]["different_tps"] = "NA"
+            cycle["VOIs"][organ]["mass_g"]["uncertainty"] = "NA"
+            cycle["VOIs"][organ]["mass_g"]["mean"] = "NA"
+            cycle["VOIs"][organ]["mass_g"]["mean_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["fitting_eq"] = self.config["VOIs"][organ]["fit_order"]
+            cycle["VOIs"][organ]["no_of_fit_params"] = "NA"
+            cycle["VOIs"][organ]["fit_params"] = list(
                 self.results.loc[organ, "Fit_params"]
             )
-            cycle["rois"][organ]["fit_params_uncertainty"] = "NA"
-            cycle["rois"][organ]["R_2"] = self.results.loc[organ, "R_squared_AIC"][0]
-            cycle["rois"][organ]["AIC"] = self.results.loc[organ, "R_squared_AIC"][1]
-            cycle["rois"][organ]["TIA_MBqh"] = self.results.loc[organ, "TIA_MBq_h"]
-            cycle["rois"][organ]["TIA_MBqh_uncertainty"] = "NA"
-            cycle["rois"][organ]["TIA_h"] = self.results.loc[organ, "TIA_h"]
-            cycle["rois"][organ]["TIA_h_uncertainty"] = "NA"
-            cycle["rois"][organ]["mean_AD_Gy"] = "NA"
-            cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
-            cycle["rois"][organ]["min_AD_Gy"] = "NA"
-            cycle["rois"][organ]["max_AD_Gy"] = "NA"
-            cycle["rois"][organ]["peak_AD_Gy"] = "NA"
-            cycle["rois"][organ]["repair_halflife"] = "NA"
-            cycle["rois"][organ]["alpha_beta"] = "NA"
-            cycle["rois"][organ]["composition"] = "NA"
-            cycle["rois"][organ]["total_s_value"] = "NA"
-            cycle["rois"][organ]["total_s_value_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["washout_ratio"] = self.config["VOIs"][organ][
+                "washout_ratio"
+            ]
+            cycle["VOIs"][organ]["fit_params_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["R_2"] = (
+                "NA"
+                if pandas.isna(self.results.loc[organ, "R_squared_AIC"][0])
+                else self.results.loc[organ, "R_squared_AIC"][0]
+            )
+            cycle["VOIs"][organ]["AIC"] = (
+                "NA"
+                if pandas.isna(self.results.loc[organ, "R_squared_AIC"][1])
+                else self.results.loc[organ, "R_squared_AIC"][1]
+            )
+            cycle["VOIs"][organ]["TIA_MBqh"] = self.results.loc[organ, "TIA_MBq_h"]
+            cycle["VOIs"][organ]["TIA_MBqh_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["TIA_h"] = self.results.loc[organ, "TIA_h"]
+            cycle["VOIs"][organ]["TIA_h_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["mean_AD_Gy"] = "NA"
+            cycle["VOIs"][organ]["mean_AD_Gy_uncertainty"] = "NA"
+            cycle["VOIs"][organ]["min_AD_Gy"] = "NA"
+            cycle["VOIs"][organ]["max_AD_Gy"] = "NA"
+            cycle["VOIs"][organ]["peak_AD_Gy"] = "NA"
+            cycle["VOIs"][organ]["repair_halflife"] = "NA"
+            cycle["VOIs"][organ]["alpha_beta"] = "NA"
+            cycle["VOIs"][organ]["composition"] = "NA"
+            cycle["VOIs"][organ]["total_s_value"] = "NA"
+            cycle["VOIs"][organ]["total_s_value_uncertainty"] = "NA"
 
             if "Lesion" in organ or "TTB" in organ:
-                cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
-                cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["density_gml"]["mean"] = self.results_lesions.loc[
-                    organ, "Density_g_per_mL"
-                ]
-                cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
-                cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
-                cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["mass_g"]["mean"] = self.results_lesions.loc[
-                    organ, "Mass_g"
-                ]
-                cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
-                cycle["rois"][organ]["composition"] = self.results_lesions.loc[
-                    organ, "Composition"
-                ]
-                cycle["rois"][organ]["total_s_value"] = self.results_lesions.loc[
-                    organ, "Total_S_Value"
-                ]
-                cycle["rois"][organ]["total_s_value_uncertainty"] = "NA"
-                cycle["rois"][organ]["mean_AD_Gy"] = self.results_lesions.loc[
+                cycle["VOIs"][organ]["density_gml"]["different_tps"] = "NA"
+                cycle["VOIs"][organ]["density_gml"]["uncertainty"] = "NA"
+                cycle["VOIs"][organ]["density_gml"]["mean"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Density_g_per_mL"]
+                )
+                cycle["VOIs"][organ]["density_gml"]["mean_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["different_tps"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["mean"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Mass_g"]
+                )
+                cycle["VOIs"][organ]["mass_g"]["mean_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["composition"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Composition"]
+                )
+                cycle["VOIs"][organ]["total_s_value"] = (
+                    self.results_dosimetry_lesions.loc[organ, "Total_S_Value"]
+                )
+                cycle["VOIs"][organ]["total_s_value_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mean_AD_Gy"] = self.results_dosimetry_lesions.loc[
                     organ, "AD_Gy"
                 ]
-                cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mean_AD_Gy_uncertainty"] = "NA"
 
             if "BoneMarrow" in organ:
-                cycle["rois"][organ]["volumes_mL"]["different_tps"] = 1170
-                cycle["rois"][organ]["volumes_mL"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["volumes_mL"]["mean"] = 1170
+                cycle["VOIs"][organ]["volumes_mL"]["different_tps"] = 1170
+                cycle["VOIs"][organ]["volumes_mL"]["uncertainty"] = "NA"
+                cycle["VOIs"][organ]["volumes_mL"]["mean"] = 1170
 
             if "Gland" in organ:
-                cycle["rois"][organ]["density_gml"]["different_tps"] = "NA"
-                cycle["rois"][organ]["density_gml"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["density_gml"]["mean"] = (
-                    self.results_salivaryglands.loc[organ, "Density_g_per_mL"]
+                cycle["VOIs"][organ]["density_gml"]["different_tps"] = "NA"
+                cycle["VOIs"][organ]["density_gml"]["uncertainty"] = "NA"
+                cycle["VOIs"][organ]["density_gml"]["mean"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "Density_g_per_mL"]
                 )
-                cycle["rois"][organ]["density_gml"]["mean_uncertainty"] = "NA"
-                cycle["rois"][organ]["mass_g"]["different_tps"] = "NA"
-                cycle["rois"][organ]["mass_g"]["uncertainty"] = "NA"
-                cycle["rois"][organ]["mass_g"]["mean"] = (
-                    self.results_salivaryglands.loc[organ, "Mass_g"]
+                cycle["VOIs"][organ]["density_gml"]["mean_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["different_tps"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["mean"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "Mass_g"]
                 )
-                cycle["rois"][organ]["mass_g"]["mean_uncertainty"] = "NA"
-                cycle["rois"][organ]["composition"] = self.results_salivaryglands.loc[
-                    organ, "Composition"
-                ]
-                cycle["rois"][organ]["total_s_value"] = self.results_salivaryglands.loc[
-                    organ, "Total_S_Value"
-                ]
-                cycle["rois"][organ]["total_s_value_uncertainty"] = "NA"
-                cycle["rois"][organ]["mean_AD_Gy"] = self.results_salivaryglands.loc[
-                    organ, "AD_Gy"
-                ]
-                cycle["rois"][organ]["mean_AD_Gy_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mass_g"]["mean_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["composition"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "Composition"]
+                )
+                cycle["VOIs"][organ]["total_s_value"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "Total_S_Value"]
+                )
+                cycle["VOIs"][organ]["total_s_value_uncertainty"] = "NA"
+                cycle["VOIs"][organ]["mean_AD_Gy"] = (
+                    self.results_dosimetry_salivaryglands.loc[organ, "AD_Gy"]
+                )
+                cycle["VOIs"][organ]["mean_AD_Gy_uncertainty"] = "NA"
 
         if self.config["Level"] == "Organ":
-            for organ in self.df_ad.index:
-                if organ in self.df_ad.index:
+            for organ in self.results_dosimetry_organs.index:
+                if organ in self.results_dosimetry_organs.index:
                     cycle["Organ-level_AD"][organ] = {
                         "AD[Gy/GBq]": {},
                         "AD[Gy/GBq]_uncertianty": {},
@@ -949,19 +958,21 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                         "BED[Gy]": {},
                         "BED[Gy]_uncertianty": {},
                     }
-                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]"] = self.df_ad.loc[
-                    organ, "AD[Gy/GBq]"
-                ]
+                cycle["Organ-level_AD"][organ]["AD[Gy/GBq]"] = (
+                    self.results_dosimetry_organs.loc[organ, "AD_total[Gy/GBq]"]
+                )
                 cycle["Organ-level_AD"][organ]["AD[Gy/GBq]_uncertainty"] = "NA"
-                cycle["Organ-level_AD"][organ]["AD[Gy]"] = self.df_ad.loc[
-                    organ, "AD[Gy]"
-                ]
+                cycle["Organ-level_AD"][organ]["AD[Gy]"] = (
+                    self.results_dosimetry_organs.loc[organ, "AD_total[Gy]"]
+                )
                 cycle["Organ-level_AD"][organ]["AD[Gy]_uncertainty"] = "NA"
 
-                if "BED[Gy]" in self.df_ad.columns:
+                if "BED[Gy]" in self.results_dosimetry_organs.columns:
                     cycle["Organ-level_AD"][organ]["BED[Gy]"] = (
-                        self.df_ad.loc[organ, "BED[Gy]"]
-                        if pandas.notna(self.df_ad.loc[organ, "BED[Gy]"])
+                        self.results_dosimetry_organs.loc[organ, "BED[Gy]"]
+                        if pandas.notna(
+                            self.results_dosimetry_organs.loc[organ, "BED[Gy]"]
+                        )
                         else "NA"
                     )
                 else:
@@ -969,7 +980,9 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
 
                 cycle["Organ-level_AD"][organ]["BED[Gy]_uncertianty"] = "NA"
 
-        if "Yes" in self.config["LesionDosimetry"]:
+        if "Yes" in self.config["OrganLevel"]["AdditionalOptions"].get(
+            "LesionDosimetry"
+        ):
             cycle["Organ-level_AD"]["TTB"] = {
                 "mass_g": {},
                 "volumes_mL": {},
@@ -979,22 +992,23 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 "AD[Gy/GBq]": {},
                 "AD[Gy/GBq]_uncertianty": {},
             }
-            cycle["Organ-level_AD"]["TTB"]["mass_g"] = self.results_lesions.loc[
-                "TTB", "Mass_g"
-            ]
-            cycle["Organ-level_AD"]["TTB"]["volumes_mL"] = self.results_lesions.loc[
-                "TTB", "Volume_CT_mL"
-            ]
-            cycle["Organ-level_AD"]["TTB"]["TIA_h"] = self.results_lesions.loc[
-                "TTB", "TIA_h"
-            ]
-            cycle["Organ-level_AD"]["TTB"]["AD[Gy]"] = self.results_lesions.loc[
-                "TTB", "AD_Gy"
-            ]
+            cycle["Organ-level_AD"]["TTB"]["mass_g"] = (
+                self.results_dosimetry_lesions.loc["TTB", "Mass_g"]
+            )
+            cycle["Organ-level_AD"]["TTB"]["volumes_mL"] = (
+                self.results_dosimetry_lesions.loc["TTB", "Volume_CT_mL"]
+            )
+            cycle["Organ-level_AD"]["TTB"]["TIA_h"] = (
+                self.results_dosimetry_lesions.loc["TTB", "TIA_h"]
+            )
+            cycle["Organ-level_AD"]["TTB"]["AD[Gy]"] = (
+                self.results_dosimetry_lesions.loc["TTB", "AD_Gy"]
+            )
             cycle["Organ-level_AD"]["TTB"]["AD[Gy]_uncertainty"] = "NA"
-            cycle["Organ-level_AD"]["TTB"]["AD[Gy/GBq]"] = self.results_lesions.loc[
-                "TTB", "AD_Gy"
-            ] / (float(self.config["InjectedActivity"]) / 1000)
+            cycle["Organ-level_AD"]["TTB"]["AD[Gy/GBq]"] = (
+                self.results_dosimetry_lesions.loc["TTB", "AD_Gy"]
+                / (float(self.config["InjectedActivity"]) / 1000)
+            )
             cycle["Organ-level_AD"]["TTB"]["AD[Gy/GBq]_uncertianty"] = "NA"
 
         with open(file_path, "w") as file:

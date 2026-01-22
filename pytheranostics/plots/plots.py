@@ -86,7 +86,7 @@ def plot_tac_residuals(
     else:
         weights = None
     # Generate x-values for plotting the fitted model starting from x=0
-    x_fit = numpy.linspace(0, x_data[-1] * 3, 500)
+    x_fit = numpy.linspace(0, x_data.max() * 3, 500)
     y_fit = result.eval(x=x_fit)
 
     # First subplot: Linear scale plot
@@ -96,7 +96,7 @@ def plot_tac_residuals(
     # Plot fitted model
     ax1.plot(x_fit, y_fit, color="red")
     ax1.set_xlim(left=0)  # Start x-axis from zero
-    ax1.set_xlim(right=x_data[-1] * 2)  # Start y-axis from zero
+    ax1.set_xlim(right=x_data.max() * 2)  # Start y-axis from zero
     ax1.set_ylim(bottom=0)  # Start y-axis from zero
     ax1.set_title(region)
     ax1.set_xlabel(x_label)
@@ -119,7 +119,7 @@ def plot_tac_residuals(
     # Plot fitted model
     ax2.plot(x_fit, y_fit, color="red")
     ax2.set_xlim(left=0)  # Start x-axis from zero
-    ax2.set_xlim(right=x_data[-1] * 2)  # Start y-axis from zero
+    ax2.set_xlim(right=x_data.max() * 2)  # Start y-axis from zero
     ax2.set_yscale("log")
     ax2.set_title(title_text)
     ax2.set_xlabel(x_label)
@@ -147,3 +147,78 @@ def plot_tac_residuals(
     plt.show()
 
     return None
+
+
+def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000, label=None):
+    """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
+
+    Parameters
+    ----------
+    ax : _type_
+        _description_
+    SPECT : _type_
+        _description_
+    masks : _type_, optional
+        _description_, by default None
+    vmax : int, optional
+        _description_, by default 300000
+    """
+    plt.sca(ax)
+    spect_mip = SPECT.max(axis=0)
+    plt.imshow(spect_mip.T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0)
+
+    if masks is not None:
+        for organ, mask in masks.items():
+            organ_lower = organ.lower()
+            print(organ_lower)
+            if "peak" in organ_lower:
+                continue
+            else:
+                if "kidney" in organ_lower:
+                    color = "lime"
+                elif "parotid" in organ_lower:
+                    color = "red"
+                elif "submandibular" in organ_lower:
+                    color = "red"
+                elif "lesion" in organ_lower:
+                    color = "m"
+                else:
+                    continue
+
+            mip_mask = mask.max(axis=0)
+            if mip_mask.shape != spect_mip.shape:
+                mip_mask = mip_mask.T
+
+            plt.contour(
+                numpy.transpose(mip_mask, (1, 0)),
+                levels=[0.5],
+                colors=[color],
+                linewidths=1.5,
+                alpha=0.5,
+            )
+
+            # --- Add label at mask center ---
+            if label is True:
+                ys, xs = numpy.where(mip_mask > 0)
+
+                if len(xs) > 0:
+                    # Corrected for transpose in contour
+                    x_center = ys.mean() - 0.2 * ys.mean()  # was xs
+                    y_center = xs.mean()  # was ys
+
+                    plt.text(
+                        x_center,
+                        y_center,
+                        organ,
+                        color=color,
+                        fontsize=8,
+                        ha="center",
+                        va="center",
+                        alpha=0.7,
+                    )
+
+    plt.xlim(30, 100)
+    plt.ylim(0, 234)
+    plt.axis("off")
+    plt.xticks([])
+    plt.yticks([])
