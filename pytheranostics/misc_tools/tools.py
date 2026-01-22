@@ -3,7 +3,6 @@
 from datetime import datetime
 from typing import Dict, Tuple
 
-import matplotlib.pyplot as plt
 import numpy
 from scipy.ndimage import median_filter
 
@@ -199,9 +198,9 @@ def extract_exponential_params_from_json(
         and all the parameters of the fit.
     """
     with_uptake = False
-
     # Determine order:
-    parameters = json_data[cycle][0]["rois"][region]["fit_params"]
+    parameters = json_data[cycle][0]["VOIs"][region]["fit_params"]
+    washout_ratio = json_data[cycle][0]["VOIs"][region]["washout_ratio"]
 
     # Handle Legacy:
     if len(parameters) in [3, 5]:
@@ -214,7 +213,6 @@ def extract_exponential_params_from_json(
 
     fixed_parameters: Dict[str, float] = {}
     all_parameters: Dict[str, float] = {}
-
     for order in range(fit_order):
         fixed_parameters[f"{param_name_base[order]}2"] = parameters[
             exponential_idxs[order]
@@ -226,14 +224,16 @@ def extract_exponential_params_from_json(
         all_parameters[f"{param_name_base[order]}2"] = parameters[
             exponential_idxs[order]
         ]
-
+    if washout_ratio is not None:
+        # Fix A1 ONLY
+        if "B1" in all_parameters:
+            fixed_parameters["B1"] = all_parameters["B1"]
     if fit_order == 2 and parameters[0] == -parameters[2]:
         with_uptake = True
 
     if fit_order == 3 and parameters[4] == -(parameters[0] + parameters[2]):
         with_uptake = True
-
-    return fixed_parameters, with_uptake, all_parameters
+    return fixed_parameters, with_uptake, all_parameters, washout_ratio
 
 
 def extract_exponential_params_from_json_legacy(
@@ -266,7 +266,7 @@ def extract_exponential_params_from_json_legacy(
         When the parameter configuration is incompatible with new format.
     """
     # Read Parameters:
-    parameters = json_data[cycle][0]["rois"][region]["fit_params"]
+    parameters = json_data[cycle][0]["VOIs"][region]["fit_params"]
 
     if len(parameters) not in [3, 5]:
         raise AssertionError(
@@ -321,7 +321,7 @@ def initialize_biokinetics_from_prior_cycle(
     dict
         Updated configuration dictionary.
     """
-    for roi, roi_info in config["rois"].items():
+    for roi, roi_info in config["VOIs"].items():
 
         if (
             "biokinectics_from_previous_cycle" in roi_info
@@ -329,15 +329,18 @@ def initialize_biokinetics_from_prior_cycle(
         ):
 
             # Get previous cycle parameters:
-            fixed_param, with_uptake, all_params = extract_exponential_params_from_json(
-                json_data=prior_treatment_data, cycle=cycle, region=roi
+            fixed_param, with_uptake, all_params, washout_ratio = (
+                extract_exponential_params_from_json(
+                    json_data=prior_treatment_data, cycle=cycle, region=roi
+                )
             )
 
-            config["rois"][roi] = {
+            config["VOIs"][roi] = {
                 "fixed_parameters": fixed_param,
                 "fit_order": len(all_params) // 2,
                 "param_init": all_params,
                 "with_uptake": with_uptake,
+                "washout_ratio": washout_ratio,
             }
 
             print(
@@ -347,45 +350,3 @@ def initialize_biokinetics_from_prior_cycle(
             print("")
 
     return config
-
-
-def plot_MIP(SPECT=None, vmax=300000, figsize=(10, 5), ax=None):
-    """Plot Maximum Intensity Projection (MIP) of SPECT data.
-
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes, optional
-        Axes object to plot on. If None, a new figure and axes will be created.
-    SPECT : numpy.ndarray
-        SPECT data array.
-    vmax : int, optional
-        Maximum value for display, by default 300000.
-    figsize : tuple, optional
-        Figure size (width, height) in inches, by default (10, 5).
-        Only used if ax is None.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Figure object.
-    ax : matplotlib.axes.Axes
-        Axes object with the plot.
-    """
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.get_figure()
-
-    plt.sca(ax)
-    plt.imshow(
-        SPECT.max(axis=0).T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0
-    )
-    plt.xlim(30, 100)
-    plt.ylim(0, 234)
-
-    plt.axis("off")
-
-    plt.xticks([])
-    plt.yticks([])
-
-    return fig, ax

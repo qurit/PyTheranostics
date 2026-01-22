@@ -11,6 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     Image,
+    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -25,21 +26,33 @@ def signature_block(person, styles, width=2.5 * inch, height=0.6 * inch):
     Placeholder for signature, line, and text.
     Returns a small table that can be inserted side-by-side with others.
     """
-    # Empty row for signature space
-    sig_space = Spacer(1, height)
+    elements = []
+
+    # If a signature path is provided, insert the image
+    if person.get("signature"):
+        sig_img = Image(person["signature"])
+        # Scale the image to fit width and maintain aspect ratio
+        sig_img.drawHeight = height
+        sig_img.drawWidth = width
+        elements.append(sig_img)
+    else:
+        # Empty space if no signature image
+        elements.append(Spacer(1, height))
 
     # Line row
     line = Table([[""]], colWidths=[width])
     line.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, -1), 1, colors.black)]))
+    elements.append(line)
 
     # Text row
     text = Paragraph(
         f"<para align=center><b>{person['name']}</b><br/>{person['title']}<br/>{person['affiliation']}</para>",
         styles["Normal"],
     )
+    elements.append(text)
 
-    # Wrap everything in a column table (1 col, 3 rows)
-    block = Table([[sig_space], [line], [text]], colWidths=[width])
+    # Wrap everything in a column table (1 col, stacked)
+    block = Table([[e] for e in elements], colWidths=[width])
     block.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
     return block
 
@@ -69,23 +82,26 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
 
     # Title
     title = Paragraph(
-        "<para align=center><b>DOSIMETRY REPORT</b></para>", styles["Title"]
+        "<para align=center><b>DOSIMETRY ASSESSMENT</b></para>", styles["Title"]
     )
     elements.append(title)
     elements.append(Spacer(1, 0.5 * inch))
 
     # Subject Information Section
     elements.append(Paragraph("<b>Subject Information</b>", styles["Heading2"]))
-
     # Subject Information Table
     subject_data = [
-        ["Clinical Trial", "PR.21"],
+        ["Clinical Trial", data.get("ClinicalTrial")],
+        ["Radiopharmaceutical", "177Lu-PSMA-617"],
+        ["Mode of administration", "I.V."],
         ["ID", data.get("PatientID")],
         ["Sex", data.get("Gender")],
+        ["Weight kg", data.get("Cycle_01", {})[0].get("Weight_g", "") / 1000],
+        ["Height cm", data.get("Cycle_01", {})[0].get("Height_cm", "")],
         ["Number of cycles ", data.get("No_of_completed_cycles")],
     ]
 
-    subject_table = Table(subject_data, colWidths=[1.5 * inch, 4 * inch])
+    subject_table = Table(subject_data, colWidths=[2 * inch, 3.5 * inch])
     subject_table.setStyle(
         TableStyle(
             [
@@ -146,11 +162,89 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         elements.append(caption)
         elements.append(Spacer(1, 0.2 * inch))
 
+    elements.append(PageBreak())
+
     for i in range(1, data.get("No_of_completed_cycles") + 1):
         cycle_info(i, elements, styles, data)
 
+    elements.append(PageBreak())
+
     elements.append(Paragraph("<b>Patient Summary</b>", styles["Heading2"]))
 
+    # ===============================
+    # CUMULATIVE ORGAN TABLE
+    # ===============================
+    elements.append(
+        Paragraph("<b>Cumulative Absorbed Dose Summary</b>", styles["Heading3"])
+    )
+
+    total_tia_kidneys = 0
+    total_tia_salivary = 0
+    total_tia_marrow = 0
+
+    total_ad_kidneys = 0
+    total_ad_salivary = 0
+    total_ad_marrow = 0
+
+    total_bed_kidneys = 0
+
+    for i in range(1, data.get("No_of_completed_cycles") + 1):
+        therapy_info = data.get(f"Cycle_0{i}", {})[0]
+
+        # Kidneys
+        total_tia_kidneys += (
+            therapy_info["VOIs"]["Kidney_Left"]["TIA_h"]
+            + therapy_info["VOIs"]["Kidney_Right"]["TIA_h"]
+        )
+        total_ad_kidneys += therapy_info["Organ-level_AD"]["Kidneys"]["AD[Gy]"]
+        total_bed_kidneys += therapy_info["Organ-level_AD"]["Kidneys"]["BED[Gy]"]
+
+        # Red marrow
+        total_tia_marrow += therapy_info["VOIs"]["BoneMarrow"]["TIA_h"]
+        total_ad_marrow += therapy_info["Organ-level_AD"]["Red Marrow"]["AD[Gy]"]
+
+        # Salivary glands
+        total_tia_salivary += (
+            therapy_info["VOIs"]["ParotidGland_Left"]["TIA_h"]
+            + therapy_info["VOIs"]["ParotidGland_Right"]["TIA_h"]
+            + therapy_info["VOIs"]["SubmandibularGland_Left"]["TIA_h"]
+            + therapy_info["VOIs"]["SubmandibularGland_Right"]["TIA_h"]
+        )
+        total_ad_salivary += therapy_info["Organ-level_AD"]["Salivary Glands"]["AD[Gy]"]
+
+    # Build the cumulative table
+    cumulative_data = [
+        ["Organ", "Cumulative TIA (h)", "Cumulative AD (Gy)", "Cumulative BED (Gy)"],
+        [
+            "Kidneys",
+            round(total_tia_kidneys, 2),
+            round(total_ad_kidneys, 2),
+            round(total_bed_kidneys, 2),
+        ],
+        ["Red Marrow", round(total_tia_marrow, 2), round(total_ad_marrow, 2), "-"],
+        [
+            "Salivary glands",
+            round(total_tia_salivary, 2),
+            round(total_ad_salivary, 2),
+            "-",
+        ],
+    ]
+
+    cumulative_table = Table(cumulative_data, colWidths=[1.5 * inch, 1.7 * inch])
+    cumulative_table.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 12),
+                ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                ("BACKGROUND", (0, 0), (0, -1), colors.lightblue),
+            ]
+        )
+    )
+
+    elements.append(cumulative_table)
     # Paths to your three images
     image_paths = [
         calling_folder / "TestDoseDB/Gy_cummulative.png",
@@ -162,7 +256,7 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     imgs = []
     for path in image_paths:
         img = Image(str(path))
-        scale = min(max_width / img.imageWidth, max_height / img.imageHeight) / 2.8
+        scale = min(max_width / img.imageWidth, max_height / img.imageHeight) / 3
         img.drawWidth = img.imageWidth * scale
         img.drawHeight = img.imageHeight * scale
         imgs.append(img)
@@ -186,7 +280,7 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     # Add caption
     elements.append(Spacer(1, 0.2 * inch))
     caption = Paragraph(
-        "<para align=center><i>Figure 2: Cumulative absorbed dose, absorbed dose per cycle, and absorbed dose per GBq per cycle for target organs.</i></para>",
+        "<para align=center><i>Figure 2: Cumulative AD, AD per cycle, and AD per GBq per cycle for target organs.</i></para>",
         styles["Normal"],
     )
     elements.append(caption)
@@ -205,7 +299,7 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         img = Image(str(path))
         # Scale to fit 2×2 layout
         scale = min(
-            (max_width / 2.2) / img.imageWidth, (max_height / 2.2) / img.imageHeight
+            (max_width / 2.5) / img.imageWidth, (max_height / 2.5) / img.imageHeight
         )
         img.drawWidth = img.imageWidth * scale
         img.drawHeight = img.imageHeight * scale
@@ -214,7 +308,7 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     # Arrange in 2×2 structure
     trend_table_data = [[trend_imgs[0], trend_imgs[1]], [trend_imgs[2], trend_imgs[3]]]
 
-    trend_table = Table(trend_table_data, colWidths=[max_width / 2.2, max_width / 2.2])
+    trend_table = Table(trend_table_data, colWidths=[max_width / 2.5, max_width / 2.5])
 
     trend_table.setStyle(
         TableStyle(
@@ -226,18 +320,14 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
             ]
         )
     )
-
-    elements.append(Spacer(1, 0.3 * inch))
     elements.append(trend_table)
 
     # Add caption
-    elements.append(Spacer(1, 0.2 * inch))
     caption = Paragraph(
         "<para align=center><i>Figure 3: Trends of hematological and renal function, and PSA.</i></para>",
         styles["Normal"],
     )
     elements.append(caption)
-    elements.append(Spacer(1, 0.2 * inch))
 
     # ===============================
     # Signatures Section
@@ -272,8 +362,70 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         )
         elements.append(app_table)
 
+    # ===============================
+    # Appendix
+    # ===============================
+
+    elements.append(PageBreak())
+    title = Paragraph("<b>Appendix</b>", styles["Heading2"])
+    elements.append(title)
+    fig_title = Paragraph(
+        "<b>Biodistribution and kinetic analysis</b>",
+        styles["Heading3"],
+    )
+    elements.append(fig_title)
+
+    for i in range(1, data.get("No_of_completed_cycles") + 1):
+        biodistribution_per_cycle(i, elements, styles, data)
+
     # Build PDF
     doc.build(elements)
+
+
+def biodistribution_per_cycle(cycle_n, elements, styles, data):
+    """Add cycle information to the PDF report elements.
+
+    Parameters
+    ----------
+    cycle_n : int
+            The cycle number.
+    elements : list
+            List of reportlab elements to append to.
+    styles : dict
+            ReportLab styles dictionary.
+    data : dict
+            Patient data dictionary.
+    """
+    if cycle_n == 1:
+        pass
+    else:
+        elements.append(PageBreak())
+
+    therapy_title = Paragraph(f"<b>Cycle {cycle_n}</b>", styles["Heading2"])
+    elements.append(therapy_title)
+
+    page_width, page_height = letter
+    max_width = page_width - 2 * 72  # 1-inch margins
+    max_height = page_height - 2 * 72
+
+    calling_folder = Path().absolute()  # notebook folder
+    pattern = calling_folder / f"TestDoseDB/*_fit_Cycle_0{cycle_n}.png"
+
+    # glob returns a list of matching files
+    image_paths = glob.glob(str(pattern))
+
+    for image_path in image_paths:
+        img = Image(image_path)
+
+        # Compute scaling factor to fit inside page
+        scale = min(max_width / img.imageWidth, max_height / img.imageHeight)
+
+        # Apply scaling (preserve aspect ratio)
+        img.drawWidth = img.imageWidth * scale
+        img.drawHeight = img.imageHeight * scale
+
+        elements.append(Spacer(1, 0.3 * inch))
+        elements.append(img)
 
 
 def cycle_info(cycle_n, elements, styles, data):
@@ -296,66 +448,27 @@ def cycle_info(cycle_n, elements, styles, data):
 
     # Therapy Information Table
     therapy_info = data.get(f"Cycle_0{cycle_n}", {})
-    therapy_data = [
-        ["Radiopharmaceutical", "177Lu-PSMA-617"],
-        ["Mode of administration", "I.V."],
-        ["Administered Activity (MBq)", therapy_info[0].get("InjectedActivity", "")],
-        [
-            "Date of injection",
-            (
-                datetime.strptime(
-                    therapy_info[0].get("InjectionDate", ""), "%Y%m%d"
-                ).strftime("%Y-%m-%d")
-                if therapy_info[0].get("InjectionDate", "")
-                else ""
-            ),
-        ],
-    ]
 
-    therapy_table = Table(therapy_data, colWidths=[2.5 * inch, 3 * inch])
-    therapy_table.setStyle(
-        TableStyle(
-            [
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 0), (-1, -1), 12),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-            ]
-        )
+    # Format injection date nicely
+    inj_date_raw = therapy_info[0].get("InjectionDate", "")
+    inj_date = (
+        datetime.strptime(inj_date_raw, "%Y%m%d").strftime("%Y-%m-%d")
+        if inj_date_raw
+        else ""
     )
 
-    elements.append(therapy_table)
-
-    page_width, page_height = letter
-    max_width = page_width - 2 * 72  # 1-inch margins
-    max_height = page_height - 2 * 72
-
-    fig_title = Paragraph(
-        "<b>Time-activity curves, fit functions, and fit parameters</b>",
-        styles["Heading3"],
+    # Build a clean paragraph instead of a table
+    therapy_info_para = Paragraph(
+        f"<para>"
+        f"<b>Administered activity:</b> {therapy_info[0].get('InjectedActivity', '')} MBq<br/>"
+        f"<b>Date of injection:</b> {inj_date}"
+        f"</para>",
+        styles["Normal"],
     )
-    elements.append(fig_title)
 
-    calling_folder = Path().absolute()  # notebook folder
-    pattern = calling_folder / f"TestDoseDB/*_fit_Cycle_0{cycle_n}.png"
-
-    # glob returns a list of matching files
-    image_paths = glob.glob(str(pattern))
-
-    for image_path in image_paths:
-        img = Image(image_path)
-
-        # Compute scaling factor to fit inside page
-        scale = min(max_width / img.imageWidth, max_height / img.imageHeight)
-
-        # Apply scaling (preserve aspect ratio)
-        img.drawWidth = img.imageWidth * scale
-        img.drawHeight = img.imageHeight * scale
-
-        elements.append(Spacer(1, 0.3 * inch))
-        elements.append(img)
+    # Add to document
+    elements.append(therapy_info_para)
+    elements.append(Spacer(1, 0.089 * inch))
 
     fig_title = Paragraph(
         "<b>Absorbed dose results for the organs at risk</b>", styles["Heading3"]
@@ -363,13 +476,13 @@ def cycle_info(cycle_n, elements, styles, data):
     elements.append(fig_title)
 
     organ_data_Gy_GBq = [
-        ["Organ", "TIA (h)", "AD (Gy/GBq)", "AD(Gy)", "BED (Gy)"],
+        ["Organ", "TIA (h)", "AD (Gy/GBq)", "AD (Gy)", "BED (Gy)"],
         [
             "Kidneys",
             round(
                 (
-                    therapy_info[0]["rois"]["Kidney_Left"]["TIA_h"]
-                    + therapy_info[0]["rois"]["Kidney_Right"]["TIA_h"]
+                    therapy_info[0]["VOIs"]["Kidney_Left"]["TIA_h"]
+                    + therapy_info[0]["VOIs"]["Kidney_Right"]["TIA_h"]
                 ),
                 2,
             ),
@@ -379,7 +492,7 @@ def cycle_info(cycle_n, elements, styles, data):
         ],
         [
             "Red Marrow",
-            round((therapy_info[0]["rois"]["BoneMarrow"]["TIA_h"]), 2),
+            round((therapy_info[0]["VOIs"]["BoneMarrow"]["TIA_h"]), 2),
             round(therapy_info[0]["Organ-level_AD"]["Red Marrow"]["AD[Gy/GBq]"], 2),
             round(therapy_info[0]["Organ-level_AD"]["Red Marrow"]["AD[Gy]"], 2),
             "-",
@@ -388,10 +501,10 @@ def cycle_info(cycle_n, elements, styles, data):
             "Salivary glands",
             round(
                 (
-                    therapy_info[0]["rois"]["ParotidGland_Left"]["TIA_h"]
-                    + therapy_info[0]["rois"]["ParotidGland_Right"]["TIA_h"]
-                    + therapy_info[0]["rois"]["SubmandibularGland_Left"]["TIA_h"]
-                    + therapy_info[0]["rois"]["SubmandibularGland_Right"]["TIA_h"]
+                    therapy_info[0]["VOIs"]["ParotidGland_Left"]["TIA_h"]
+                    + therapy_info[0]["VOIs"]["ParotidGland_Right"]["TIA_h"]
+                    + therapy_info[0]["VOIs"]["SubmandibularGland_Left"]["TIA_h"]
+                    + therapy_info[0]["VOIs"]["SubmandibularGland_Right"]["TIA_h"]
                 ),
                 2,
             ),
