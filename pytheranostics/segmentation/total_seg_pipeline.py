@@ -89,23 +89,19 @@ def _sanitize_id(text: str) -> str:
     ).strip("_")
 
 
-def run_full_pipeline(
+def run_segmentation_pipeline(
     input_folders: Optional[List[str]] = None,
     base_output_dir: str | Path = ".",
-    rtstruct_output_dir: str | Path = "./RTStructs",
     *,
     root_dir: Optional[str | Path] = None,
     device: str = "mps",
     parallel: bool = False,
     max_workers: int = 2,
-    export_csv: bool = True,
 ) -> Dict[str, Dict[str, Path]]:
-    """Run the complete workflow.
+    """Run CT segmentation with TotalSegmentator.
 
-    1) Discover CT DICOM series under a root directory (if provided) or use input_folders
-    2) Segment each input CT series with TotalSegmentator into per-patient/per-timepoint subfolders
-    3) Convert all masks to RT-STRUCT per timepoint per patient
-    4) Optionally export ROI inventory CSV (recursively) under rtstruct_output_dir
+    This performs steps 1-2: discovery and segmentation. The output masks can then
+    be converted to RT-STRUCT multiple times with different configurations.
 
     Parameters
     ----------
@@ -113,8 +109,6 @@ def run_full_pipeline(
         Explicit list of CT DICOM series folders (overrides discovery if given).
     base_output_dir : str | Path, optional
         Base directory where TotalSegmentator results are written, by default '.'.
-    rtstruct_output_dir : str | Path, optional
-        Directory where RT-STRUCT files will be saved, by default './RTStructs'.
     root_dir : str | Path, optional
         Root folder to discover CT series (if input_folders is None).
     device : str, optional
@@ -123,22 +117,20 @@ def run_full_pipeline(
         If True, run segmentation in parallel, by default False.
     max_workers : int, optional
         Number of workers for parallel processing, by default 2.
-    export_csv : bool, optional
-        If True, writes all_rois.csv in rtstruct_output_dir (recursive), by default True.
 
     Returns
     -------
-    Dict[str, Dict[str, Path]]
-        Mapping {patient_id -> {timepoint -> rtstruct_path}}.
+    dict
+        Dictionary with keys:
+        - 'segmentations': {patient_id -> {timepoint -> segmentation_output_dir}}
+        - 'ct_paths': {patient_id -> {timepoint -> ct_dicom_folder}}
     """
     base_output_dir = Path(base_output_dir)
-    rtstruct_output_dir = Path(rtstruct_output_dir)
-    rtstruct_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Determine and announce effective device
     resolved_device = device
     try:
-        import torch  # local import to avoid hard dependency at import time
+        import torch
 
         mps_avail = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
         cuda_avail = torch.cuda.is_available()
@@ -174,16 +166,13 @@ def run_full_pipeline(
     else:
         input_paths = [Path(p) for p in input_folders]
 
-    # 1) Prepare segmentation tasks: compute patient_id and timepoint
+    # 1) Prepare segmentation tasks
     sp = SegmentationProcessor(str(base_output_dir), device=resolved_device)
-    tasks: List[Tuple[Path, str, str, Path]] = (
-        []
-    )  # (ct_path, patient_id, timepoint, out_dir)
+    tasks: List[Tuple[Path, str, str, Path]] = []
 
     for ct_path in input_paths:
         tp = sp.extract_timepoint(ct_path)
         if tp == "unknown":
-            # Skip entries without a parsable timepoint
             continue
         patient_id = _read_patient_id_from_series(ct_path) or _sanitize_id(
             ct_path.parent.name
@@ -194,11 +183,10 @@ def run_full_pipeline(
     if not tasks:
         raise RuntimeError("No valid CT series with timepoints found.")
 
-    # 2) Run segmentation (optionally in parallel)
+    # 2) Run segmentation
     if parallel:
         from concurrent.futures import ProcessPoolExecutor
 
-        # Convert tasks into simple tuples of strings for pickling safety
         safe_tasks = [
             (str(ct_path), patient_id, tp, str(out_dir), resolved_device)
             for ct_path, patient_id, tp, out_dir in tasks
@@ -211,42 +199,156 @@ def run_full_pipeline(
                 (str(ct_path), patient_id, tp, str(out_dir), resolved_device)
             )
 
-    # 3) Convert masks to RT-STRUCT per patient/timepoint
+    # Return mapping of segmentation outputs and CT paths
+    seg_map: Dict[str, Dict[str, Path]] = {}
+    ct_paths: Dict[str, Dict[str, str]] = {}
+    for ct_path, patient_id, tp, out_dir in tasks:
+        seg_map.setdefault(patient_id, {})[tp] = out_dir
+        ct_paths.setdefault(patient_id, {})[tp] = str(ct_path)
+
+    return {"segmentations": seg_map, "ct_paths": ct_paths}
+
+
+def convert_masks_to_rtstruct(
+    segmentation_base_dir: str | Path,
+    ct_series_paths: Dict[str, Dict[str, str]],
+    rtstruct_output_dir: str | Path = "./RTStructs",
+    config_path: Optional[str | Path] = None,
+    export_csv: bool = True,
+) -> Dict[str, Dict[str, Path]]:
+    """Convert NIfTI segmentation masks to RT-STRUCT files.
+
+    This performs steps 3-4: RT-STRUCT conversion and CSV export. Can be run
+    multiple times with different configs to generate different RT-STRUCTs.
+
+    Parameters
+    ----------
+    segmentation_base_dir : str | Path
+        Base directory containing segmentation outputs (patient_id/timepoint/*.nii.gz).
+    ct_series_paths : Dict[str, Dict[str, str]]
+        Mapping {patient_id -> {timepoint -> ct_dicom_folder}}.
+    rtstruct_output_dir : str | Path, optional
+        Directory where RT-STRUCT files will be saved, by default './RTStructs'.
+    config_path : str | Path, optional
+        Path to total_seg_config.json. If None, checks current directory.
+    export_csv : bool, optional
+        If True, writes all_rois.csv in rtstruct_output_dir, by default True.
+
+    Returns
+    -------
+    Dict[str, Dict[str, Path]]
+        Mapping {patient_id -> {timepoint -> rtstruct_path}}.
+    """
+    segmentation_base_dir = Path(segmentation_base_dir)
+    rtstruct_output_dir = Path(rtstruct_output_dir)
+    rtstruct_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Determine config path
+    if config_path is None:
+        config_path = Path.cwd() / "total_seg_config.json"
+    else:
+        config_path = Path(config_path)
+
+    use_config = config_path.exists()
+    if use_config:
+        print(f"Using config: {config_path}")
+    else:
+        print("No config found, adding all masks")
+
+    # Convert masks to RT-STRUCT
     patient_map: Dict[str, Dict[str, Path]] = {}
 
-    # Check for config file in current working directory
-    config_path = Path.cwd() / "total_seg_config.json"
-    use_config = config_path.exists()
+    for patient_id, timepoints in ct_series_paths.items():
+        for tp, ct_path in timepoints.items():
+            mask_dir = segmentation_base_dir / patient_id / tp
+            if not mask_dir.exists():
+                print(f"⚠️  Skipping {patient_id}/{tp}: {mask_dir} not found")
+                continue
 
-    if use_config:
-        print(f"Found config at: {config_path}")
+            rt_out_dir = rtstruct_output_dir / patient_id
+            rt_out_dir.mkdir(parents=True, exist_ok=True)
+            out_file = rt_out_dir / f"rtstruct_{tp}.dcm"
+            print(f"RT-STRUCT: patient={patient_id} timepoint={tp} -> {out_file}")
 
-    for ct_path, patient_id, tp, out_dir in tasks:
-        if not out_dir.exists():
-            print(f"⚠️  Skipping RT-STRUCT for {patient_id}/{tp}: {out_dir} not found")
-            continue
-        rt_out_dir = rtstruct_output_dir / patient_id
-        rt_out_dir.mkdir(parents=True, exist_ok=True)
-        out_file = rt_out_dir / f"rtstruct_{tp}.dcm"
-        print(f"RT-STRUCT: patient={patient_id} timepoint={tp} -> {out_file}")
-        converter = RTStructConverter(ct_dicom_folder=str(ct_path))
+            converter = RTStructConverter(ct_dicom_folder=str(ct_path))
 
-        if use_config:
-            converter.add_masks_from_folder_with_config(
-                str(out_dir), str(config_path), permute_axes=True, flip_x=True
-            )
-        else:
-            converter.add_masks_from_folder(
-                str(out_dir), permute_axes=True, flip_x=True
-            )
+            if use_config:
+                converter.add_masks_from_folder_with_config(
+                    str(mask_dir), str(config_path), permute_axes=True, flip_x=True
+                )
+            else:
+                converter.add_masks_from_folder(
+                    str(mask_dir), permute_axes=True, flip_x=True
+                )
 
-        converter.save(str(out_file))
-        patient_map.setdefault(patient_id, {})[tp] = out_file
+            converter.save(str(out_file))
+            patient_map.setdefault(patient_id, {})[tp] = out_file
 
-    # 4) Export a single CSV for all RT-STRUCTs (recursive)
+    # Export CSV
     if export_csv:
         export_multiple_rtstructs_to_csv(
             str(rtstruct_output_dir), str(rtstruct_output_dir / "all_rois.csv")
         )
 
     return patient_map
+
+
+def run_full_pipeline(
+    input_folders: Optional[List[str]] = None,
+    base_output_dir: str | Path = ".",
+    rtstruct_output_dir: str | Path = "./RTStructs",
+    *,
+    root_dir: Optional[str | Path] = None,
+    device: str = "mps",
+    parallel: bool = False,
+    max_workers: int = 2,
+    export_csv: bool = True,
+) -> Dict[str, Dict[str, Path]]:
+    """Run the complete workflow (segmentation + RT-STRUCT conversion).
+
+    Convenience function that runs both segmentation and RT-STRUCT conversion.
+    For more control, use run_segmentation_pipeline() and convert_masks_to_rtstruct()
+    separately.
+
+    Parameters
+    ----------
+    input_folders : List[str], optional
+        Explicit list of CT DICOM series folders (overrides discovery if given).
+    base_output_dir : str | Path, optional
+        Base directory where TotalSegmentator results are written, by default '.'.
+    rtstruct_output_dir : str | Path, optional
+        Directory where RT-STRUCT files will be saved, by default './RTStructs'.
+    root_dir : str | Path, optional
+        Root folder to discover CT series (if input_folders is None).
+    device : str, optional
+        'mps' (Apple), 'cuda', or 'cpu', by default "mps".
+    parallel : bool, optional
+        If True, run segmentation in parallel, by default False.
+    max_workers : int, optional
+        Number of workers for parallel processing, by default 2.
+    export_csv : bool, optional
+        If True, writes all_rois.csv in rtstruct_output_dir (recursive), by default True.
+
+    Returns
+    -------
+    Dict[str, Dict[str, Path]]
+        Mapping {patient_id -> {timepoint -> rtstruct_path}}.
+    """
+    # Step 1-2: Run segmentation
+    result = run_segmentation_pipeline(
+        input_folders=input_folders,
+        base_output_dir=base_output_dir,
+        root_dir=root_dir,
+        device=device,
+        parallel=parallel,
+        max_workers=max_workers,
+    )
+
+    # Step 3-4: Convert to RT-STRUCT and export CSV
+    return convert_masks_to_rtstruct(
+        segmentation_base_dir=base_output_dir,
+        ct_series_paths=result["ct_paths"],
+        rtstruct_output_dir=rtstruct_output_dir,
+        config_path=None,  # Will auto-detect in cwd
+        export_csv=export_csv,
+    )
