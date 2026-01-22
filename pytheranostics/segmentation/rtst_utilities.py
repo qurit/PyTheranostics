@@ -1,6 +1,7 @@
 """Helpers for working with RT structure sets."""
 
 import csv
+import json
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -63,6 +64,109 @@ class RTStructConverter:
         # Add to RT-STRUCT
         self.rtstruct.add_roi(mask=mask_array, name=roi_name)
         print(f"Added ROI: {roi_name}")
+
+    def add_masks_from_folder_with_config(
+        self,
+        nifti_folder: str,
+        config_path: str,
+        permute_axes: bool = True,
+        flip_x: bool = True,
+    ):
+        """Add NIfTI masks using config for filtering, renaming, and combining.
+
+        Parameters
+        ----------
+        nifti_folder : str
+            Path to folder containing NIfTI masks.
+        config_path : str
+            Path to JSON config file with vois and combine rules.
+        permute_axes : bool, optional
+            Whether to swap X and Y axes, by default True.
+        flip_x : bool, optional
+            Whether to flip the X axis, by default True.
+        """
+        # Load config
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+        # Build include/rename maps from vois
+        voi_map = {}  # voi_name -> (include, new_name)
+        for voi in config.get("vois", []):
+            voi_name = voi.get("voi_name", "")
+            include = voi.get("include", False)
+            new_name = voi.get("new_name", None)
+            if voi_name:
+                voi_map[voi_name.lower()] = (include, new_name)
+
+        # Build combine rules
+        combine_rules = {}  # combined_voi_name -> [sources]
+        for rule in config.get("combine", []):
+            combined_name = rule.get("combined_voi_name", "")
+            sources = rule.get("sources", [])
+            if combined_name:
+                combine_rules[combined_name] = sources
+
+        nifti_folder = Path(nifti_folder)
+        added_masks = {}  # mask_name -> roi_name (for combining)
+
+        # Add individual masks (filtered and renamed)
+        for fname in sorted(os.listdir(nifti_folder)):
+            if fname.endswith(".nii") or fname.endswith(".nii.gz"):
+                stem = fname.replace(".nii.gz", "").replace(".nii", "")
+                stem_lower = stem.lower()
+
+                # Check if included in config
+                if stem_lower in voi_map:
+                    include, new_name = voi_map[stem_lower]
+                    if not include:
+                        print(f"Skipped (include=False): {stem}")
+                        continue
+                    roi_name = new_name if new_name else stem
+                else:
+                    # Not in config, skip it
+                    print(f"Skipped (not in config): {stem}")
+                    continue
+
+                mask_path = nifti_folder / fname
+                self.add_mask_from_nifti(
+                    str(mask_path),
+                    roi_name=roi_name,
+                    permute_axes=permute_axes,
+                    flip_x=flip_x,
+                )
+                added_masks[stem_lower] = roi_name
+
+        # Handle combining
+        for combined_name, source_list in combine_rules.items():
+            # Check if all sources are present
+            missing = [s for s in source_list if s.lower() not in added_masks]
+            if missing:
+                print(f"Skipped combined ROI '{combined_name}': missing {missing}")
+                continue
+
+            # Load and combine masks
+            combined_mask = None
+            for source in source_list:
+                mask_file = None
+                for fname in os.listdir(nifti_folder):
+                    if fname.replace(".nii.gz", "").replace(".nii", "") == source:
+                        mask_file = nifti_folder / fname
+                        break
+                if mask_file:
+                    mask_nii = nib.load(str(mask_file))
+                    mask_array = mask_nii.get_fdata().astype(bool)
+                    if permute_axes:
+                        mask_array = mask_array.transpose(1, 0, 2)
+                    if flip_x:
+                        mask_array = mask_array[::-1, :, :]
+                    if combined_mask is None:
+                        combined_mask = mask_array
+                    else:
+                        combined_mask = combined_mask | mask_array
+
+            if combined_mask is not None:
+                self.rtstruct.add_roi(mask=combined_mask, name=combined_name)
+                print(f"Added combined ROI: {combined_name} (from {source_list})")
 
     def add_masks_from_folder(
         self, nifti_folder: str, permute_axes: bool = True, flip_x: bool = True
