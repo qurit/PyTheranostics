@@ -100,11 +100,14 @@ class RTStructConverter:
 
         # Build combine rules
         combine_rules = {}  # combined_voi_name -> [sources]
+        sources_to_combine = set()  # Track which sources are part of combine rules
         for rule in config.get("combine", []):
             combined_name = rule.get("combined_voi_name", "")
             sources = rule.get("sources", [])
             if combined_name:
                 combine_rules[combined_name] = sources
+                # Add all sources to the set (case-insensitive)
+                sources_to_combine.update([s.lower() for s in sources])
 
         nifti_folder = Path(nifti_folder)
         added_masks = {}  # mask_name -> roi_name (for combining)
@@ -114,6 +117,12 @@ class RTStructConverter:
             if fname.endswith(".nii") or fname.endswith(".nii.gz"):
                 stem = fname.replace(".nii.gz", "").replace(".nii", "")
                 stem_lower = stem.lower()
+
+                # Skip if this will be part of a combined ROI
+                if stem_lower in sources_to_combine:
+                    print(f"Reserved for combining: {stem}")
+                    added_masks[stem_lower] = stem  # Track it but don't add as ROI
+                    continue
 
                 # Check if included in config
                 if stem_lower in voi_map:
@@ -148,8 +157,10 @@ class RTStructConverter:
             combined_mask = None
             for source in source_list:
                 mask_file = None
+                source_lower = source.lower()
                 for fname in os.listdir(nifti_folder):
-                    if fname.replace(".nii.gz", "").replace(".nii", "") == source:
+                    stem = fname.replace(".nii.gz", "").replace(".nii", "")
+                    if stem.lower() == source_lower:
                         mask_file = nifti_folder / fname
                         break
                 if mask_file:
@@ -166,7 +177,9 @@ class RTStructConverter:
 
             if combined_mask is not None:
                 self.rtstruct.add_roi(mask=combined_mask, name=combined_name)
-                print(f"Added combined ROI: {combined_name} (from {source_list})")
+                print(
+                    f"Added combined ROI: {combined_name} (from {len(source_list)} sources)"
+                )
 
     def add_masks_from_folder(
         self, nifti_folder: str, permute_axes: bool = True, flip_x: bool = True
