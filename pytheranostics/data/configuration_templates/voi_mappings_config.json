@@ -1,0 +1,11 @@
+{
+  "_instructions": "Map VOI names between different naming conventions.",
+
+  "ct_mappings": {
+    "organ_name_in_ct": "standardized_name"
+  },
+
+  "spect_mappings": {
+    "organ_name_in_spect": "standardized_name"
+  }
+}
