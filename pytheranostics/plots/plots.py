@@ -149,20 +149,61 @@ def plot_tac_residuals(
     return None
 
 
-def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000, label=None):
+def plot_MIP_with_mask_outlines(
+    SPECT,
+    masks=None,
+    vmax=300000,
+    label=None,
+    save_path=None,
+    dpi=300,
+    ax=None,
+    figsize=None,
+):
     """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
 
     Parameters
     ----------
-    ax : _type_
-        _description_
-    SPECT : _type_
-        _description_
-    masks : _type_, optional
-        _description_, by default None
+    SPECT : numpy.ndarray
+        3D SPECT data array.
+    masks : dict, optional
+        Dictionary of masks with organ names as keys and 3D arrays as values.
+        By default None.
     vmax : int, optional
-        _description_, by default 300000
+        Maximum value for display intensity. By default 300000.
+    label : bool, optional
+        Whether to add text labels at mask centers. By default None.
+    save_path : str or Path, optional
+        Path to save the figure. If provided, the parent directory will be created
+        if it doesn't exist. By default None (no saving).
+    dpi : int, optional
+        Resolution for saved figure in dots per inch. By default 300.
+    ax : matplotlib.axes.Axes, optional
+        Matplotlib axes object to plot on. If None, creates a new figure and axes.
+        By default None.
+    figsize : tuple, optional
+        Figure size (width, height) in inches when creating a new figure.
+        If None, automatically calculates based on data limits. By default None.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes object containing the plot.
     """
+    # Create figure and axes if not provided
+    if ax is None:
+        # Auto-calculate figsize based on the data limits to minimize white space
+        if figsize is None:
+            # Data limits that will be applied later
+            xlim_range = 100 - 30  # 70 units
+            ylim_range = 234 - 0  # 234 units
+            # Calculate aspect ratio and create appropriately sized figure
+            aspect = ylim_range / xlim_range  # ~3.34
+            width = 4  # Base width in inches
+            height = width * aspect
+            figsize = (width, height)
+
+        fig, ax = plt.subplots(figsize=figsize)
+
     plt.sca(ax)
     spect_mip = SPECT.max(axis=0)
     plt.imshow(spect_mip.T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0)
@@ -222,3 +263,12 @@ def plot_MIP_with_mask_outlines(ax, SPECT, masks=None, vmax=300000, label=None):
     plt.axis("off")
     plt.xticks([])
     plt.yticks([])
+
+    # Save figure if path is provided
+    if save_path is not None:
+        save_path = Path(save_path)
+        # Create parent directory if it doesn't exist
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+
+    return ax
