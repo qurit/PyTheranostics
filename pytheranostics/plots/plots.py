@@ -158,6 +158,7 @@ def plot_MIP_with_mask_outlines(
     dpi=300,
     ax=None,
     figsize=None,
+    spacing=None,
 ):
     """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
 
@@ -182,36 +183,85 @@ def plot_MIP_with_mask_outlines(
         By default None.
     figsize : tuple, optional
         Figure size (width, height) in inches when creating a new figure.
-        If None, automatically calculates based on data limits. By default None.
+        If None, automatically calculates based on physical dimensions. By default None.
+    spacing : tuple, optional
+        Pixel spacing (x, y, z) in mm from DICOM. If provided, used to create
+        physically accurate aspect ratio. By default None.
 
     Returns
     -------
     matplotlib.axes.Axes
         The axes object containing the plot.
     """
+    plt.sca(ax) if ax is not None else None
+    spect_mip = SPECT.max(axis=0)
+
+    # Calculate aspect ratio for proper physical scaling
+    if spacing is not None:
+        # spacing is (x, y, z) in mm
+        # For proper aspect ratio: aspect = dy/dx
+        data_aspect = spacing[1] / spacing[0]  # y-spacing / x-spacing
+    else:
+        data_aspect = 1.0
+
+    # Automatically determine bounds based on data content
+    # Use a threshold to find where there's actual signal
+    threshold = vmax * 0.01  # 1% of max display value
+    signal_mask = spect_mip.T > threshold
+
+    if signal_mask.any():
+        # Find bounding box of signal
+        rows, cols = numpy.where(signal_mask)
+        ylim_min, ylim_max = rows.min(), rows.max()
+        xlim_min, xlim_max = cols.min(), cols.max()
+
+        # Add small margin (5% on each side)
+        margin_x = int((xlim_max - xlim_min) * 0.05)
+        margin_y = int((ylim_max - ylim_min) * 0.05)
+
+        xlim_min = max(0, xlim_min - margin_x)
+        xlim_max = min(spect_mip.shape[1] - 1, xlim_max + margin_x)
+        ylim_min = max(0, ylim_min - margin_y)
+        ylim_max = min(spect_mip.shape[0] - 1, ylim_max + margin_y)
+    else:
+        # Fallback to full image if no signal detected
+        xlim_min, xlim_max = 0, spect_mip.shape[1] - 1
+        ylim_min, ylim_max = 0, spect_mip.shape[0] - 1
+
     # Create figure and axes if not provided
     if ax is None:
-        # Auto-calculate figsize based on the data limits to minimize white space
         if figsize is None:
-            # Data limits that will be applied later
-            xlim_range = 100 - 30  # 70 units
-            ylim_range = 234 - 0  # 234 units
-            # Calculate aspect ratio and create appropriately sized figure
-            aspect = ylim_range / xlim_range  # ~3.34
-            width = 4  # Base width in inches
-            height = width * aspect
-            figsize = (width, height)
+            if spacing is not None:
+                # Physical dimensions of ROI in mm
+                roi_width_mm = (xlim_max - xlim_min) * spacing[0]
+                roi_height_mm = (ylim_max - ylim_min) * spacing[1]
+
+                # Create compact figure matching ROI aspect ratio
+                base_width = 3  # inches - smaller base
+                figsize = (base_width, base_width * roi_height_mm / roi_width_mm)
+            else:
+                # Fallback to pixel-based calculation
+                xlim_range = xlim_max - xlim_min
+                ylim_range = ylim_max - ylim_min
+                aspect_ratio = ylim_range / xlim_range
+                base_width = 3
+                figsize = (base_width, base_width * aspect_ratio)
 
         fig, ax = plt.subplots(figsize=figsize)
+        plt.sca(ax)
 
-    plt.sca(ax)
-    spect_mip = SPECT.max(axis=0)
-    plt.imshow(spect_mip.T, cmap="Greys", interpolation="Gaussian", vmax=vmax, vmin=0)
+    plt.imshow(
+        spect_mip.T,
+        cmap="Greys",
+        interpolation="Gaussian",
+        vmax=vmax,
+        vmin=0,
+        aspect=data_aspect,
+    )
 
     if masks is not None:
         for organ, mask in masks.items():
             organ_lower = organ.lower()
-            print(organ_lower)
             if "peak" in organ_lower:
                 continue
             else:
@@ -258,8 +308,8 @@ def plot_MIP_with_mask_outlines(
                         alpha=0.7,
                     )
 
-    plt.xlim(30, 100)
-    plt.ylim(0, 234)
+    plt.xlim(xlim_min, xlim_max)
+    plt.ylim(ylim_min, ylim_max)
     plt.axis("off")
     plt.xticks([])
     plt.yticks([])
@@ -269,6 +319,6 @@ def plot_MIP_with_mask_outlines(
         save_path = Path(save_path)
         # Create parent directory if it doesn't exist
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight", pad_inches=0)
 
     return ax
