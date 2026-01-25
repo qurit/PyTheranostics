@@ -105,14 +105,16 @@ Use ``summarize_timepoints()`` to inspect detected series before organizing:
     for patient_id, entries in summary.items():
         print(f"\n{patient_id}:")
         for entry in entries:
+            gap = entry['delta_hours']
+            gap_str = "N/A" if gap is None else f"{gap:.1f}h"
             print(f"  {entry['study_date']} - {entry['modality']} "
                   f"Series{entry['series_number']} at {entry['datetime']} "
-                  f"(gap: {entry['delta_hours']:.1f}h)")
+                  f"(gap: {gap_str})")
 
 Example output::
 
     PATIENT001:
-      20190409 - CT Series2 at 2019-04-09 11:34:57 (gap: None)
+      20190409 - CT Series2 at 2019-04-09 11:34:57 (gap: N/A)
       20190409 - NM Series5 at 2019-04-09 16:06:50 (gap: 4.5h)
       20190409 - CT Series2 at 2019-04-09 16:26:59 (gap: 0.3h)
       20190410 - CT Series2 at 2019-04-10 10:15:23 (gap: 17.8h)
