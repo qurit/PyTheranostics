@@ -28,22 +28,80 @@ class LongitudinalStudy:
     of interest and meta-data.
     """
 
-    _VALID_ORGAN_NAMES = [
-        "Kidney_Left",
-        "Kidney_Right",
-        "Liver",
-        "Spleen",
-        "Bladder",
-        "SubmandibularGland_Left",
-        "SubmandibularGland_Right",
-        "ParotidGland_Left",
-        "ParotidGland_Right",
-        "BoneMarrow",
-        "Skeleton",
-        "WholeBody",
-        "RemainderOfBody",
-        "TotalTumorBurden",
-    ]
+    # Cached valid organ names loaded from config
+    _VALID_ORGAN_NAMES = None
+
+    @classmethod
+    def _get_valid_organ_names(cls) -> List[str]:
+        """Get valid organ names from config file.
+
+        Searches for voi_mappings_config.json in order:
+        1. Current directory (project-specific config)
+        2. One level up (project root)
+        3. Package template (OLINDA-compatible defaults)
+
+        Returns
+        -------
+        List[str]
+            List of valid organ names.
+
+        Raises
+        ------
+        FileNotFoundError
+            If no config file can be found.
+        ValueError
+            If config file doesn't contain valid_organ_names.
+        """
+        if cls._VALID_ORGAN_NAMES is not None:
+            return cls._VALID_ORGAN_NAMES
+
+        # Try project-specific configs first
+        search_paths = [
+            Path.cwd() / "voi_mappings_config.json",
+            Path.cwd().parent / "voi_mappings_config.json",
+        ]
+
+        for config_path in search_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, "r") as f:
+                        config = json.load(f)
+                        if "valid_organ_names" in config:
+                            # Handle both old format (list) and new format (dict with names key)
+                            organ_names = config["valid_organ_names"]
+                            if isinstance(organ_names, dict):
+                                cls._VALID_ORGAN_NAMES = organ_names.get("names", [])
+                            else:
+                                cls._VALID_ORGAN_NAMES = organ_names
+                            return cls._VALID_ORGAN_NAMES
+                except Exception:
+                    continue
+
+        # Load from package template (OLINDA defaults)
+        try:
+            import importlib.resources as pkg_resources
+
+            template_path = pkg_resources.files("pytheranostics.data").joinpath(
+                "configuration_templates/voi_mappings_config.json"
+            )
+            with open(template_path, "r") as f:
+                config = json.load(f)
+                if "valid_organ_names" in config:
+                    organ_names = config["valid_organ_names"]
+                    if isinstance(organ_names, dict):
+                        cls._VALID_ORGAN_NAMES = organ_names.get("names", [])
+                    else:
+                        cls._VALID_ORGAN_NAMES = organ_names
+                    return cls._VALID_ORGAN_NAMES
+        except Exception as e:
+            raise FileNotFoundError(
+                "Could not load valid_organ_names from any config file. "
+                "Please ensure voi_mappings_config.json exists in your project or package."
+            ) from e
+
+        raise ValueError(
+            "Config file found but does not contain 'valid_organ_names' section."
+        )
 
     def __init__(
         self,
@@ -196,10 +254,11 @@ class LongitudinalStudy:
         """Check if a mask name is valid.
 
         Valid names are either:
-        - Standard organ names from _VALID_ORGAN_NAMES
+        - Standard organ names from config or default list
         - Lesion names in format 'Lesion_N' where N is a positive integer
         """
-        if mask_name in LongitudinalStudy._VALID_ORGAN_NAMES:
+        valid_names = LongitudinalStudy._get_valid_organ_names()
+        if mask_name in valid_names:
             return True
         lesion_pattern = r"^Lesion_([1-9]\d*)$"
         return bool(re.match(lesion_pattern, mask_name))
