@@ -79,7 +79,7 @@ def organize_folder_by_cycles(
     timepoint_separation_days: float = 1,
     move: bool = True,
     patient_id_filter: Optional[List[str]] = None,
-) -> Dict[str, Dict[str, List[Path]]]:
+) -> Dict[str, Dict[str, Dict[str, List[Path]]]]:
     """Organize a folder of DICOM files into Patient/Cycle/Timepoint structure.
 
     This scans ``storage_root`` recursively for ``*.dcm`` files, groups them by
