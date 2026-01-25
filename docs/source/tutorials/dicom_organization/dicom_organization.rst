@@ -84,7 +84,7 @@ For protocols with multiple scans on the same day (e.g., morning CT and afternoo
         timepoint_separation_days=0.2  # 0.2 days ≈ 4.8 hours
     )
 
-This uses ``AcquisitionDateTime`` from DICOM tags (or file modification time as fallback) to split same-day scans into separate timepoints.
+This uses DICOM acquisition date/time tags (e.g., ``AcquisitionDate``/``AcquisitionTime``, or related series/content/study date/time tags) with file modification time as a fallback to split same-day scans into separate timepoints.
 
 Debugging and Inspection
 -------------------------
