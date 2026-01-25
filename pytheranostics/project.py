@@ -90,6 +90,7 @@ def init_project(
     available_templates = {
         "total_seg_config.json": "TotalSegmentator ROI filtering/renaming/combining",
         "voi_mappings_config.json": "VOI name mappings for CT/SPECT analysis",
+        "dosimetry_fit_defaults.json": "Dosimetry fit parameters for organs and lesions",
     }
 
     if templates is None:
@@ -176,6 +177,13 @@ Map VOI names between different naming conventions:
 - `ct_mappings`: Morphology-based names (e.g., "Kidney_L_m")
 - `spect_mappings`: Activity-based names (e.g., "Kidney_L_a")
 
+### dosimetry_fit_defaults.json
+Configure default fit parameters for dosimetry calculations:
+- `organ_defaults`: Parameters applied to all organs
+- `organs`: Override specific organ kinetics (e.g., BoneMarrow)
+- `lesion_defaults`: Parameters for auto-discovered lesions
+- `lesions.pattern`: Regex pattern for lesion ROI names
+
 ## Getting Started
 
 ```python
@@ -256,6 +264,7 @@ def list_templates() -> dict:
     return {
         "total_seg_config.json": "TotalSegmentator ROI filtering/renaming/combining",
         "voi_mappings_config.json": "VOI name mappings for CT/SPECT analysis",
+        "dosimetry_fit_defaults.json": "Dosimetry fit parameters for organs and lesions",
     }
 
 
