@@ -1,6 +1,7 @@
 """Module for longitudinal medical imaging studies."""
 
 import json
+import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,6 +20,8 @@ from pytheranostics.imaging_tools.tools import (
     resample_mask_to_target,
 )
 from pytheranostics.registration.phantom_to_ct import PhantomToCTBoneReg
+
+logger = logging.getLogger(__name__)
 
 
 class LongitudinalStudy:
@@ -205,12 +208,16 @@ class LongitudinalStudy:
 
         if parallel and len(dicom_dirs) > 1:
             # Parallel loading for multiple timepoints
-            print(f"Loading {len(dicom_dirs)} {modality} timepoints in parallel...")
+            logger.info(
+                f"Loading {len(dicom_dirs)} {modality} timepoints in parallel..."
+            )
 
             # Helper function for parallel execution
             def load_single_timepoint(args):
                 time_id, dicom_dir = args
-                print(f"  Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                logger.debug(
+                    f"  Loading timepoint {time_id} from {Path(dicom_dir).name}..."
+                )
                 return time_id, load_from_dicom_dir(
                     dir=dicom_dir,
                     modality=modality,
@@ -230,11 +237,13 @@ class LongitudinalStudy:
                     time_id, (image, meta) = future.result()
                     images[time_id] = image
                     metadata[time_id] = meta
-                    print(f"  ✓ Timepoint {time_id} loaded")
+                    logger.debug(f"  ✓ Timepoint {time_id} loaded")
         else:
             # Sequential loading
             for time_id, dicom_dir in enumerate(dicom_dirs):
-                print(f"Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                logger.info(
+                    f"Loading timepoint {time_id} from {Path(dicom_dir).name}..."
+                )
                 image, meta = load_from_dicom_dir(
                     dir=dicom_dir,
                     modality=modality,
@@ -691,8 +700,8 @@ class LongitudinalStudy:
                 )
 
             if mask_target in self.masks[time_id]:
-                print(
-                    f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!"
+                logger.warning(
+                    f"{mask_target} found at Time = {time_id}. It will be over-written!"
                 )
 
             # Masks are in the right orientation and spacing, however there could be discrepancies
@@ -756,8 +765,8 @@ class LongitudinalStudy:
                 SimpleITK.GetArrayFromImage(mask_itk), axes=(1, 2, 0)
             )
             if mask_name in self.masks[time_id]:
-                print(
-                    f"Warning: {mask_name} found at Time = {time_id}. It will be over-written!"
+                logger.warning(
+                    f"{mask_name} found at Time = {time_id}. It will be over-written!"
                 )
             self.masks[time_id][mask_name] = mask_array.astype(numpy.bool_)
 
@@ -865,7 +874,7 @@ class LongitudinalStudy:
             phantom_skeleton_path (Path): Path to phantom Skeleton .nii file.
             phantom_bone_marrow_path (Path): Path to phantom Bone Marrow .nii file.
         """
-        print(
+        logger.info(
             "Running Personalized Bone Marrow generation from XCAT Phantom. This feature is unstable. Please review the generated BoneMarrow masks."
         )
 
@@ -882,11 +891,11 @@ class LongitudinalStudy:
         best_index = {time_id: 0 for time_id in self.images.keys()}
 
         for i in range(num_iterations):
-            print(f"Registration :: Iteration {i+1}")
+            logger.info(f"Registration :: Iteration {i+1}")
             # Loop through each time point:
             for time_id, ct in self.images.items():
                 # Register Skeleton
-                print(
+                logger.debug(
                     f" >> Registering Phantom Skeleton to CT at time point {time_id} ..."
                 )
                 RegManager = PhantomToCTBoneReg(
@@ -921,14 +930,14 @@ class LongitudinalStudy:
                     best_index[time_id] = jaccard
 
                 # Calculate Index
-                print(
+                logger.debug(
                     f" >>> Jaccard Index between Skeleton and Segmented Bone Marrow: {jaccard: 1.2f}"
                 )
 
         # Final Results:
-        print(" >>> Final Jaccard Indices:")
+        logger.info(" >>> Final Jaccard Indices:")
         for time_id in self.masks.keys():
-            print(f" >>> Time point {time_id}: {best_index[time_id]}")
+            logger.info(f" >>> Time point {time_id}: {best_index[time_id]}")
 
         return None
 
@@ -960,7 +969,7 @@ class LongitudinalStudy:
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
-        print(f"Writing Image ({name}) into nifty file.")
+        logger.info(f"Writing Image ({name}) into nifty file.")
         SimpleITK.WriteImage(
             image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32),
             fileName=out_path / f"Image_{time_id}{name}.nii.gz",
@@ -977,7 +986,7 @@ class LongitudinalStudy:
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
-        print(f"Writing Image ({name}) into mhd file.")
+        logger.info(f"Writing Image ({name}) into mhd file.")
         SimpleITK.WriteImage(
             image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32),
             fileName=os.path.join(out_path, f"{name}.mhd"),
@@ -1015,7 +1024,7 @@ class LongitudinalStudy:
             ref_image=self.images[time_id],
         )
 
-        print(f"Writing Masks ({mask_names}) into nifty file.")
+        logger.info(f"Writing Masks ({mask_names}) into nifty file.")
 
         SimpleITK.WriteImage(
             image=mask_image, fileName=out_path / f"Masks_{time_id}.nii.gz"

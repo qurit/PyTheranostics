@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
@@ -22,6 +23,8 @@ from pytheranostics.registration.ct_to_spect import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
 )
+
+logger = logging.getLogger(__name__)
 
 # TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
 # the code below)
@@ -91,22 +94,22 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
                         injected_activity > 20000
                     ):  # Activity likely in Bq instead of MBq
                         injected_activity /= 1e6
-                    print(
+                    logger.info(
                         f"Injected activity found in DICOM Header: {injected_activity:2.1f} MBq. Please verify."
                     )
                 except AttributeError:
                     # Sequence exists but RadionuclideTotalDose attribute is missing
-                    print(
+                    logger.warning(
                         "RadiopharmaceuticalInformationSequence found but RadionuclideTotalDose is missing."
                     )
             else:
                 # Sequence exists but is empty - this may indicate a data quality issue
-                print(
-                    "Warning: RadiopharmaceuticalInformationSequence is empty. This may indicate a data quality issue."
+                logger.warning(
+                    "RadiopharmaceuticalInformationSequence is empty. This may indicate a data quality issue."
                 )
 
         if injected_activity is None:
-            print("Using default injected activity: 7400 MBq")
+            logger.info("Using default injected activity: 7400 MBq")
             injected_activity = 7400.0
 
     # Global attributes. Should be the same in all slices!
@@ -394,7 +397,9 @@ def load_from_dicom_dir(
             )
 
         except AttributeError:
-            print("No calibration factor provided, Data might not be in BQ/ML ...")
+            logger.warning(
+                "No calibration factor provided, Data might not be in BQ/ML ..."
+            )
 
     # Load Meta Data using pydicom.
     meta = load_metadata(dir=dir, modality=modality)
@@ -403,7 +408,7 @@ def load_from_dicom_dir(
     image = force_orthogonality(image=image)
 
     # Display Origin and Orientation.
-    print(
+    logger.debug(
         f"Modality: {modality} -> Origin: {image.GetOrigin()}; Direction: {image.GetDirection()}"
     )
 
@@ -452,10 +457,12 @@ def force_orthogonality(image: SimpleITK.Image) -> SimpleITK.Image:
         Image with orthogonal orientation vectors.
     """
     if not are_vectors_orthogonal(image.GetDirection()):
-        print("Patient Orientation Vectors are NOT orthogonal. Forcing...")
+        logger.warning("Patient Orientation Vectors are NOT orthogonal. Forcing...")
         prev_origin = image.GetDirection()
         new_origin = [round(vec_element) for vec_element in prev_origin]
-        print(f">> Original Orientation: {prev_origin}, New Orientation: {new_origin} ")
+        logger.debug(
+            f">> Original Orientation: {prev_origin}, New Orientation: {new_origin} "
+        )
         image.SetDirection(new_origin)
     else:
         prev_origin = image.GetDirection()
@@ -586,7 +593,7 @@ def load_and_resample_RT_to_target(
     resampled_masks: Dict[str, SimpleITK.Image] = {}
 
     for mask_name, mask_image in ref_masks.items():
-        print(f"Resampling Masks: {mask_name} ...")
+        logger.debug(f"Resampling Masks: {mask_name} ...")
         resampled_masks[mask_name] = resample_mask_to_target(
             mask_img=mask_image, target_img=target_img
         )
@@ -627,7 +634,7 @@ def load_and_register_RT_to_target(
     resampled_masks: Dict[str, SimpleITK.Image] = {}
 
     for mask_name, mask_image in ref_masks.items():
-        print(f"Registering Masks: {mask_name} ...")
+        logger.debug(f"Registering Masks: {mask_name} ...")
         resampled_masks[mask_name] = transform_ct_mask_to_spect(
             mask=mask_image, spect=target_img, transform=transform
         )
