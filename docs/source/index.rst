@@ -14,6 +14,7 @@ PyTheranostics is a comprehensive Python library for nuclear medicine image proc
 
    intro/overview
    intro/installation
+   intro/logging
    tutorials/getting_started/basic_usage
 
 .. toctree::
