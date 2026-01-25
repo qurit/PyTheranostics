@@ -103,8 +103,10 @@ class TestLongitudinalStudyInit:
         assert len(study.images) == 2
         assert len(study.meta) == 2
         assert len(study.masks) == 0
-        assert isinstance(study._VALID_ORGAN_NAMES, list)
-        assert "Liver" in study._VALID_ORGAN_NAMES
+        # Test that _get_valid_organ_names() returns a list and contains expected organs
+        valid_organs = LongitudinalStudy._get_valid_organ_names()
+        assert isinstance(valid_organs, list)
+        assert "Liver" in valid_organs
         assert LongitudinalStudy._is_valid_mask_name("Lesion_1")
 
     def test_init_mismatched_keys_raises_error(self):
