@@ -1,11 +1,46 @@
 """Plotting utilities for PyTheranostics workflows."""
 
+import json
 from pathlib import Path
 from typing import Optional
 
 import lmfit
 import matplotlib.pyplot as plt
 import numpy
+
+try:
+    from importlib.resources import files
+except ImportError:
+    from importlib_resources import files
+
+
+def _find_config_file(filename="voi_mappings_config.json", max_depth=2):
+    """Search upward from current directory for config file.
+
+    Searches current directory and one parent level only to avoid
+    finding unrelated configs from other projects.
+
+    Parameters
+    ----------
+    filename : str
+        Name of config file to find
+    max_depth : int
+        Maximum number of parent directories to search (default: 2)
+
+    Returns
+    -------
+    Path or None
+        Path to config file if found, None otherwise
+    """
+    current = Path.cwd()
+    for _ in range(max_depth):
+        config_path = current / filename
+        if config_path.exists():
+            return config_path
+        if current.parent == current:  # Reached filesystem root
+            break
+        current = current.parent
+    return None
 
 
 def ewin_montage(img: numpy.ndarray, ewin: dict) -> None:
@@ -159,6 +194,10 @@ def plot_MIP_with_mask_outlines(
     ax=None,
     figsize=None,
     spacing=None,
+    mask_colors=None,
+    config_path=None,
+    colorbar=False,
+    units=None,
 ):
     """Plot Maximum Intensity Projection (MIP) of SPECT data with masks outlines.
 
@@ -187,6 +226,25 @@ def plot_MIP_with_mask_outlines(
     spacing : tuple, optional
         Pixel spacing (x, y, z) in mm from DICOM. If provided, used to create
         physically accurate aspect ratio. By default None.
+    mask_colors : dict, optional
+        Dictionary mapping organ names (or keywords) to colors. If a mask name matches
+        a key (case-insensitive substring match), that color is used. If None, uses
+        default color mapping. Unmapped organs use matplotlib's color cycle.
+        Example: {"kidney": "lime", "liver": "yellow", "lesion": "red"}
+        By default None.
+    config_path : str or Path, optional
+        Path to voi_mappings_config.json file. If None, searches upward from current
+        directory (like git) to find the config in your project root. Falls back to
+        package template if not found.
+        Example: Path("./my_project/voi_mappings_config.json")
+        By default None.
+    colorbar : bool, optional
+        Whether to add a colorbar showing the intensity scale. By default False.
+    units : str, optional
+        Units from DICOM header (e.g., 'BQML', 'CNTS'). Can be extracted from
+        DICOM tag (0054,1001). If provided, automatically determines scaling and
+        colorbar label. Common values: 'BQML' (Bq/ml), 'CNTS' (counts).
+        By default None (assumes Bq and scales to MBq).
 
     Returns
     -------
@@ -250,31 +308,114 @@ def plot_MIP_with_mask_outlines(
         fig, ax = plt.subplots(figsize=figsize)
         plt.sca(ax)
 
-    plt.imshow(
-        spect_mip.T,
+    # Determine scaling and label based on units
+    if units is not None:
+        units_upper = units.upper()
+        if units_upper in ["BQML", "BQ/ML"]:
+            scale_factor = 1e6
+            colorbar_label = "MBq/ml"
+        elif units_upper in ["BQ", "BECQUEREL"]:
+            scale_factor = 1e6
+            colorbar_label = "MBq"
+        elif units_upper in ["CNTS", "COUNTS"]:
+            scale_factor = 1.0
+            colorbar_label = "Counts"
+        else:
+            # Unknown units, no scaling
+            scale_factor = 1.0
+            colorbar_label = units
+    else:
+        # Default: assume Bq and convert to MBq
+        scale_factor = 1e6
+        colorbar_label = "MBq"
+
+    # Apply scaling
+    spect_mip_scaled = spect_mip / scale_factor
+    vmax_scaled = vmax / scale_factor
+
+    im = plt.imshow(
+        spect_mip_scaled.T,
         cmap="Greys",
         interpolation="Gaussian",
-        vmax=vmax,
+        vmax=vmax_scaled,
         vmin=0,
         aspect=data_aspect,
     )
 
+    # Add colorbar if requested
+    if colorbar:
+        plt.colorbar(im, ax=ax, label=colorbar_label)
+
+    # Hardcoded fallback defaults (only used if config file is missing)
+    fallback_defaults = {
+        "kidney": "lime",
+        "parotid": "red",
+        "submandibular": "red",
+        "lesion": "magenta",
+        "liver": "yellow",
+        "spleen": "cyan",
+        "tumor": "magenta",
+    }
+
+    # Determine color mapping: parameter > config file > fallback defaults
+    if mask_colors is not None:
+        # Explicit override via parameter
+        color_map = mask_colors
+    else:
+        # Try to load from configuration file
+        try:
+            if config_path is not None:
+                # User-provided config path
+                config_file = Path(config_path)
+            else:
+                # Search for config in project directory (upward search)
+                config_file = _find_config_file("voi_mappings_config.json")
+
+                if config_file is None:
+                    # Not found in project, use package template
+                    config_file = files(
+                        "pytheranostics.data.configuration_templates"
+                    ).joinpath("voi_mappings_config.json")
+
+            with config_file.open("r") as f:
+                config = json.load(f)
+                if "plot_colors" in config:
+                    # Use plot_colors from config (even if empty - will trigger color cycle)
+                    color_map = {
+                        k: v
+                        for k, v in config["plot_colors"].items()
+                        if not k.startswith("_")
+                    }
+                else:
+                    # plot_colors key missing, use fallback
+                    color_map = fallback_defaults
+        except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            # Config file missing or invalid, use fallback defaults
+            color_map = fallback_defaults
+
+    # Color cycle for unmapped organs
+    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    color_index = 0
+
     if masks is not None:
         for organ, mask in masks.items():
             organ_lower = organ.lower()
+
+            # Skip organs with 'peak' in the name (background/noise)
             if "peak" in organ_lower:
                 continue
-            else:
-                if "kidney" in organ_lower:
-                    color = "lime"
-                elif "parotid" in organ_lower:
-                    color = "red"
-                elif "submandibular" in organ_lower:
-                    color = "red"
-                elif "lesion" in organ_lower:
-                    color = "m"
-                else:
-                    continue
+
+            # Find matching color from color_map (keyword match)
+            color = None
+            for keyword, keyword_color in color_map.items():
+                if keyword.lower() in organ_lower:
+                    color = keyword_color
+                    break
+
+            # If no match found, use color cycle
+            if color is None:
+                color = color_cycle[color_index % len(color_cycle)]
+                color_index += 1
 
             mip_mask = mask.max(axis=0)
             if mip_mask.shape != spect_mip.shape:
