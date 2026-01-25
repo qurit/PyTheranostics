@@ -222,7 +222,7 @@ def organize_folder_by_cycles(
                 subgroups.append(current_group)
 
             # Create a series_entry per subgroup
-            for sg_idx, sg_files in enumerate(subgroups):
+            for _, sg_files in enumerate(subgroups):
                 sg_dts = [fdt for f, fdt in file_dts if f in sg_files]
                 sg_rep_dt = min(sg_dts) if sg_dts else rep_dt
                 series_entries.append(
