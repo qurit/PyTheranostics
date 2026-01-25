@@ -139,7 +139,7 @@ Parameters Reference
 :move: If ``True``, move files; if ``False``, copy files (default: ``True``)
 :patient_id_filter: List of PatientIDs to process; if ``None``, process all (default: ``None``)
 
-Returns a nested dictionary: ``{PatientID: {"CycleX": {"tpY": [Path, ...]}}}}``
+Returns a nested dictionary: ``{PatientID: {"CycleX": {"tpY": [Path, ...]}}}``
 
 ``summarize_timepoints()``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
