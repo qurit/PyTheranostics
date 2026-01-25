@@ -1,5 +1,5 @@
 {
-  "_instructions": "Map VOI names between different naming conventions.",
+  "_instructions": "Map VOI names between different naming conventions and configure visualization colors. Edit this file to customize organ name mappings and plot appearance.",
 
   "ct_mappings": {
     "organ_name_in_ct": "standardized_name"
@@ -7,5 +7,9 @@
 
   "spect_mappings": {
     "organ_name_in_spect": "standardized_name"
+  },
+
+  "plot_colors": {
+    "_description": "Configure colors for organ contours in MIP plots. Add entries with organ names or keywords as keys (case-insensitive substring matching) and matplotlib color names or hex codes as values. Leave empty {} to use matplotlib's default color cycle. Example: 'kidney': 'lime', 'liver': '#FFD700', 'tumor': 'red'"
   }
 }
