@@ -7,6 +7,7 @@ from the folder structure produced by the DICOM receiver or manual organization.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -224,26 +225,69 @@ def prepare_cycle_inputs(
 # --- New high-level orchestration API ---------------------------------------------------------
 
 
+def _get_canonical_mappings() -> Dict[str, str]:
+    """Load canonical name mappings from config file.
+
+    Searches for voi_mappings_config.json in order:
+    1. Current directory (project-specific)
+    2. One level up (project root)
+    3. Package template (defaults)
+
+    Returns
+    -------
+    Dict[str, str]
+        Mapping of abbreviated/common names to canonical names.
+        Returns empty dict if no config found.
+    """
+    search_paths = [
+        Path.cwd() / "voi_mappings_config.json",
+        Path.cwd().parent / "voi_mappings_config.json",
+    ]
+
+    for config_path in search_paths:
+        if config_path.exists():
+            try:
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    if "canonical_mappings" in config:
+                        canon_config = config["canonical_mappings"]
+                        if isinstance(canon_config, dict):
+                            return canon_config.get("mappings", {})
+            except Exception:
+                continue
+
+    # Try package template
+    try:
+        import importlib.resources as pkg_resources
+
+        template_path = pkg_resources.files("pytheranostics.data").joinpath(
+            "configuration_templates/voi_mappings_config.json"
+        )
+        with open(template_path, "r") as f:
+            config = json.load(f)
+            if "canonical_mappings" in config:
+                canon_config = config["canonical_mappings"]
+                if isinstance(canon_config, dict):
+                    return canon_config.get("mappings", {})
+    except Exception:
+        pass
+
+    return {}
+
+
 def _canonical_mask_name(name: str) -> str:
-    """Map RTSTRUCT ROI names to canonical pyTheranostics mask names.
+    """Apply canonical name mappings from config.
 
     Best-effort normalization used for auto mapping. Keeps unknown names as-is.
+    Mappings are loaded from voi_mappings_config.json.
     """
     # Strip modality suffixes often used in notebooks (e.g., _m for CT-based, _a for activity)
     base = name
     if base.endswith("_m") or base.endswith("_a"):
         base = base[:-2]
 
-    # Common synonyms/abbreviations
-    replacements = {
-        "Kidney_L": "Kidney_Left",
-        "Kidney_R": "Kidney_Right",
-        "Parotid_L": "ParotidGland_Left",
-        "Parotid_R": "ParotidGland_Right",
-        "Submandibular_L": "SubmandibularGland_Left",
-        "Submandibular_R": "SubmandibularGland_Right",
-        "WBCT": "WholeBody",
-    }
+    # Load canonical mappings from config
+    replacements = _get_canonical_mappings()
     return replacements.get(base, base)
 
 
@@ -389,7 +433,7 @@ def create_studies_with_masks(
         apply_spect_mapping = (final_spect_mapping is not None) or auto_map
 
         def _is_valid_target(name: str) -> bool:
-            if name in LongitudinalStudy._VALID_ORGAN_NAMES:
+            if name in LongitudinalStudy._get_valid_organ_names():
                 return True
             return re.match(r"^Lesion_([1-9]\d*)$", name) is not None
 
