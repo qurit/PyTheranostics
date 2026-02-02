@@ -79,7 +79,7 @@ def organize_folder_by_cycles(
     timepoint_separation_days: float = 1,
     move: bool = True,
     patient_id_filter: Optional[List[str]] = None,
-) -> Dict[str, Dict[str, List[Path]]]:
+) -> Dict[str, Dict[str, Dict[str, List[Path]]]]:
     """Organize a folder of DICOM files into Patient/Cycle/Timepoint structure.
 
     This scans ``storage_root`` recursively for ``*.dcm`` files, groups them by
@@ -222,7 +222,7 @@ def organize_folder_by_cycles(
                 subgroups.append(current_group)
 
             # Create a series_entry per subgroup
-            for sg_idx, sg_files in enumerate(subgroups):
+            for _, sg_files in enumerate(subgroups):
                 sg_dts = [fdt for f, fdt in file_dts if f in sg_files]
                 sg_rep_dt = min(sg_dts) if sg_dts else rep_dt
                 series_entries.append(
@@ -311,13 +311,21 @@ def organize_folder_by_cycles(
                     if src_dir.exists() and not any(src_dir.iterdir()):
                         src_dir.rmdir()
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to remove source directory %s during cleanup",
+                        src_dir,
+                        exc_info=True,
+                    )
                 try:
                     parent1 = src_dir.parent
                     if parent1.exists() and not any(parent1.iterdir()):
                         parent1.rmdir()
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to remove parent directory %s during cleanup",
+                        parent1,
+                        exc_info=True,
+                    )
 
     return results
 
