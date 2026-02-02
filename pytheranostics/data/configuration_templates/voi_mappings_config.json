@@ -1,5 +1,38 @@
 {
-  "_instructions": "Map VOI names between different naming conventions and configure visualization colors. Edit this file to customize organ name mappings and plot appearance.",
+  "_instructions": "Configure VOI/organ naming conventions, mappings, and visualization settings.",
+
+  "valid_organ_names": {
+    "_description": "List of valid organ/VOI names for validation. These default names are compatible with OLINDA dosimetry calculations. Users can add custom organs as needed for their workflows.",
+    "names": [
+      "Kidney_Left",
+      "Kidney_Right",
+      "Liver",
+      "Spleen",
+      "Bladder",
+      "SubmandibularGland_Left",
+      "SubmandibularGland_Right",
+      "ParotidGland_Left",
+      "ParotidGland_Right",
+      "BoneMarrow",
+      "Skeleton",
+      "WholeBody",
+      "RemainderOfBody",
+      "TotalTumorBurden"
+    ]
+  },
+
+  "canonical_mappings": {
+    "_description": "Best-effort ROI name normalization for auto_map mode. Maps abbreviated/common names to canonical organ names. Used when auto_map=True is set in create_studies_with_masks.",
+    "mappings": {
+      "Kidney_L": "Kidney_Left",
+      "Kidney_R": "Kidney_Right",
+      "Parotid_L": "ParotidGland_Left",
+      "Parotid_R": "ParotidGland_Right",
+      "Submandibular_L": "SubmandibularGland_Left",
+      "Submandibular_R": "SubmandibularGland_Right",
+      "WBCT": "WholeBody"
+    }
+  },
 
   "ct_mappings": {
     "organ_name_in_ct": "standardized_name"
@@ -10,6 +43,13 @@
   },
 
   "plot_colors": {
-    "_description": "Configure colors for organ contours in MIP plots. Add entries with organ names or keywords as keys (case-insensitive substring matching) and matplotlib color names or hex codes as values. Leave empty {} to use matplotlib's default color cycle. Example: 'kidney': 'lime', 'liver': '#FFD700', 'tumor': 'red'"
+    "_description": "Color mapping for organ contours in MIP plots. Keys can be organ names or keywords (case-insensitive substring match). Any matplotlib color name or hex code is valid.",
+    "kidney": "lime",
+    "parotid": "red",
+    "submandibular": "red",
+    "lesion": "magenta",
+    "liver": "yellow",
+    "spleen": "cyan",
+    "tumor": "magenta"
   }
 }

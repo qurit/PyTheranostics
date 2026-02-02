@@ -7,8 +7,11 @@ without bloating notebook output.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def _split_modalities(
@@ -76,14 +79,14 @@ def summarize_used_mappings(
             unmapped_ct_n = len(parts.get("unmapped_ct", []))
             unmapped_sp_n = len(parts.get("unmapped_spect", []))
             msg += f" | Unmapped: CT {unmapped_ct_n}, SPECT {unmapped_sp_n}"
-        print(msg)
+        logger.info(msg)
 
         if verbose:
 
             def _print_pairs(label: str, pairs: Iterable[Tuple[str, str]]) -> None:
                 shown = 0
                 for k, v in pairs:
-                    print(f"  {label}: {k} -> {v}")
+                    logger.info(f"  {label}: {k} -> {v}")
                     shown += 1
                     if shown >= sample_limit:
                         break
@@ -95,10 +98,10 @@ def summarize_used_mappings(
         if include_unmapped:
             if parts.get("unmapped_ct"):
                 sample_ct = parts["unmapped_ct"][:sample_limit]
-                print(f"  Unmapped CT (identity): {sample_ct}")
+                logger.info(f"  Unmapped CT (identity): {sample_ct}")
             if parts.get("unmapped_spect"):
                 sample_sp = parts["unmapped_spect"][:sample_limit]
-                print(f"  Unmapped SPECT (identity): {sample_sp}")
+                logger.info(f"  Unmapped SPECT (identity): {sample_sp}")
 
     if save_json_path is not None:
         out = {
@@ -119,4 +122,4 @@ def summarize_used_mappings(
         save_path = Path(save_json_path)
         with save_path.open("w") as f:
             json.dump(out, f, indent=2)
-        print(f"Saved detailed mapping summary to {save_path}")
+        logger.info(f"Saved detailed mapping summary to {save_path}")
