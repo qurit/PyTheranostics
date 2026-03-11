@@ -5,10 +5,13 @@ Simplifies data ingestion for dosimetry workflows.
 """
 
 import logging
+import os
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pydicom
+from pydicom.misc import is_dicom
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +283,290 @@ def auto_setup_dosimetry_study(
         study_info["spect_paths"],
         study_info["rtstruct_files"],
     )
+
+
+def auto_setup_dosimetry_study_inventory(
+    base_dir: Path, patient_id: Optional[str] = None
+) -> Tuple[Dict[str, Any], List[str], List[str], List[str]]:
+    """
+    Build a DICOM inventory of SPECT/NM/OT/PT, CT, and RTSTRUCT series.
+
+    Parameters
+    ----------
+    base_dir : Path
+        Base directory containing DICOM files.
+    patient_id : str, optional
+        Patient ID override. If None, the first detected PatientID is used.
+
+    Returns
+    -------
+    tuple
+        (study_info, ct_paths, spect_paths, rtstruct_files)
+    """
+
+    def _iter_dicom_files(root: Path) -> Iterable[Path]:
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() == ".dcm" or is_dicom(str(path)):
+                yield path
+
+    def _parse_datetime(
+        date_str: Optional[str], time_str: Optional[str]
+    ) -> Optional[datetime]:
+        if not date_str:
+            return None
+        time_val = (time_str or "000000").split(".")[0]
+        if len(time_val) < 6:
+            time_val = time_val.ljust(6, "0")
+        try:
+            return datetime.strptime(f"{date_str}{time_val}", "%Y%m%d%H%M%S")
+        except ValueError:
+            return None
+
+    def _dicom_datetime(ds: pydicom.Dataset) -> Optional[datetime]:
+        for date_key, time_key in [
+            ("AcquisitionDate", "AcquisitionTime"),
+            ("SeriesDate", "SeriesTime"),
+            ("ContentDate", "ContentTime"),
+            ("StudyDate", "StudyTime"),
+        ]:
+            date_val = getattr(ds, date_key, None)
+            time_val = getattr(ds, time_key, None)
+            dt = _parse_datetime(date_val, time_val)
+            if dt:
+                return dt
+        return None
+
+    def _common_parent(files: List[Path]) -> Optional[str]:
+        if not files:
+            return None
+        common = Path(os.path.commonpath([str(p) for p in files]))
+        if common.is_file():
+            return str(common.parent)
+        return str(common)
+
+    def _select_best_match(
+        target: Dict[str, Any], candidates: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if not candidates:
+            return None
+        target_study = target.get("study_uid")
+        filtered = [c for c in candidates if c.get("study_uid") == target_study]
+        if filtered:
+            candidates = filtered
+        target_dt = target.get("series_datetime")
+        dated = [c for c in candidates if c.get("series_datetime")]
+        if target_dt and dated:
+            return min(
+                dated,
+                key=lambda c: abs((c["series_datetime"] - target_dt).total_seconds()),
+            )
+        return candidates[0]
+
+    def _extract_injection_info(ds: pydicom.Dataset) -> Dict[str, Any]:
+        info: Dict[str, Any] = {
+            "patient_weight_kg": getattr(ds, "PatientWeight", None),
+            "injection_date": None,
+            "injection_time": None,
+            "injected_activity": None,
+            "radiopharmaceutical": None,
+        }
+
+        if info["patient_weight_kg"]:
+            info["patient_weight_g"] = int(info["patient_weight_kg"] * 1000)
+
+        if hasattr(ds, "RadiopharmaceuticalInformationSequence"):
+            rp_seq = ds.RadiopharmaceuticalInformationSequence
+            if len(rp_seq) > 0:
+                rp_info = rp_seq[0]
+                info["radiopharmaceutical"] = getattr(
+                    rp_info, "Radiopharmaceutical", None
+                )
+                info["injected_activity"] = getattr(
+                    rp_info, "RadionuclideTotalDose", None
+                )
+
+                inj_date = getattr(rp_info, "RadiopharmaceuticalStartDate", None)
+                inj_time = getattr(rp_info, "RadiopharmaceuticalStartTime", None)
+
+                if inj_date:
+                    info["injection_date"] = inj_date
+                if inj_time:
+                    info["injection_time"] = inj_time.split(".")[0]
+
+        return info
+
+    series_map: Dict[str, Dict[str, Any]] = {}
+    detected_patient_id: Optional[str] = None
+
+    tag_list = [
+        "Modality",
+        "SeriesInstanceUID",
+        "StudyInstanceUID",
+        "StudyDate",
+        "StudyTime",
+        "SeriesDate",
+        "SeriesTime",
+        "AcquisitionDate",
+        "AcquisitionTime",
+        "ContentDate",
+        "ContentTime",
+        "PatientID",
+    ]
+
+    for dcm_path in _iter_dicom_files(Path(base_dir)):
+        try:
+            ds = pydicom.dcmread(
+                dcm_path, stop_before_pixels=True, force=True, specific_tags=tag_list
+            )
+        except Exception as exc:
+            logger.warning(f"Skipping unreadable DICOM: {dcm_path} ({exc})")
+            continue
+
+        modality = getattr(ds, "Modality", None)
+        if modality not in {"CT", "RTSTRUCT", "NM", "OT", "PT"}:
+            continue
+
+        series_uid = getattr(ds, "SeriesInstanceUID", None)
+        study_uid = getattr(ds, "StudyInstanceUID", None)
+        series_key = series_uid or f"{study_uid}|{modality}|{dcm_path.parent}"
+
+        if series_key not in series_map:
+            series_map[series_key] = {
+                "modality": modality,
+                "study_uid": study_uid,
+                "series_uid": series_uid,
+                "files": [],
+                "series_datetime": _dicom_datetime(ds),
+                "patient_id": getattr(ds, "PatientID", None),
+                "representative_ds": ds,
+            }
+
+        series_map[series_key]["files"].append(dcm_path)
+
+        if not detected_patient_id:
+            detected_patient_id = getattr(ds, "PatientID", None)
+
+    spect_series = [
+        s for s in series_map.values() if s["modality"] in {"NM", "OT", "PT"}
+    ]
+    ct_series = [s for s in series_map.values() if s["modality"] == "CT"]
+    rt_series = [s for s in series_map.values() if s["modality"] == "RTSTRUCT"]
+
+    logger.info(
+        "DICOM inventory: %d SPECT series, %d CT series, %d RTSTRUCT series",
+        len(spect_series),
+        len(ct_series),
+        len(rt_series),
+    )
+
+    for series in spect_series:
+        logger.info(
+            "SPECT series: study_uid=%s series_uid=%s datetime=%s files=%d root=%s",
+            series.get("study_uid"),
+            series.get("series_uid"),
+            series.get("series_datetime"),
+            len(series.get("files", [])),
+            _common_parent(series.get("files", [])) or "UNKNOWN",
+        )
+
+    for series in ct_series:
+        logger.info(
+            "CT series: study_uid=%s series_uid=%s datetime=%s files=%d root=%s",
+            series.get("study_uid"),
+            series.get("series_uid"),
+            series.get("series_datetime"),
+            len(series.get("files", [])),
+            _common_parent(series.get("files", [])) or "UNKNOWN",
+        )
+
+    for series in rt_series:
+        logger.info(
+            "RTSTRUCT series: study_uid=%s series_uid=%s datetime=%s files=%d root=%s",
+            series.get("study_uid"),
+            series.get("series_uid"),
+            series.get("series_datetime"),
+            len(series.get("files", [])),
+            _common_parent(series.get("files", [])) or "UNKNOWN",
+        )
+
+    time_points: List[Dict[str, Any]] = []
+    ct_paths: List[str] = []
+    spect_paths: List[str] = []
+    rtstruct_files: List[str] = []
+
+    def _spect_sort_key(series: Dict[str, Any]) -> Tuple[int, datetime]:
+        dt_val = series.get("series_datetime")
+        if dt_val:
+            return (0, dt_val)
+        return (1, datetime.max)
+
+    for idx, spect in enumerate(sorted(spect_series, key=_spect_sort_key)):
+        ct_match = _select_best_match(spect, ct_series)
+        rt_match = _select_best_match(spect, rt_series)
+
+        spect_path = _common_parent(spect["files"])
+        ct_path = _common_parent(ct_match["files"]) if ct_match else None
+        rt_file = str(rt_match["files"][0]) if rt_match and rt_match["files"] else None
+
+        logger.info(
+            "Time point %s: SPECT=%s CT=%s RTSTRUCT=%s",
+            f"tp{idx + 1}",
+            spect_path or "NONE",
+            ct_path or "NONE",
+            rt_file or "NONE",
+        )
+        if ct_match:
+            logger.info(
+                "Time point %s CT match: study_uid=%s series_uid=%s datetime=%s",
+                f"tp{idx + 1}",
+                ct_match.get("study_uid"),
+                ct_match.get("series_uid"),
+                ct_match.get("series_datetime"),
+            )
+        if rt_match:
+            logger.info(
+                "Time point %s RTSTRUCT match: study_uid=%s series_uid=%s datetime=%s",
+                f"tp{idx + 1}",
+                rt_match.get("study_uid"),
+                rt_match.get("series_uid"),
+                rt_match.get("series_datetime"),
+            )
+
+        tp_info: Dict[str, Any] = {
+            "name": f"tp{idx + 1}",
+            "spect_path": spect_path,
+            "ct_path": ct_path,
+            "rtstruct_file": rt_file,
+            "series_datetime": spect.get("series_datetime"),
+            "study_uid": spect.get("study_uid"),
+            "series_uid": spect.get("series_uid"),
+            "patient_id": spect.get("patient_id"),
+            "injection_info": (
+                _extract_injection_info(spect["representative_ds"])
+                if spect.get("representative_ds")
+                else {}
+            ),
+        }
+
+        time_points.append(tp_info)
+        if ct_path:
+            ct_paths.append(ct_path)
+        if spect_path:
+            spect_paths.append(spect_path)
+        if rt_file:
+            rtstruct_files.append(rt_file)
+
+    study_info: Dict[str, Any] = {
+        "patient_id": patient_id or detected_patient_id,
+        "time_points": time_points,
+        "ct_paths": ct_paths,
+        "spect_paths": spect_paths,
+        "rtstruct_files": rtstruct_files,
+    }
+
+    return study_info, ct_paths, spect_paths, rtstruct_files
 
 
 def extract_patient_metadata(dicom_dir: Path) -> Dict:
