@@ -16,6 +16,22 @@ from pydicom.misc import is_dicom
 logger = logging.getLogger(__name__)
 
 
+def _split_dicom_datetime(dt_val: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Split a DICOM DT value into date (YYYYMMDD) and time (HHMMSS).
+    """
+    if not dt_val:
+        return None, None
+    val = str(dt_val).split(".")[0]
+    if len(val) < 8:
+        return None, None
+    date_part = val[:8]
+    time_part = val[8:14] if len(val) > 8 else None
+    if time_part:
+        time_part = time_part.ljust(6, "0")
+    return date_part, time_part
+
+
 class DosimetryStudyOrganizer:
     """
     Organize DICOM studies for dosimetry analysis.
@@ -181,17 +197,26 @@ class DosimetryStudyOrganizer:
                     rp_info, "RadionuclideTotalDose", None
                 )
 
-                # Extract date and time
-                inj_date = getattr(rp_info, "RadiopharmaceuticalStartDate", None)
-                inj_time = getattr(rp_info, "RadiopharmaceuticalStartTime", None)
-
+                inj_dt = getattr(rp_info, "RadiopharmaceuticalStartDateTime", None)
+                inj_date, inj_time = _split_dicom_datetime(inj_dt)
                 if inj_date:
                     info["injection_date"] = inj_date
                 if inj_time:
-                    # Format time to HHMMSS
-                    info["injection_time"] = inj_time.split(".")[
-                        0
-                    ]  # Remove fractional seconds
+                    info["injection_time"] = inj_time
+
+                # Backward-compatible fallback when DateTime is not available.
+                if not info["injection_date"]:
+                    inj_date_legacy = getattr(
+                        rp_info, "RadiopharmaceuticalStartDate", None
+                    )
+                    if inj_date_legacy:
+                        info["injection_date"] = inj_date_legacy
+                if not info["injection_time"]:
+                    inj_time_legacy = getattr(
+                        rp_info, "RadiopharmaceuticalStartTime", None
+                    )
+                    if inj_time_legacy:
+                        info["injection_time"] = inj_time_legacy.split(".")[0]
 
         return info
 
@@ -289,7 +314,7 @@ def auto_setup_dosimetry_study_inventory(
     base_dir: Path, patient_id: Optional[str] = None
 ) -> Tuple[Dict[str, Any], List[str], List[str], List[str]]:
     """
-    Build a DICOM inventory of SPECT/NM/OT/PT, CT, and RTSTRUCT series.
+    Build a DICOM inventory of SPECT (NM/OT/PT), CT, and RTSTRUCT series.
 
     Parameters
     ----------
@@ -387,13 +412,26 @@ def auto_setup_dosimetry_study_inventory(
                     rp_info, "RadionuclideTotalDose", None
                 )
 
-                inj_date = getattr(rp_info, "RadiopharmaceuticalStartDate", None)
-                inj_time = getattr(rp_info, "RadiopharmaceuticalStartTime", None)
-
+                inj_dt = getattr(rp_info, "RadiopharmaceuticalStartDateTime", None)
+                inj_date, inj_time = _split_dicom_datetime(inj_dt)
                 if inj_date:
                     info["injection_date"] = inj_date
                 if inj_time:
-                    info["injection_time"] = inj_time.split(".")[0]
+                    info["injection_time"] = inj_time
+
+                # Backward-compatible fallback when DateTime is not available.
+                if not info["injection_date"]:
+                    inj_date_legacy = getattr(
+                        rp_info, "RadiopharmaceuticalStartDate", None
+                    )
+                    if inj_date_legacy:
+                        info["injection_date"] = inj_date_legacy
+                if not info["injection_time"]:
+                    inj_time_legacy = getattr(
+                        rp_info, "RadiopharmaceuticalStartTime", None
+                    )
+                    if inj_time_legacy:
+                        info["injection_time"] = inj_time_legacy.split(".")[0]
 
         return info
 
@@ -401,9 +439,12 @@ def auto_setup_dosimetry_study_inventory(
     detected_patient_id: Optional[str] = None
 
     tag_list = [
+        # Core indexing/matching fields
         "Modality",
         "SeriesInstanceUID",
         "StudyInstanceUID",
+        "SOPClassUID",
+        "SOPInstanceUID",
         "StudyDate",
         "StudyTime",
         "SeriesDate",
@@ -413,6 +454,38 @@ def auto_setup_dosimetry_study_inventory(
         "ContentDate",
         "ContentTime",
         "PatientID",
+        "PatientName",
+        "PatientSex",
+        "PatientBirthDate",
+        "PatientWeight",
+        # Common geometric/acquisition fields
+        "FrameOfReferenceUID",
+        "ImagePositionPatient",
+        "ImageOrientationPatient",
+        "PixelSpacing",
+        "SliceThickness",
+        "KVP",
+        "ConvolutionKernel",
+        "RescaleIntercept",
+        "RescaleSlope",
+        # NM/PT quantitative + injection fields
+        "SeriesDescription",
+        "AcquisitionDuration",
+        "Units",
+        "DecayCorrection",
+        "CorrectedImage",
+        "CountsSource",
+        "NumberOfSlices",
+        "RadiopharmaceuticalInformationSequence",
+        "RadiopharmaceuticalStartDateTime",
+        # RTSTRUCT linkage/content fields
+        "StructureSetLabel",
+        "StructureSetDate",
+        "StructureSetTime",
+        "ReferencedFrameOfReferenceSequence",
+        "StructureSetROISequence",
+        "ROIContourSequence",
+        "RTROIObservationsSequence",
     ]
 
     for dcm_path in _iter_dicom_files(Path(base_dir)):
@@ -607,15 +680,20 @@ def extract_patient_metadata(dicom_dir: Path) -> Dict:
                 metadata["injected_activity"] = getattr(
                     rp_info, "RadionuclideTotalDose", None
                 )
-                metadata["injection_date"] = getattr(
-                    rp_info, "RadiopharmaceuticalStartDate", None
-                )
-                metadata["injection_time"] = getattr(
-                    rp_info, "RadiopharmaceuticalStartTime", None
-                )
-                if metadata["injection_time"]:
-                    metadata["injection_time"] = metadata["injection_time"].split(".")[
-                        0
-                    ]
+                inj_dt = getattr(rp_info, "RadiopharmaceuticalStartDateTime", None)
+                inj_date, inj_time = _split_dicom_datetime(inj_dt)
+                metadata["injection_date"] = inj_date
+                metadata["injection_time"] = inj_time
+
+                if not metadata["injection_date"]:
+                    metadata["injection_date"] = getattr(
+                        rp_info, "RadiopharmaceuticalStartDate", None
+                    )
+                if not metadata["injection_time"]:
+                    inj_time_legacy = getattr(
+                        rp_info, "RadiopharmaceuticalStartTime", None
+                    )
+                    if inj_time_legacy:
+                        metadata["injection_time"] = inj_time_legacy.split(".")[0]
 
     return metadata
