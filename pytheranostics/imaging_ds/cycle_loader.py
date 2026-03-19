@@ -509,6 +509,11 @@ def create_studies_with_masks(
             # Build NM masks only if target available
             target_img = next(iter(longSPECT.images.values()), None)
 
+        if target_img is None:
+            raise RuntimeError(
+                f"No SPECT image available for timepoint {time_id} to resample NM masks"
+            )
+        
         ct_masks, nm_masks = load_and_resample_RT_to_target(
             ref_dicom_ct_dir=str(ct_dir),
             rt_struct_file=str(rt_file),
@@ -570,6 +575,7 @@ def create_studies_with_masks(
                 if final_spect_mapping is not None:
                     for k in nm_masks.keys():
                         dst = final_spect_mapping.get(k)
+                        
                         if dst is not None and _is_valid_target(dst):
                             spect_map_valid[k] = dst
                         else:
