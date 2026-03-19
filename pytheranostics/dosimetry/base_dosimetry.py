@@ -232,6 +232,21 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             print("No Reference Time point was given. Assigning time ID = 0")
             self.config["ReferenceTimePoint"] = 0
 
+        # If WholeBody and RemainderOfBody were not defined by the user, add them by default to the VOIs to ensure consistency with dosimetry calculations.
+        for missing in ["WholeBody", "RemainderOfBody"]:
+            if missing not in self.config["VOIs"]:
+                print(
+                    f"Adding {missing} to the list of VOIs with default parameters. This region is required for dosimetry calculations."
+                )
+                self.config["VOIs"][missing] = {
+                    "fit_order": None,
+                    "with_uptake": None,
+                    "fixed_parameters": None,
+                    "bounds": None,
+                    "param_init": None,
+                }
+
+        
         if "Organ" in self.config["Level"]:
             if "WholeBody" not in self.config["VOIs"]:
                 if "No" in self.config["OrganLevel"]["AdditionalOptions"]["WholeBody"]:
@@ -255,7 +270,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         tmp_results: Dict[str, List[float]] = {
             roi_name: []
             for roi_name in self.nm_data.masks[0].keys()
-            if roi_name in self.config["VOIs"]
+            if roi_name in self.config["VOIs"] or roi_name in ["WholeBody", "RemainderOfBody"]
         }
 
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq", "Density_HU"]
@@ -266,7 +281,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.normalize_time_to_injection(time_id=time_id)
 
         for roi_name in tmp_results.keys():
-
+                    
             # Time (relative to time of injection, in hours)
             tmp_results[roi_name].append(
                 [self.nm_data.meta[time_id].HoursAfterInjection for time_id in time_ids]
@@ -412,6 +427,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         }
 
         for region, region_data in self.results.iterrows():
+            
+            if type(region) != str:
+                raise TypeError(f"Region names should be strings. Found {type(region)} instead.")
+                        
             fit_results = self.smart_fit_selection(
                 region_data=region_data, region=region
             )
@@ -419,7 +438,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             plot_tac_residuals(
                 result=fit_results,
                 region=region,
-                cycle=self.config["Cycle"],
+                cycle=self.cycle,
                 output_dir=self.db_dir,
             )
 
