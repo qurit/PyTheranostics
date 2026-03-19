@@ -87,9 +87,10 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
 
         # Store data
-        self.patient_id = config["PatientID"]
-        self.cycle = config["Cycle"]
-        self.db_dir = Path(config["DatabaseDir"])
+        self.patient_id = config["PatientID"] if "PatientID" in config else "UnknownPatient"
+        self.cycle = config["Cycle"] if "Cycle" in config else 1
+        self.db_dir = Path(config["DatabaseDir"]) if "DatabaseDir" in config else Path("./")
+        
         self.check_mandatory_fields()
         self.check_patient_in_db()  # TODO: Traceability/database?
 
