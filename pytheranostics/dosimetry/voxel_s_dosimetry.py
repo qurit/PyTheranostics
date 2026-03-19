@@ -70,6 +70,10 @@ class VoxelSDosimetry(BaseDosimetry):
         masks = numpy.zeros_like(tia_map, dtype=numpy.int8)
 
         for region, region_data in self.results.iterrows():
+            
+            # Type check:
+            if type(region) != str:
+                raise TypeError(f"Region names should be strings. Found {type(region)} instead.")
 
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
@@ -90,7 +94,7 @@ class VoxelSDosimetry(BaseDosimetry):
             region_tia = region_data["TIA_MBq_h"]
 
             region_fit_params = region_data["Fit_params"]  # fit params
-            exp_order = self.config["rois"][region]["fit_order"]
+            exp_order = self.config["VOIs"][region]["fit_order"]
             region_fit, _, _ = get_exponential(
                 order=exp_order, param_init=None, decayconst=1.0
             )  # Decay-constant not used here.
