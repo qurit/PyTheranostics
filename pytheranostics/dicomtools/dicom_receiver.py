@@ -6,7 +6,7 @@ Automatically receives and organizes DICOM images for dosimetry workflows.
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -22,6 +22,8 @@ from pydicom.uid import (
 from pynetdicom import AE, AllStoragePresentationContexts, evt
 from pynetdicom.sop_class import Verification
 
+from .dicom_organizer import organize_folder_by_cycles
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +38,8 @@ class DICOMReceiver:
     - Metadata extraction for dosimetry parameters
     - Support for CT, SPECT/NM, PET, and RT Structure Sets
     - Configurable storage paths and callbacks
+
+    Requires pynetdicom to be installed.
     """
 
     def __init__(
@@ -163,11 +167,15 @@ class DICOMReceiver:
                     logger.info(
                         f"Auto-organizing cycles for patient {patient_id} after {self.auto_organize_debounce_seconds}s idle"
                     )
-                    self.organize_by_cycles(
-                        patient_id=patient_id,
+                    organize_folder_by_cycles(
+                        storage_root=self.storage_root,
                         output_base=self.auto_organize_output_base,
                         cycle_gap_days=self.auto_organize_cycle_gap_days,
-                        timepoint_separation_days=self.auto_organize_timepoint_separation_days,
+                        timepoint_separation_days=float(
+                            self.auto_organize_timepoint_separation_days
+                        ),
+                        move=True,
+                        patient_id_filter=[patient_id],
                     )
                 except Exception as e:
                     logger.exception(f"Auto-organize failed for {patient_id}: {e}")
@@ -274,318 +282,6 @@ class DICOMReceiver:
 
         path.mkdir(parents=True, exist_ok=True)
         return path
-
-    # --------------------------
-    # Post-processing utilities
-    # --------------------------
-    @staticmethod
-    def _parse_dt(
-        date_str: Optional[str], time_str: Optional[str]
-    ) -> Optional[datetime]:
-        """Parse common DICOM date/time fields to a datetime object.
-
-        Parameters
-        ----------
-        date_str : str | None
-            DICOM DA (YYYYMMDD)
-        time_str : str | None
-            DICOM TM (HHMMSS.frac)
-
-        Returns
-        -------
-        datetime | None
-            Parsed datetime or None if not enough info
-        """
-        if not date_str:
-            return None
-        try:
-            y = int(date_str[0:4])
-            m = int(date_str[4:6])
-            d = int(date_str[6:8])
-            if time_str:
-                hh = int(time_str[0:2]) if len(time_str) >= 2 else 0
-                mm = int(time_str[2:4]) if len(time_str) >= 4 else 0
-                ss = int(time_str[4:6]) if len(time_str) >= 6 else 0
-                micro = 0
-                if len(time_str) > 7 and "." in time_str:
-                    frac = time_str.split(".")[-1]
-                    # pad/cut to microseconds
-                    frac = (frac + "000000")[:6]
-                    micro = int(frac)
-                return datetime(y, m, d, hh, mm, ss, micro)
-            return datetime(y, m, d)
-        except Exception:
-            return None
-
-    @staticmethod
-    def _series_datetime_from_any(dcm: pydicom.Dataset) -> Optional[datetime]:
-        """Best-effort extraction of a datetime for a DICOM series instance.
-
-        Tries SeriesDate/Time, then AcquisitionDate/Time, then ContentDate/Time,
-        finally falls back to StudyDate/Time.
-        """
-        # Series
-        dt = DICOMReceiver._parse_dt(
-            getattr(dcm, "SeriesDate", None), getattr(dcm, "SeriesTime", None)
-        )
-        if dt:
-            return dt
-        # Acquisition
-        dt = DICOMReceiver._parse_dt(
-            getattr(dcm, "AcquisitionDate", None), getattr(dcm, "AcquisitionTime", None)
-        )
-        if dt:
-            return dt
-        # Content
-        dt = DICOMReceiver._parse_dt(
-            getattr(dcm, "ContentDate", None), getattr(dcm, "ContentTime", None)
-        )
-        if dt:
-            return dt
-        # Study
-        return DICOMReceiver._parse_dt(
-            getattr(dcm, "StudyDate", None), getattr(dcm, "StudyTime", None)
-        )
-
-    @staticmethod
-    def _get_any_dicom_datetime_in_path(path: Path) -> Optional[datetime]:
-        """Find any DICOM file in a directory and return its best-effort datetime.
-
-        Parameters
-        ----------
-        path : Path
-            Directory containing DICOM files
-
-        Returns
-        -------
-        datetime | None
-        """
-        try:
-            for dcm_file in sorted(path.glob("*.dcm")):
-                try:
-                    ds = pydicom.dcmread(
-                        str(dcm_file), stop_before_pixels=True, force=True
-                    )
-                    dt = DICOMReceiver._series_datetime_from_any(ds)
-                    if dt:
-                        return dt
-                except Exception:
-                    continue
-            return None
-        except Exception:
-            return None
-
-    def _collect_patient_series(self, patient_id: str) -> List[Dict]:
-        """Collect all known series for a patient across all studies.
-
-        Returns list of dicts with keys: modality, series_number, series_description,
-        path (Path), datetime (datetime | None), study_date (str | None).
-        """
-        series_list: List[Dict] = []
-        for key, info in self.metadata.items():
-            if not key.startswith(f"{patient_id}_"):
-                continue
-            study_date = info.get("patient_info", {}).get("StudyDate")
-            series = info.get("series", {})
-            for s_key, s in series.items():
-                src_path = Path(s.get("path", self.storage_root))
-                # Determine a representative datetime for the series
-                rep_dt = self._get_any_dicom_datetime_in_path(src_path)
-                if rep_dt is None and study_date:
-                    # Fallback to study_date
-                    rep_dt = self._parse_dt(
-                        study_date, info.get("patient_info", {}).get("StudyTime")
-                    )
-                series_list.append(
-                    {
-                        "modality": s.get("modality", "UNKNOWN"),
-                        "series_number": s.get("series_number", 0),
-                        "series_description": s.get("series_description", ""),
-                        "path": src_path,
-                        "datetime": rep_dt,
-                        "study_date": study_date,
-                    }
-                )
-        # Filter out those without any path
-        return [x for x in series_list if x.get("path") is not None]
-
-    def organize_by_cycles(
-        self,
-        patient_id: str,
-        output_base: Path,
-        cycle_gap_days: int = 15,
-        timepoint_separation_days: int = 1,
-    ) -> Dict[str, Dict[str, List[Path]]]:
-        """Post-process received DICOMs into Cycle/Timepoint structure.
-
-                Creates folders like:
-                    PatientID/Cycle1/tp1/CT/Series3
-                    PatientID/Cycle1/tp1/SPECT/Series5
-                    PatientID/Cycle1/tp2/CT/Series2
-
-                RTSTRUCT will be placed under the corresponding CT timepoint:
-                    PatientID/Cycle1/tp1/CT/RTstruct/Series7
-
-        Parameters
-        ----------
-        patient_id : str
-            Patient identifier
-        output_base : Path
-            Directory under which the new structure will be created
-        cycle_gap_days : int
-            Start a new cycle if the gap since the previous scan is >= this many days (default 15 days).
-        timepoint_separation_days : int
-            Start a new timepoint when acquisition date changes by this many days or more (default 1 day)
-
-        Returns
-        -------
-        dict
-            Nested dict with created directories per cycle and timepoint
-        """
-        series_list = self._collect_patient_series(patient_id)
-        if not series_list:
-            raise ValueError(f"No series found for patient '{patient_id}'.")
-
-        # Ensure we have datetimes; if some missing, use file mtime as last resort
-        for s in series_list:
-            if s["datetime"] is None:
-                try:
-                    any_file = next(iter(sorted(s["path"].glob("*.dcm"))))
-                    mtime = datetime.fromtimestamp(any_file.stat().st_mtime)
-                    s["datetime"] = mtime
-                except StopIteration:
-                    # No files present - skip later
-                    s["datetime"] = None
-
-        # Drop any without datetime ultimately
-        series_list = [s for s in series_list if s["datetime"] is not None]
-
-        # Group series by StudyDate to define timepoints, so RTSTRUCT doesn't create new cycles
-        # Build mapping: study_date -> list[series]
-        tp_by_date: Dict[str, List[Dict]] = {}
-        for s in series_list:
-            sd = s.get("study_date") or s["datetime"].strftime("%Y%m%d")
-            tp_by_date.setdefault(sd, []).append(s)
-
-        # Sort timepoints by study date
-        sorted_dates = sorted(tp_by_date.keys())
-
-        out: Dict[str, Dict[str, List[Path]]] = {}
-        patient_root = Path(output_base) / patient_id
-        patient_root.mkdir(parents=True, exist_ok=True)
-
-        if not sorted_dates:
-            return out
-
-        # Compute cycles from consecutive study date gaps
-        cycle_idx = 1
-        tp_idx = 1
-        prev_date_dt = datetime.strptime(sorted_dates[0], "%Y%m%d")
-
-        for i, sd in enumerate(sorted_dates):
-            this_date_dt = datetime.strptime(sd, "%Y%m%d")
-            if i > 0:
-                if (this_date_dt - prev_date_dt) >= timedelta(days=cycle_gap_days):
-                    # New cycle
-                    cycle_idx += 1
-                    tp_idx = 1
-                else:
-                    # Same cycle, next timepoint (optionally collapse same-day scans if needed)
-                    if (
-                        this_date_dt.date() - prev_date_dt.date()
-                    ).days >= timepoint_separation_days:
-                        tp_idx += 1
-
-            # For all series in this study date, place under tp folder
-            cycle_dir = patient_root / f"Cycle{cycle_idx}" / f"tp{tp_idx}"
-            cycle_dir.mkdir(parents=True, exist_ok=True)
-
-            # Track source modality directories seen for cleanup after moving
-            src_dirs_for_cleanup: set[Path] = set()
-
-            for s in tp_by_date[sd]:
-                modality = s["modality"]
-                # Normalize modality names for destination
-                if modality in ["NM", "PT"]:
-                    modality_folder = "SPECT"
-                elif modality == "RTSTRUCT":
-                    modality_folder = "CT"  # RTSTRUCT under CT/RTstruct
-                else:
-                    modality_folder = modality
-
-                series_number = s.get("series_number", 0) or 0
-                # Destination folders drop the Series subfolder; put instances directly under modality
-                if modality == "RTSTRUCT":
-                    dest_dir = cycle_dir / "CT" / "RTstruct"
-                else:
-                    dest_dir = cycle_dir / modality_folder
-
-                dest_dir.mkdir(parents=True, exist_ok=True)
-
-                # Copy only files belonging to this SeriesNumber
-                src_path: Path = s["path"]
-                src_dirs_for_cleanup.add(src_path)
-                copied = 0
-                for dcm_file in src_path.glob("*.dcm"):
-                    try:
-                        ds = pydicom.dcmread(
-                            str(dcm_file), stop_before_pixels=True, force=True
-                        )
-                        if int(getattr(ds, "SeriesNumber", -1) or -1) == int(
-                            series_number
-                        ):
-                            import shutil
-
-                            dest_file = dest_dir / dcm_file.name
-                            if dest_file.exists():
-                                # Skip if already present to avoid accidental overwrite
-                                continue
-                            # Move instead of copy to avoid duplication
-                            shutil.move(str(dcm_file), str(dest_file))
-                            copied += 1
-                    except Exception:
-                        continue
-                logger.info(
-                    f"Organized {copied} files -> {dest_dir} ({modality}, Series{int(series_number)}, {sd})"
-                )
-
-                # Record in output mapping
-                cycle_key = f"Cycle{cycle_idx}"
-                tp_key = f"tp{tp_idx}"
-                out.setdefault(cycle_key, {}).setdefault(tp_key, []).append(dest_dir)
-
-            # After processing all series for this StudyDate, prune empty source directories
-            try:
-                for src_dir in src_dirs_for_cleanup:
-                    # Remove dir if empty
-                    try:
-                        if src_dir.exists() and not any(src_dir.iterdir()):
-                            src_dir.rmdir()
-                    except Exception:
-                        pass
-                    # Attempt to remove parent StudyDate dir if empty
-                    try:
-                        study_parent = src_dir.parent
-                        if study_parent.exists() and not any(study_parent.iterdir()):
-                            study_parent.rmdir()
-                    except Exception:
-                        pass
-                    # Attempt to remove patient dir if now empty (rare)
-                    try:
-                        patient_dir = study_parent.parent
-                        if patient_dir.exists() and not any(patient_dir.iterdir()):
-                            patient_dir.rmdir()
-                    except Exception:
-                        pass
-            except Exception:
-                logger.debug("Cleanup after move encountered issues; continuing.")
-
-            prev_date_dt = this_date_dt
-
-        logger.info(
-            f"Cycle/Timepoint organization complete for patient {patient_id} at {patient_root}"
-        )
-        return out
 
     def _handle_store(self, event):
         """

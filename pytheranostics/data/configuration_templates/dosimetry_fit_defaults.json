@@ -1,0 +1,33 @@
+{
+  "_description": "Default dosimetry fit parameters for organs and lesions. Project-specific overrides can be provided via a dosimetry_fit_defaults.json placed in the project root.",
+  "organ_defaults": {
+    "fit_order": 1,
+    "with_uptake": false,
+    "param_init": {"A1": 100, "A2": 0.01},
+    "fixed_parameters": null,
+    "bounds": null,
+    "washout_ratio": null
+  },
+  "organs": {
+    "BoneMarrow": {
+      "fit_order": 2,
+      "param_init": {"A1": 50},
+      "fixed_parameters": {"A2": 0.045788, "B1": 561.376560, "B2": 0.213215},
+      "with_uptake": null,
+      "bounds": null,
+      "washout_ratio": 4.656569406831483
+    }
+  },
+  "lesion_defaults": {
+    "fit_order": 1,
+    "param_init": {"A1": 700, "A2": 0.1},
+    "fixed_parameters": null,
+    "bounds": {"A1": [0, "inf"], "A2": ["log2_over_(6.647*24)_per_hour", "inf"]},
+    "with_uptake": false,
+    "washout_ratio": null
+  },
+  "lesions": {
+    "auto_discover": true,
+    "pattern": "^Lesion_(\\d+)$"
+  }
+}

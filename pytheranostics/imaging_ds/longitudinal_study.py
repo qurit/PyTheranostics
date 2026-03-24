@@ -1,6 +1,7 @@
 """Module for longitudinal medical imaging studies."""
 
 import json
+import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -20,6 +21,8 @@ from pytheranostics.imaging_tools.tools import (
 )
 from pytheranostics.registration.phantom_to_ct import PhantomToCTBoneReg
 
+logger = logging.getLogger(__name__)
+
 
 class LongitudinalStudy:
     """Longitudinal Study Data Class.
@@ -28,22 +31,80 @@ class LongitudinalStudy:
     of interest and meta-data.
     """
 
-    _VALID_ORGAN_NAMES = [
-        "Kidney_Left",
-        "Kidney_Right",
-        "Liver",
-        "Spleen",
-        "Bladder",
-        "SubmandibularGland_Left",
-        "SubmandibularGland_Right",
-        "ParotidGland_Left",
-        "ParotidGland_Right",
-        "BoneMarrow",
-        "Skeleton",
-        "WholeBody",
-        "RemainderOfBody",
-        "TotalTumorBurden",
-    ]
+    # Cached valid organ names loaded from config
+    _VALID_ORGAN_NAMES = None
+
+    @classmethod
+    def _get_valid_organ_names(cls) -> List[str]:
+        """Get valid organ names from config file.
+
+        Searches for voi_mappings_config.json in order:
+        1. Current directory (project-specific config)
+        2. One level up (project root)
+        3. Package template (OLINDA-compatible defaults)
+
+        Returns
+        -------
+        List[str]
+            List of valid organ names.
+
+        Raises
+        ------
+        FileNotFoundError
+            If no config file can be found.
+        ValueError
+            If config file doesn't contain valid_organ_names.
+        """
+        if cls._VALID_ORGAN_NAMES is not None:
+            return cls._VALID_ORGAN_NAMES
+
+        # Try project-specific configs first
+        search_paths = [
+            Path.cwd() / "voi_mappings_config.json",
+            Path.cwd().parent / "voi_mappings_config.json",
+        ]
+
+        for config_path in search_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, "r") as f:
+                        config = json.load(f)
+                        if "valid_organ_names" in config:
+                            # Handle both old format (list) and new format (dict with names key)
+                            organ_names = config["valid_organ_names"]
+                            if isinstance(organ_names, dict):
+                                cls._VALID_ORGAN_NAMES = organ_names.get("names", [])
+                            else:
+                                cls._VALID_ORGAN_NAMES = organ_names
+                            return cls._VALID_ORGAN_NAMES
+                except Exception:
+                    continue
+
+        # Load from package template (OLINDA defaults)
+        try:
+            import importlib.resources as pkg_resources
+
+            template_path = pkg_resources.files("pytheranostics.data").joinpath(
+                "configuration_templates/voi_mappings_config.json"
+            )
+            with open(template_path, "r") as f:
+                config = json.load(f)
+                if "valid_organ_names" in config:
+                    organ_names = config["valid_organ_names"]
+                    if isinstance(organ_names, dict):
+                        cls._VALID_ORGAN_NAMES = organ_names.get("names", [])
+                    else:
+                        cls._VALID_ORGAN_NAMES = organ_names
+                    return cls._VALID_ORGAN_NAMES
+        except Exception as e:
+            raise FileNotFoundError(
+                "Could not load valid_organ_names from any config file. "
+                "Please ensure voi_mappings_config.json exists in your project or package."
+            ) from e
+
+        raise ValueError(
+            "Config file found but does not contain 'valid_organ_names' section."
+        )
 
     def __init__(
         self,
@@ -147,12 +208,16 @@ class LongitudinalStudy:
 
         if parallel and len(dicom_dirs) > 1:
             # Parallel loading for multiple timepoints
-            print(f"Loading {len(dicom_dirs)} {modality} timepoints in parallel...")
+            logger.info(
+                f"Loading {len(dicom_dirs)} {modality} timepoints in parallel..."
+            )
 
             # Helper function for parallel execution
             def load_single_timepoint(args):
                 time_id, dicom_dir = args
-                print(f"  Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                logger.debug(
+                    f"  Loading timepoint {time_id} from {Path(dicom_dir).name}..."
+                )
                 return time_id, load_from_dicom_dir(
                     dir=dicom_dir,
                     modality=modality,
@@ -172,11 +237,13 @@ class LongitudinalStudy:
                     time_id, (image, meta) = future.result()
                     images[time_id] = image
                     metadata[time_id] = meta
-                    print(f"  ✓ Timepoint {time_id} loaded")
+                    logger.debug(f"  ✓ Timepoint {time_id} loaded")
         else:
             # Sequential loading
             for time_id, dicom_dir in enumerate(dicom_dirs):
-                print(f"Loading timepoint {time_id} from {Path(dicom_dir).name}...")
+                logger.info(
+                    f"Loading timepoint {time_id} from {Path(dicom_dir).name}..."
+                )
                 image, meta = load_from_dicom_dir(
                     dir=dicom_dir,
                     modality=modality,
@@ -196,10 +263,11 @@ class LongitudinalStudy:
         """Check if a mask name is valid.
 
         Valid names are either:
-        - Standard organ names from _VALID_ORGAN_NAMES
+        - Standard organ names from config or default list
         - Lesion names in format 'Lesion_N' where N is a positive integer
         """
-        if mask_name in LongitudinalStudy._VALID_ORGAN_NAMES:
+        valid_names = LongitudinalStudy._get_valid_organ_names()
+        if mask_name in valid_names:
             return True
         lesion_pattern = r"^Lesion_([1-9]\d*)$"
         return bool(re.match(lesion_pattern, mask_name))
@@ -632,8 +700,8 @@ class LongitudinalStudy:
                 )
 
             if mask_target in self.masks[time_id]:
-                print(
-                    f"Warning: {mask_target} found at Time = {time_id}. It will be over-written!"
+                logger.warning(
+                    f"{mask_target} found at Time = {time_id}. It will be over-written!"
                 )
 
             # Masks are in the right orientation and spacing, however there could be discrepancies
@@ -697,8 +765,8 @@ class LongitudinalStudy:
                 SimpleITK.GetArrayFromImage(mask_itk), axes=(1, 2, 0)
             )
             if mask_name in self.masks[time_id]:
-                print(
-                    f"Warning: {mask_name} found at Time = {time_id}. It will be over-written!"
+                logger.warning(
+                    f"{mask_name} found at Time = {time_id}. It will be over-written!"
                 )
             self.masks[time_id][mask_name] = mask_array.astype(numpy.bool_)
 
@@ -806,7 +874,7 @@ class LongitudinalStudy:
             phantom_skeleton_path (Path): Path to phantom Skeleton .nii file.
             phantom_bone_marrow_path (Path): Path to phantom Bone Marrow .nii file.
         """
-        print(
+        logger.info(
             "Running Personalized Bone Marrow generation from XCAT Phantom. This feature is unstable. Please review the generated BoneMarrow masks."
         )
 
@@ -823,11 +891,11 @@ class LongitudinalStudy:
         best_index = {time_id: 0 for time_id in self.images.keys()}
 
         for i in range(num_iterations):
-            print(f"Registration :: Iteration {i+1}")
+            logger.info(f"Registration :: Iteration {i+1}")
             # Loop through each time point:
             for time_id, ct in self.images.items():
                 # Register Skeleton
-                print(
+                logger.debug(
                     f" >> Registering Phantom Skeleton to CT at time point {time_id} ..."
                 )
                 RegManager = PhantomToCTBoneReg(
@@ -862,14 +930,14 @@ class LongitudinalStudy:
                     best_index[time_id] = jaccard
 
                 # Calculate Index
-                print(
+                logger.debug(
                     f" >>> Jaccard Index between Skeleton and Segmented Bone Marrow: {jaccard: 1.2f}"
                 )
 
         # Final Results:
-        print(" >>> Final Jaccard Indices:")
+        logger.info(" >>> Final Jaccard Indices:")
         for time_id in self.masks.keys():
-            print(f" >>> Time point {time_id}: {best_index[time_id]}")
+            logger.info(f" >>> Time point {time_id}: {best_index[time_id]}")
 
         return None
 
@@ -901,7 +969,7 @@ class LongitudinalStudy:
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
-        print(f"Writing Image ({name}) into nifty file.")
+        logger.info(f"Writing Image ({name}) into nifty file.")
         SimpleITK.WriteImage(
             image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32),
             fileName=out_path / f"Image_{time_id}{name}.nii.gz",
@@ -918,7 +986,7 @@ class LongitudinalStudy:
             time_id (int): The time ID representing the time point to be saved.
             out_path (Path): The path to the folder where images will be written.
         """
-        print(f"Writing Image ({name}) into mhd file.")
+        logger.info(f"Writing Image ({name}) into mhd file.")
         SimpleITK.WriteImage(
             image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32),
             fileName=os.path.join(out_path, f"{name}.mhd"),
@@ -956,7 +1024,7 @@ class LongitudinalStudy:
             ref_image=self.images[time_id],
         )
 
-        print(f"Writing Masks ({mask_names}) into nifty file.")
+        logger.info(f"Writing Masks ({mask_names}) into nifty file.")
 
         SimpleITK.WriteImage(
             image=mask_image, fileName=out_path / f"Masks_{time_id}.nii.gz"

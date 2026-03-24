@@ -20,9 +20,21 @@ PyTheranostics is a powerful toolkit designed for processing nuclear medicine sc
 
 ## Installation
 
+### Basic Installation
+
 ```bash
 pip install pytheranostics
 ```
+
+### Installation with Segmentation Support
+
+If you plan to use the automatic segmentation tools with TotalSegmentator:
+
+```bash
+pip install pytheranostics[totalsegmentator]
+```
+
+This installs additional dependencies required for segmentation (torch, torchvision, and TotalSegmentator).
 
 ## Quick Start
 
