@@ -233,7 +233,7 @@ class OrganSDosimetry(BaseDosimetry):
 
             self.results_fitting.loc["Red Marrow"][
                 "Volume_CT_mL"
-            ] = 1170  # TODO volume hardcoded, think about alternatives
+            ] = 1170  # TODO volume hardcoded, think about alternatives #this one works for blood based method only; for imaging method it should be scaled # EANM Dosimetry Committee guidelines for bone marro and whole-body dosimetry
 
             self.results_fitting.loc["RemainderOfBody"]["Volume_CT_mL"] = (
                 self.config["PatientWeight_g"]
