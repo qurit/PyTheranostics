@@ -357,9 +357,9 @@ class DoseVoxelKernel:
 
         if ct is not None:
             logger.warning(
-                "Scaling dose by density will yield erroneous dose values in very "
-                "low-density voxels (for example air inside the body). Please use "
-                "at your own risk."
+                "Applying local mass-density reweighting to a homogeneous-medium dose "
+                "kernel result. This is not a full heterogeneity correction and is "
+                "only a rough approximation in soft tissue."
             )
             dose_mGy = self.weight_dose_by_density(dose_map=dose_mGy, ct=ct)
 
@@ -368,20 +368,54 @@ class DoseVoxelKernel:
     def weight_dose_by_density(
         self, dose_map: numpy.ndarray, ct: numpy.ndarray
     ) -> numpy.ndarray:
-        """Scale dose per voxel by voxel density.
+        """Apply local mass-density reweighting to a dose map.
 
-        This is only valid for voxels of density similar to that of soft tissue and will also improve results for voxels
-        with higher density of soft tissue in some instances. However, it will over-estimate doses in voxels with lower density than soft tissue.
-        To prevent dose to shoot-up in areas of air where there is activity present (e.g., in the patient's gut), we do not apply scaling based on density in those voxels (i.e., we apply a factor of 1, which is equivalent to saying
-        the tissue is ~ soft tissue).
+        This method does not perform a true heterogeneity correction. It assumes the
+        dose kernel was computed in a homogeneous medium close to soft tissue and
+        rescales the resulting dose voxel-by-voxel by ``1 / rho`` using CT-derived
+        density. As a result, it should be treated only as a rough local mass
+        correction in near-water soft tissues.
 
-        Args:
-            dose_map (numpy.ndarray): Dose-map obtained from convolution of TIA map and Dose Kernel.
-            ct (numpy.ndarray): CT image, in HU.
+        Methodological limitations:
+        - It uses only the local density of the target voxel and ignores transport
+          effects from surrounding tissues.
+        - It does not account for material composition differences beyond the
+          HU-to-density mapping.
+        - Negative HU values are clipped to 0 HU before conversion so air and other
+          low-density voxels are effectively treated as water-equivalent for this
+          scaling step. This avoids unphysical dose blow-up but is not physically
+          rigorous.
+
+        Parameters
+        ----------
+        dose_map : numpy.ndarray
+            Dose map obtained from convolution of the TIA map with a homogeneous-
+            medium dose kernel.
+        ct : numpy.ndarray
+            CT image in HU, sampled on the same grid as ``dose_map``.
 
         Returns
         -------
         numpy.ndarray
-            Modified Dose-map with dose per voxel scaled-up by density.
+            Dose map after local density reweighting.
+
+        Raises
+        ------
+        ValueError
+            If ``dose_map`` and ``ct`` do not share the same shape.
         """
-        return 1 / hu_to_rho(hu=numpy.clip(ct, 0, 99999)) * dose_map
+        if dose_map.shape != ct.shape:
+            raise ValueError(
+                "Dose-map and CT array must have the same shape for density weighting. "
+                f"Got {dose_map.shape} and {ct.shape}."
+            )
+
+        ct_clipped = numpy.clip(ct.astype(numpy.float64), 0.0, None)
+        rho = hu_to_rho(hu=ct_clipped)
+
+        logger.info(
+            "Applying local density reweighting with HU clipped to [0, inf) before "
+            "HU-to-density conversion."
+        )
+
+        return dose_map / rho
