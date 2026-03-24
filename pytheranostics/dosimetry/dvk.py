@@ -150,7 +150,9 @@ def _download_kernels_from_zenodo(isotope: str, kernel_dir: Path) -> None:
     try:
         with zipfile.ZipFile(archive_path) as archive:
             csv_members = [
-                member for member in archive.infolist() if member.filename.lower().endswith(".csv")
+                member
+                for member in archive.infolist()
+                if member.filename.lower().endswith(".csv")
             ]
             if not csv_members:
                 raise FileNotFoundError(
@@ -165,7 +167,9 @@ def _download_kernels_from_zenodo(isotope: str, kernel_dir: Path) -> None:
     logger.info("Downloaded dose voxel kernels for %s from %s", isotope, url)
 
 
-def _ensure_kernel_files_available(kernel_dir: Path, isotope: str) -> List[KernelMetadata]:
+def _ensure_kernel_files_available(
+    kernel_dir: Path, isotope: str
+) -> List[KernelMetadata]:
     """Ensure that kernel CSVs for the requested isotope are available locally."""
     kernels = _discover_kernel_files(kernel_dir=kernel_dir, isotope=isotope)
     if kernels:
@@ -175,7 +179,11 @@ def _ensure_kernel_files_available(kernel_dir: Path, isotope: str) -> List[Kerne
         _CSV_PATTERN.match(path.name) is not None for path in kernel_dir.rglob("*.csv")
     )
     if not has_any_csv_kernels:
-        logger.info("No kernel CSV files found under %s. Downloading %s kernels.", kernel_dir, isotope)
+        logger.info(
+            "No kernel CSV files found under %s. Downloading %s kernels.",
+            kernel_dir,
+            isotope,
+        )
     else:
         logger.info(
             "No local kernel CSVs found for %s under %s. Downloading isotope archive.",
@@ -196,7 +204,9 @@ def _ensure_kernel_files_available(kernel_dir: Path, isotope: str) -> List[Kerne
 def _load_octant_kernel(csv_path: Path) -> numpy.ndarray:
     """Load the positive octant stored in a kernel CSV."""
     with csv_path.open("r", encoding="utf-8", newline="") as file_obj:
-        rows = [row for row in csv.reader(file_obj) if any(cell.strip() for cell in row)]
+        rows = [
+            row for row in csv.reader(file_obj) if any(cell.strip() for cell in row)
+        ]
 
     if not rows:
         raise ValueError(f"Kernel CSV '{csv_path}' is empty.")
@@ -214,7 +224,9 @@ def _load_octant_kernel(csv_path: Path) -> numpy.ndarray:
         )
 
     num_sections = len(rows) // section_size
-    octant = numpy.empty((section_size, section_size, num_sections), dtype=numpy.float64)
+    octant = numpy.empty(
+        (section_size, section_size, num_sections), dtype=numpy.float64
+    )
 
     for section_idx in range(num_sections):
         start = section_idx * section_size
