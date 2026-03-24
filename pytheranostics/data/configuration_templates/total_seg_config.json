@@ -1,0 +1,590 @@
+{
+  "vois": [
+    {
+      "voi_name": "adrenal_gland_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "adrenal_gland_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "aorta",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "atrial_appendage_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "autochthon_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "autochthon_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "brachiocephalic_trunk",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "brachiocephalic_vein_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "brachiocephalic_vein_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "brain",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "clavicula_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "clavicula_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "colon",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "common_carotid_artery_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "common_carotid_artery_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "costal_cartilages",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "duodenum",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "esophagus",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "femur_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "femur_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "gallbladder",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "gluteus_maximus_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "gluteus_maximus_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "gluteus_medius_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "gluteus_medius_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "gluteus_minimus_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "gluteus_minimus_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "heart",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "hip_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "hip_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "humerus_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "humerus_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "iliac_artery_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "iliac_artery_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "iliac_vena_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "iliac_vena_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "iliopsoas_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "iliopsoas_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "inferior_vena_cava",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "kidney_cyst_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "kidney_cyst_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "kidney_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "kidney_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "liver",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "lung_lower_lobe_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "lung_lower_lobe_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "lung_middle_lobe_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "lung_upper_lobe_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "lung_upper_lobe_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "pancreas",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "portal_vein_and_splenic_vein",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "prostate",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "pulmonary_vein",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_1",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_10",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_11",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_12",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_2",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_3",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_4",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_5",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_6",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_7",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_8",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_left_9",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_1",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_10",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_11",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_12",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_2",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_3",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_4",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_5",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_6",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_7",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_8",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "rib_right_9",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "sacrum",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "scapula_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "scapula_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "skull",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "small_bowel",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "spinal_cord",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "spleen",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "sternum",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "stomach",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "subclavian_artery_left",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "subclavian_artery_right",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "superior_vena_cava",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "thyroid_gland",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "trachea",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "urinary_bladder",
+      "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C1",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C2",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C3",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C4",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C5",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C6",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_C7",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_L1",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_L2",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_L3",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_L4",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_L5",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_S1",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T1",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T10",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T11",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T12",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T2",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T3",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T4",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T5",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T6",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T7",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T8",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "vertebrae_T9",
+      "include": true,
+      "new_name": null
+    }
+  ],
+  "combine": []
+}
