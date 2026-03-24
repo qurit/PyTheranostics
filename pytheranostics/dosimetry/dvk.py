@@ -332,6 +332,9 @@ class DoseVoxelKernel:
             voxel_size_mm=selected_kernel.voxel_size_mm,
             crop_size_mm=crop_kernel_size_mm,
         ).astype(numpy.float64)
+        self.voxel_size_mm = float(selected_kernel.voxel_size_mm)
+        self.matrix_size = int(selected_kernel.matrix_size)
+        self.isotope = selected_kernel.isotope
 
     def tia_to_dose(
         self, tia_mbq_s: numpy.ndarray, ct: Optional[numpy.ndarray] = None

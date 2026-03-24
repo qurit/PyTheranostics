@@ -31,7 +31,9 @@ def _write_kernel_csv(path: Path, octant: np.ndarray) -> None:
                 file_obj.write("\n")
 
 
-def test_select_closest_kernel_warns_for_large_mismatch(caplog: pytest.LogCaptureFixture):
+def test_select_closest_kernel_warns_for_large_mismatch(
+    caplog: pytest.LogCaptureFixture,
+):
     """A warning should be emitted when the requested voxel size is far from a match."""
     kernels = [
         KernelMetadata(Path("a.csv"), "Lu177", 4.7952, 173),
@@ -87,7 +89,9 @@ def test_dose_voxel_kernel_downloads_when_no_csv_exists(
     monkeypatch.setattr(dvk, "_DATA_DIR", kernel_dir)
     monkeypatch.setattr(dvk, "_download_kernels_from_zenodo", _fake_download)
 
-    kernel = DoseVoxelKernel(isotope="Lu177", voxel_size_mm=5.0, crop_kernel_size_mm=None)
+    kernel = DoseVoxelKernel(
+        isotope="Lu177", voxel_size_mm=5.0, crop_kernel_size_mm=None
+    )
 
     assert created["called"] is True
     assert kernel.kernel.shape == (3, 3, 3)

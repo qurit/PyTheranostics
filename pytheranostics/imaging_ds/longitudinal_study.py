@@ -800,11 +800,11 @@ class LongitudinalStudy:
             raise AssertionError(
                 "Can't compute activity if the image data does not represent the distribution of a radionuclide"
             )
-        return numpy.sum(
+        return float(numpy.sum(
             self.masks[time_id][region]
             * self.array_at(time_id=time_id)
             * self.voxel_volume(time_id=time_id)
-        )
+        ))
 
     def density_of(self, region: str, time_id: int) -> float:
         """Return the mean density of region of interest, in HU.
@@ -971,7 +971,7 @@ class LongitudinalStudy:
         """
         logger.info(f"Writing Image ({name}) into nifty file.")
         SimpleITK.WriteImage(
-            image=SimpleITK.Cast(self.images[time_id], SimpleITK.sitkInt32),
+            image=self.images[time_id],
             fileName=out_path / f"Image_{time_id}{name}.nii.gz",
         )
         return None
