@@ -645,14 +645,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             )  # Gy
 
             if kinetic == "monoexp":
-                t_eff = numpy.log(2) / (
-                    (
-                        self.results.loc["Kidney_Left"]["Fit_params"][1]
-                        + self.results.loc["Kidney_Right"]["Fit_params"][1]
-                    )
-                    / 2
-                )
+                # gather existing kidneys dynamically
+                kidney_labels = [
+                    s for s in self.results.index if s.startswith("Kidney_")
+                ]
+
+                # extract alpha parameters for those that exist
+                alphas = [self.results.loc[k]["Fit_params"][1] for k in kidney_labels]
+
+                # compute effective half-time using the mean alpha
+                alpha_mean = numpy.mean(alphas)
+                t_eff = numpy.log(2) / alpha_mean
+
                 bed[organ] = AD + 1 / alpha_beta * t_repair / (t_repair + t_eff) * AD**2
+
             elif kinetic == "biexp":
                 mean_lambda_washout = (
                     self.results.loc["Kidney_Left"]["Fit_params"][1]
