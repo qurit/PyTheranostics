@@ -36,7 +36,19 @@ _CSV_PATTERN = re.compile(
 
 @dataclass(frozen=True)
 class KernelMetadata:
-    """Metadata parsed from a dose kernel CSV filename."""
+    """Metadata parsed from a dose-kernel CSV filename.
+
+    Attributes
+    ----------
+    path : Path
+        Path to the CSV file on disk.
+    isotope : str
+        Canonical isotope label, for example ``"Lu177"``.
+    voxel_size_mm : float
+        Isotropic voxel size represented by the kernel, in millimeters.
+    matrix_size : int
+        Edge length of the cubic full kernel matrix.
+    """
 
     path: Path
     isotope: str
@@ -45,7 +57,23 @@ class KernelMetadata:
 
 
 def _split_isotope(isotope: str) -> Tuple[str, str]:
-    """Return isotope mass number and symbol from either `Lu177` or `177Lu`."""
+    """Split an isotope label into mass number and element symbol.
+
+    Parameters
+    ----------
+    isotope : str
+        Isotope label formatted as ``"Lu177"`` or ``"177Lu"``.
+
+    Returns
+    -------
+    tuple of str
+        Mass number followed by the element symbol.
+
+    Raises
+    ------
+    ValueError
+        If ``isotope`` does not match one of the supported label formats.
+    """
     match = re.fullmatch(r"(?P<symbol>[A-Za-z]+)(?P<mass>\d+)", isotope)
     if match is None:
         match = re.fullmatch(r"(?P<mass>\d+)(?P<symbol>[A-Za-z]+)", isotope)
@@ -60,19 +88,54 @@ def _split_isotope(isotope: str) -> Tuple[str, str]:
 
 
 def _canonical_isotope(isotope: str) -> str:
-    """Convert an isotope string to a canonical representation for comparisons."""
+    """Convert an isotope label to the canonical comparison format.
+
+    Parameters
+    ----------
+    isotope : str
+        Isotope label formatted as ``"Lu177"`` or ``"177Lu"``.
+
+    Returns
+    -------
+    str
+        Canonical label with the element symbol first, for example ``"Lu177"``.
+    """
     mass, symbol = _split_isotope(isotope)
     return f"{symbol.capitalize()}{mass}"
 
 
 def _zenodo_isotope_name(isotope: str) -> str:
-    """Convert an isotope string to Zenodo's archive naming convention."""
+    """Convert an isotope label to Zenodo's archive naming convention.
+
+    Parameters
+    ----------
+    isotope : str
+        Isotope label formatted as ``"Lu177"`` or ``"177Lu"``.
+
+    Returns
+    -------
+    str
+        Archive label with the mass number first, for example ``"177Lu"``.
+    """
     mass, symbol = _split_isotope(isotope)
     return f"{mass}{symbol.capitalize()}"
 
 
 def _discover_kernel_files(kernel_dir: Path, isotope: str) -> List[KernelMetadata]:
-    """Return kernel CSVs matching the requested isotope."""
+    """Discover local kernel CSV files matching an isotope.
+
+    Parameters
+    ----------
+    kernel_dir : Path
+        Root directory searched recursively for kernel CSV files.
+    isotope : str
+        Requested isotope label.
+
+    Returns
+    -------
+    list of KernelMetadata
+        Parsed metadata for matching kernel files.
+    """
     requested_isotope = _canonical_isotope(isotope)
     kernels: List[KernelMetadata] = []
 
@@ -100,7 +163,25 @@ def _discover_kernel_files(kernel_dir: Path, isotope: str) -> List[KernelMetadat
 def _select_closest_kernel(
     requested_voxel_size_mm: float, available_kernels: Sequence[KernelMetadata]
 ) -> KernelMetadata:
-    """Return the kernel whose voxel size is closest to the requested size."""
+    """Select the available kernel whose voxel size is closest to the request.
+
+    Parameters
+    ----------
+    requested_voxel_size_mm : float
+        Requested isotropic voxel size in millimeters.
+    available_kernels : sequence of KernelMetadata
+        Candidate kernels for the isotope of interest.
+
+    Returns
+    -------
+    KernelMetadata
+        Metadata for the closest matching kernel.
+
+    Raises
+    ------
+    ValueError
+        If ``available_kernels`` is empty.
+    """
     if not available_kernels:
         raise ValueError("No kernels were provided for voxel-size selection.")
 
@@ -122,7 +203,24 @@ def _select_closest_kernel(
 
 
 def _download_kernels_from_zenodo(isotope: str, kernel_dir: Path) -> None:
-    """Download and extract dose-kernel CSVs for the requested isotope."""
+    """Download and extract dose-kernel CSV files for an isotope.
+
+    Parameters
+    ----------
+    isotope : str
+        Requested isotope label.
+    kernel_dir : Path
+        Destination directory where the downloaded archive is extracted.
+
+    Raises
+    ------
+    NotImplementedError
+        If no Zenodo archive exists for the requested isotope.
+    FileNotFoundError
+        If the downloaded archive does not contain any CSV kernel files.
+    urllib.error.URLError
+        If the archive download fails for a network-related reason.
+    """
     zenodo_name = _zenodo_isotope_name(isotope)
     url = (
         f"https://zenodo.org/records/{_ZENODO_RECORD_ID}/files/"
@@ -170,7 +268,26 @@ def _download_kernels_from_zenodo(isotope: str, kernel_dir: Path) -> None:
 def _ensure_kernel_files_available(
     kernel_dir: Path, isotope: str
 ) -> List[KernelMetadata]:
-    """Ensure that kernel CSVs for the requested isotope are available locally."""
+    """Ensure that kernel CSV files for an isotope are available locally.
+
+    Parameters
+    ----------
+    kernel_dir : Path
+        Root directory containing local kernel files.
+    isotope : str
+        Requested isotope label.
+
+    Returns
+    -------
+    list of KernelMetadata
+        Available kernels for the requested isotope after local discovery and any
+        required download.
+
+    Raises
+    ------
+    NotImplementedError
+        If matching kernels are still unavailable after the download attempt.
+    """
     kernels = _discover_kernel_files(kernel_dir=kernel_dir, isotope=isotope)
     if kernels:
         return kernels
@@ -202,7 +319,24 @@ def _ensure_kernel_files_available(
 
 
 def _load_octant_kernel(csv_path: Path) -> numpy.ndarray:
-    """Load the positive octant stored in a kernel CSV."""
+    """Load a stored positive octant from a kernel CSV file.
+
+    Parameters
+    ----------
+    csv_path : Path
+        Path to a kernel CSV file using the stacked-square Zenodo layout.
+
+    Returns
+    -------
+    numpy.ndarray
+        Three-dimensional positive octant of the kernel.
+
+    Raises
+    ------
+    ValueError
+        If the CSV file is empty, malformed, or cannot be reshaped into stacked
+        square sections.
+    """
     with csv_path.open("r", encoding="utf-8", newline="") as file_obj:
         rows = [
             row for row in csv.reader(file_obj) if any(cell.strip() for cell in row)
@@ -238,7 +372,20 @@ def _load_octant_kernel(csv_path: Path) -> numpy.ndarray:
 
 
 def _mirror_axis_from_center(half_kernel: numpy.ndarray, axis: int) -> numpy.ndarray:
-    """Mirror a kernel axis where index 0 is the center voxel."""
+    """Mirror a kernel axis around the center voxel.
+
+    Parameters
+    ----------
+    half_kernel : numpy.ndarray
+        Kernel array where index 0 along ``axis`` corresponds to the center voxel.
+    axis : int
+        Axis to mirror.
+
+    Returns
+    -------
+    numpy.ndarray
+        Kernel with the requested axis mirrored onto the negative side.
+    """
     slicer = [slice(None)] * half_kernel.ndim
     slicer[axis] = slice(1, None)
     positive_side = half_kernel[tuple(slicer)]
@@ -247,7 +394,19 @@ def _mirror_axis_from_center(half_kernel: numpy.ndarray, axis: int) -> numpy.nda
 
 
 def _build_full_kernel_from_octant(octant: numpy.ndarray) -> numpy.ndarray:
-    """Expand the stored positive octant into a full 3-D kernel."""
+    """Expand a stored positive octant into a full three-dimensional kernel.
+
+    Parameters
+    ----------
+    octant : numpy.ndarray
+        Positive octant whose index 0 corresponds to the kernel center along each
+        axis.
+
+    Returns
+    -------
+    numpy.ndarray
+        Full symmetric three-dimensional kernel.
+    """
     kernel = octant
     for axis in range(3):
         kernel = _mirror_axis_from_center(kernel, axis=axis)
@@ -255,7 +414,25 @@ def _build_full_kernel_from_octant(octant: numpy.ndarray) -> numpy.ndarray:
 
 
 def _odd_voxel_count_for_physical_size(size_mm: float, voxel_size_mm: float) -> int:
-    """Return the odd voxel count closest to a requested physical crop size."""
+    """Return the nearest odd voxel count for a requested physical size.
+
+    Parameters
+    ----------
+    size_mm : float
+        Requested physical size in millimeters.
+    voxel_size_mm : float
+        Isotropic voxel size in millimeters.
+
+    Returns
+    -------
+    int
+        Odd voxel count closest to the requested physical extent.
+
+    Raises
+    ------
+    ValueError
+        If ``size_mm`` is not strictly positive.
+    """
     if size_mm <= 0:
         raise ValueError("Crop size must be positive when cropping is enabled.")
 
@@ -274,7 +451,23 @@ def _odd_voxel_count_for_physical_size(size_mm: float, voxel_size_mm: float) -> 
 def _crop_kernel_around_center(
     kernel: numpy.ndarray, voxel_size_mm: float, crop_size_mm: Optional[float]
 ) -> numpy.ndarray:
-    """Crop a kernel symmetrically around its center voxel."""
+    """Crop a kernel symmetrically around its center voxel.
+
+    Parameters
+    ----------
+    kernel : numpy.ndarray
+        Full three-dimensional dose kernel.
+    voxel_size_mm : float
+        Isotropic voxel size represented by ``kernel``.
+    crop_size_mm : float, optional
+        Requested physical crop size in millimeters. If ``None``, no cropping is
+        applied.
+
+    Returns
+    -------
+    numpy.ndarray
+        Cropped kernel, or the original kernel when no crop is needed.
+    """
     if crop_size_mm is None:
         return kernel
 
@@ -290,7 +483,29 @@ def _crop_kernel_around_center(
 
 
 class DoseVoxelKernel:
-    """Dose Voxel Kernel for convolution-based dosimetry calculations."""
+    """Dose voxel kernel used for convolution-based dosimetry calculations.
+
+    Parameters
+    ----------
+    isotope : str
+        Requested isotope label.
+    voxel_size_mm : float
+        Requested isotropic voxel size in millimeters.
+    crop_kernel_size_mm : float, optional
+        Physical crop size of the cubic kernel in millimeters. Pass ``None`` to
+        keep the full kernel.
+
+    Attributes
+    ----------
+    kernel : numpy.ndarray
+        Loaded full or cropped dose kernel.
+    voxel_size_mm : float
+        Voxel size of the selected kernel in millimeters.
+    matrix_size : int
+        Matrix size of the selected full kernel before optional cropping.
+    isotope : str
+        Canonical isotope label of the selected kernel.
+    """
 
     def __init__(
         self,
@@ -298,14 +513,24 @@ class DoseVoxelKernel:
         voxel_size_mm: float,
         crop_kernel_size_mm: Optional[float] = _DEFAULT_CROP_SIZE_MM,
     ) -> None:
-        """Initialize the DoseVoxelKernel.
+        """Initialize a dose voxel kernel from local or downloaded CSV files.
 
-        Args
-        ----
-            isotope (str): The isotope name (e.g., 'Lu177').
-            voxel_size_mm (float): Requested voxel size in millimeters.
-            crop_kernel_size_mm (float | None): Physical cubic crop size in mm.
-                Use ``None`` to disable cropping.
+        Parameters
+        ----------
+        isotope : str
+            Requested isotope label, for example ``"Lu177"``.
+        voxel_size_mm : float
+            Requested isotropic voxel size in millimeters.
+        crop_kernel_size_mm : float, optional
+            Physical cubic crop size in millimeters. Pass ``None`` to disable
+            cropping.
+
+        Raises
+        ------
+        ValueError
+            If the reconstructed kernel shape does not match the filename metadata.
+        NotImplementedError
+            If no kernel files can be found or downloaded for ``isotope``.
         """
         available_kernels = _ensure_kernel_files_available(_DATA_DIR, isotope)
         selected_kernel = _select_closest_kernel(
