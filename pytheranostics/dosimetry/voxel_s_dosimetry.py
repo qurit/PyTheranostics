@@ -3,7 +3,6 @@
 import logging
 import os
 import shutil
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy
@@ -74,10 +73,12 @@ class VoxelSDosimetry(BaseDosimetry):
         masks = numpy.zeros_like(tia_map, dtype=numpy.int8)
 
         for region, region_data in self.results.iterrows():
-            
+
             # Type check:
-            if type(region) != str:
-                raise TypeError(f"Region names should be strings. Found {type(region)} instead.")
+            if not isinstance(region, str):
+                raise TypeError(
+                    f"Region names should be strings. Found {type(region)} instead."
+                )
 
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
@@ -154,7 +155,11 @@ class VoxelSDosimetry(BaseDosimetry):
         )
         kernel_ref_image = self._build_reference_image_with_spacing(
             ref_image=tia_ref_image,
-            spacing_mm=(dose_kernel.voxel_size_mm, dose_kernel.voxel_size_mm, dose_kernel.voxel_size_mm),
+            spacing_mm=(
+                dose_kernel.voxel_size_mm,
+                dose_kernel.voxel_size_mm,
+                dose_kernel.voxel_size_mm,
+            ),
         )
         tia_kernel_grid = self._resample_tia_to_target_grid(target_img=kernel_ref_image)
 
@@ -179,7 +184,9 @@ class VoxelSDosimetry(BaseDosimetry):
             array=numpy.transpose(kernel_dose_array, axes=(2, 0, 1)),
             ref_image=kernel_ref_image,
         )
-        logger.info("Resampling dose map from kernel grid to %s output grid.", output_grid)
+        logger.info(
+            "Resampling dose map from kernel grid to %s output grid.", output_grid
+        )
         dose_map_array = numpy.transpose(
             SimpleITK.GetArrayFromImage(
                 resample_to_target(
@@ -226,9 +233,7 @@ class VoxelSDosimetry(BaseDosimetry):
             max(
                 1,
                 int(
-                    round(
-                        original_size[idx] * original_spacing[idx] / spacing_mm[idx]
-                    )
+                    round(original_size[idx] * original_spacing[idx] / spacing_mm[idx])
                 ),
             )
             for idx in range(3)

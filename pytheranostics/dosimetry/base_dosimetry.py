@@ -87,10 +87,14 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self.toMBq = 1e-6  # Factor to scale activity from Bq to MBq
 
         # Store data
-        self.patient_id = config["PatientID"] if "PatientID" in config else "UnknownPatient"
+        self.patient_id = (
+            config["PatientID"] if "PatientID" in config else "UnknownPatient"
+        )
         self.cycle = config["Cycle"] if "Cycle" in config else 1
-        self.db_dir = Path(config["DatabaseDir"]) if "DatabaseDir" in config else Path("./")
-        
+        self.db_dir = (
+            Path(config["DatabaseDir"]) if "DatabaseDir" in config else Path("./")
+        )
+
         self.check_mandatory_fields()
         self.check_patient_in_db()  # TODO: Traceability/database?
 
@@ -246,7 +250,6 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                     "param_init": None,
                 }
 
-        
         if "Organ" in self.config["Level"]:
             if "WholeBody" not in self.config["VOIs"]:
                 if "No" in self.config["OrganLevel"]["AdditionalOptions"]["WholeBody"]:
@@ -270,7 +273,8 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         tmp_results: Dict[str, List[float]] = {
             roi_name: []
             for roi_name in self.nm_data.masks[0].keys()
-            if roi_name in self.config["VOIs"] or roi_name in ["WholeBody", "RemainderOfBody"]
+            if roi_name in self.config["VOIs"]
+            or roi_name in ["WholeBody", "RemainderOfBody"]
         }
 
         cols: List[str] = ["Time_hr", "Volume_CT_mL", "Activity_MBq", "Density_HU"]
@@ -281,7 +285,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
             self.normalize_time_to_injection(time_id=time_id)
 
         for roi_name in tmp_results.keys():
-                    
+
             # Time (relative to time of injection, in hours)
             tmp_results[roi_name].append(
                 [self.nm_data.meta[time_id].HoursAfterInjection for time_id in time_ids]
@@ -427,10 +431,12 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         }
 
         for region, region_data in self.results.iterrows():
-            
-            if type(region) != str:
-                raise TypeError(f"Region names should be strings. Found {type(region)} instead.")
-                        
+
+            if not isinstance(region, str):
+                raise TypeError(
+                    f"Region names should be strings. Found {type(region)} instead."
+                )
+
             fit_results = self.smart_fit_selection(
                 region_data=region_data, region=region
             )
