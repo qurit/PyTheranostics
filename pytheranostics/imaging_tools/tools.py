@@ -293,7 +293,9 @@ def apply_qspect_dcm_scaling(
             f"Found more than 1 .dcm file inside {path_dir.name}, not sure which one is the right SPECT."
         )
 
-    image_array = numpy.squeeze(SimpleITK.GetArrayFromImage(image)).astype(numpy.float32)
+    image_array = numpy.squeeze(SimpleITK.GetArrayFromImage(image)).astype(
+        numpy.float32
+    )
 
     if scale_factor is not None:
         slope = float(scale_factor[0])
@@ -322,13 +324,21 @@ def apply_qspect_dcm_scaling(
         )
 
     decay_correction = str(getattr(dcm_data, "DecayCorrection", "") or "").upper()
-    logger.info("DICOM DecayCorrection for %s image is '%s'.", modality, decay_correction or "MISSING")
+    logger.info(
+        "DICOM DecayCorrection for %s image is '%s'.",
+        modality,
+        decay_correction or "MISSING",
+    )
 
     if decay_correction == "START":
-        logger.info("No additional decay normalization is needed because the image is already referenced to acquisition start.")
+        logger.info(
+            "No additional decay normalization is needed because the image is already referenced to acquisition start."
+        )
     elif decay_correction == "ADMIN":
         acquisition_dt = _get_acquisition_start_datetime(dcm_data)
-        admin_dt, half_life_seconds = _get_radiopharm_admin_datetime_and_half_life(dcm_data)
+        admin_dt, half_life_seconds = _get_radiopharm_admin_datetime_and_half_life(
+            dcm_data
+        )
 
         if acquisition_dt is None:
             logger.warning(
@@ -352,7 +362,9 @@ def apply_qspect_dcm_scaling(
                     admin_dt.isoformat(),
                 )
             else:
-                decay_factor = math.exp(-math.log(2.0) * delta_seconds / half_life_seconds)
+                decay_factor = math.exp(
+                    -math.log(2.0) * delta_seconds / half_life_seconds
+                )
                 logger.info(
                     "Converting %s image from ADMIN to START decay reference using administration time %s, acquisition time %s, half-life %.6g s, elapsed time %.3f s, factor %.9g.",
                     modality,

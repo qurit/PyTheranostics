@@ -800,11 +800,13 @@ class LongitudinalStudy:
             raise AssertionError(
                 "Can't compute activity if the image data does not represent the distribution of a radionuclide"
             )
-        return float(numpy.sum(
-            self.masks[time_id][region]
-            * self.array_at(time_id=time_id)
-            * self.voxel_volume(time_id=time_id)
-        ))
+        return float(
+            numpy.sum(
+                self.masks[time_id][region]
+                * self.array_at(time_id=time_id)
+                * self.voxel_volume(time_id=time_id)
+            )
+        )
 
     def density_of(self, region: str, time_id: int) -> float:
         """Return the mean density of region of interest, in HU.
