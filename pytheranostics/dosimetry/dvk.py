@@ -191,7 +191,7 @@ def _ensure_kernel_files_available(
             kernel_dir,
         )
 
-    _download_kernels_from_zenodo(isotope=isotope, kernel_dir=kernel_dir)
+    _download_kernels_from_zenodo(isotope, kernel_dir)
     kernels = _discover_kernel_files(kernel_dir=kernel_dir, isotope=isotope)
     if not kernels:
         raise NotImplementedError(
