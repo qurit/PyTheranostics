@@ -11,6 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     Image,
+    KeepTogether,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -57,7 +58,14 @@ def signature_block(person, styles, width=2.5 * inch, height=0.6 * inch):
     return block
 
 
-def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by=None):
+def create_dosimetry_pdf(
+    image_bar,
+    json_file,
+    output_file,
+    calculated_by=None,
+    approved_by=None,
+    comment=None,
+):
     """Generate a dosimetry report PDF from patient JSON data.
 
     Parameters
@@ -117,7 +125,11 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
 
     elements.append(subject_table)
     elements.append(Spacer(1, 0.3 * inch))
-
+    if comment:
+        elements.append(
+            Paragraph(f'<font color="red"><b>{comment}</b></font>', styles["Normal"])
+        )
+        elements.append(Spacer(1, 0.3 * inch))
     elements.append(
         Paragraph("<b>Maximum Intensity Projection</b>", styles["Heading3"])
     )
@@ -138,6 +150,25 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
             img.drawHeight = img.imageHeight * scale
             mip_images.append(img)
 
+        # Add colorbar as the last "image" in the same row
+    colorbar_path = calling_folder / "TestDoseDB/bar.png"
+
+    if colorbar_path.exists():
+        bar_img = Image(str(colorbar_path))
+
+        # Make the bar much narrower (thin horizontal line)
+        bar_max_width = 2.7 * inch
+        bar_max_height = 2.4 * inch
+
+        bar_scale = min(
+            bar_max_width / bar_img.imageWidth, bar_max_height / bar_img.imageHeight
+        )
+
+        bar_img.drawWidth = bar_img.imageWidth * bar_scale
+        bar_img.drawHeight = bar_img.imageHeight * bar_scale
+
+    mip_images.append(bar_img)  # <-- add as last image
+
     # Put all images in one row using a Table
     if mip_images:
         mip_table = Table([mip_images])  # single row
@@ -156,7 +187,8 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         elements.append(Spacer(1, 0.2 * inch))
         caption = Paragraph(
             "<para align=center><i>Figure 1: Maximum Intensity Projection images of the patient across cycles. "
-            "The regions show the segmented organs at risk including the kidneys and the salivary glands. </i></para>",
+            "The regions show the segmented organs at risk including the kidneys and the salivary glands. "
+            f"The maximum value threshold set in all images at {image_bar/1000} kBq/ml. </i></para>",
             styles["Normal"],
         )
         elements.append(caption)
@@ -181,10 +213,16 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     total_tia_kidneys = 0
     total_tia_salivary = 0
     total_tia_marrow = 0
+    total_tia_liver = 0
+    total_tia_spleen = 0
+    total_tia_body = 0
 
     total_ad_kidneys = 0
     total_ad_salivary = 0
     total_ad_marrow = 0
+    total_ad_liver = 0
+    total_ad_spleen = 0
+    total_ad_body = 0
 
     total_bed_kidneys = 0
 
@@ -192,10 +230,11 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         therapy_info = data.get(f"Cycle_0{i}", {})[0]
 
         # Kidneys
-        total_tia_kidneys += (
-            therapy_info["VOIs"]["Kidney_Left"]["TIA_h"]
-            + therapy_info["VOIs"]["Kidney_Right"]["TIA_h"]
-        )
+        kidney_labels = [k for k in therapy_info["VOIs"] if k.startswith("Kidney_")]
+
+        for k in kidney_labels:
+            total_tia_kidneys += therapy_info["VOIs"][k]["TIA_h"]
+
         total_ad_kidneys += therapy_info["Organ-level_AD"]["Kidneys"]["AD[Gy]"]
         total_bed_kidneys += therapy_info["Organ-level_AD"]["Kidneys"]["BED[Gy]"]
 
@@ -211,6 +250,18 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
             + therapy_info["VOIs"]["SubmandibularGland_Right"]["TIA_h"]
         )
         total_ad_salivary += therapy_info["Organ-level_AD"]["Salivary Glands"]["AD[Gy]"]
+
+        # Liver
+        total_tia_liver += therapy_info["VOIs"]["Liver"]["TIA_h"]
+        total_ad_liver += therapy_info["Organ-level_AD"]["Liver"]["AD[Gy]"]
+
+        # Spleen
+        total_tia_spleen += therapy_info["VOIs"]["Spleen"]["TIA_h"]
+        total_ad_spleen += therapy_info["Organ-level_AD"]["Spleen"]["AD[Gy]"]
+
+        # Body
+        total_tia_body += therapy_info["VOIs"]["WholeBody"]["TIA_h"]
+        total_ad_body += therapy_info["Organ-level_AD"]["Total Body"]["AD[Gy]"]
 
     # Build the cumulative table
     cumulative_data = [
@@ -228,6 +279,9 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
             round(total_ad_salivary, 2),
             "-",
         ],
+        ["Liver", round(total_tia_liver, 2), round(total_ad_liver, 2), "-"],
+        ["Spleen", round(total_tia_spleen, 2), round(total_ad_spleen, 2), "-"],
+        ["Total Body", round(total_tia_body, 2), round(total_ad_body, 2), "-"],
     ]
 
     cumulative_table = Table(cumulative_data, colWidths=[1.5 * inch, 1.7 * inch])
@@ -236,6 +290,7 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
             [
                 ("ALIGN", (0, 0), (-1, -1), "LEFT"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
                 ("FONTSIZE", (0, 0), (-1, -1), 12),
                 ("GRID", (0, 0), (-1, -1), 1, colors.black),
@@ -245,31 +300,61 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     )
 
     elements.append(cumulative_table)
-    # Paths to your three images
-    image_paths = [
-        calling_folder / "TestDoseDB/Gy_cummulative.png",
-        calling_folder / "TestDoseDB/Gy_per_cycle.png",
-        calling_folder / "TestDoseDB/Gy_per_GBq_per_cycle.png",
-    ]
 
-    # Load and scale images
-    imgs = []
-    for path in image_paths:
+    # Paths
+    plot_paths = [
+        calling_folder / "TestDoseDB/Gy_per_GBq_per_cycle.png",
+        calling_folder / "TestDoseDB/Gy_cumulative.png",
+    ]
+    legend_path = calling_folder / "TestDoseDB/AD_legend.png"
+
+    # ---- Load plots (row 1) ----
+    plots = []
+    for path in plot_paths:
         img = Image(str(path))
-        scale = min(max_width / img.imageWidth, max_height / img.imageHeight) / 3
+
+        scale = min(
+            (max_width * 0.45) / img.imageWidth,  # half width
+            (max_height / 2) / img.imageHeight,
+        )
+
         img.drawWidth = img.imageWidth * scale
         img.drawHeight = img.imageHeight * scale
-        imgs.append(img)
+        plots.append(img)
 
-    # Create a table with 1 row and 3 columns
-    table = Table([imgs], colWidths=[max_width / 3] * 3)
+    # ---- Load legend (row 2, scaled to 70%) ----
+    legend = Image(str(legend_path))
 
-    # Optional styling
+    legend_scale = (
+        min(
+            (max_width * 0.9) / legend.imageWidth,
+            (max_height / 4) / legend.imageHeight,
+        )
+        * 0.5
+    )  # 70% size
+
+    legend.drawWidth = legend.imageWidth * legend_scale
+    legend.drawHeight = legend.imageHeight * legend_scale
+
+    # ---- Build table data ----
+    table_data = [
+        [plots[0], plots[1]],  # Row 1: two plots
+        [legend, ""],  # Row 2: legend spanning 2 columns
+    ]
+
+    table = Table(
+        table_data,
+        colWidths=[max_width * 0.45, max_width * 0.45],
+    )
+
     table.setStyle(
         TableStyle(
             [
+                ("SPAN", (0, 1), (1, 1)),  # merge legend row
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ]
         )
     )
@@ -280,11 +365,15 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
     # Add caption
     elements.append(Spacer(1, 0.2 * inch))
     caption = Paragraph(
-        "<para align=center><i>Figure 2: Cumulative AD, AD per cycle, and AD per GBq per cycle for target organs.</i></para>",
+        "<para align=center><i>Figure 2: Absorbed dose per cycle reported in units of Gy/GBq, and cumulative absorbed dose in Gy for target organs and total tumor burden (TTB).</i></para>",
         styles["Normal"],
     )
     elements.append(caption)
     elements.append(Spacer(1, 0.2 * inch))
+
+    # new page
+    elements.append(PageBreak())
+    elements.append(Paragraph("<b>Laboratory Results Summary</b>", styles["Heading3"]))
 
     # Paths to trend plots
     trend_paths = [
@@ -292,34 +381,55 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         calling_folder / "TestDoseDB/Platelets_trend.png",
         calling_folder / "TestDoseDB/eGFR_trend.png",
         calling_folder / "TestDoseDB/PSA_trend.png",
+        calling_folder / "TestDoseDB/CTCAE_legend.png",
     ]
 
     trend_imgs = []
-    for path in trend_paths:
+    for i, path in enumerate(trend_paths):
         img = Image(str(path))
-        # Scale to fit 2×2 layout
-        scale = min(
-            (max_width / 2.5) / img.imageWidth, (max_height / 2.5) / img.imageHeight
-        )
+
+        # scale plots and legend slightly differently
+        if i < 4:  # regular plots
+            scale = min(
+                (max_width / 2.5) / img.imageWidth,
+                (max_height / 2.5) / img.imageHeight,
+            )
+        else:  # legend – wider, less tall
+            scale = min(
+                (max_width / 1.5) / img.imageWidth,
+                (max_height / 6) / img.imageHeight,
+            )
+
         img.drawWidth = img.imageWidth * scale
         img.drawHeight = img.imageHeight * scale
         trend_imgs.append(img)
 
-    # Arrange in 2×2 structure
-    trend_table_data = [[trend_imgs[0], trend_imgs[1]], [trend_imgs[2], trend_imgs[3]]]
+    # ---- Table layout ----
+    trend_table_data = [
+        [trend_imgs[0], trend_imgs[1]],
+        [trend_imgs[2], trend_imgs[3]],
+        [trend_imgs[4], ""],  # legend row
+    ]
 
-    trend_table = Table(trend_table_data, colWidths=[max_width / 2.5, max_width / 2.5])
+    trend_table = Table(
+        trend_table_data,
+        colWidths=[max_width / 2.5, max_width / 2.5],
+    )
 
     trend_table.setStyle(
         TableStyle(
             [
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+                # merge legend row across both columns
+                ("SPAN", (0, 2), (1, 2)),
+                # spacing
                 ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
             ]
         )
     )
+
     elements.append(trend_table)
 
     # Add caption
@@ -328,7 +438,7 @@ def create_dosimetry_pdf(json_file, output_file, calculated_by=None, approved_by
         styles["Normal"],
     )
     elements.append(caption)
-
+    elements.append(PageBreak())
     # ===============================
     # Signatures Section
     # ===============================
@@ -413,8 +523,17 @@ def biodistribution_per_cycle(cycle_n, elements, styles, data):
 
     # glob returns a list of matching files
     image_paths = glob.glob(str(pattern))
+    image_paths = sorted(image_paths)
 
     for image_path in image_paths:
+        if "Lesion" in Path(image_path).name:
+            continue
+        if "Bladder" in Path(image_path).name:
+            continue
+        if "Skeleton" in Path(image_path).name:
+            continue
+        if "Remainder" in Path(image_path).name:
+            continue
         img = Image(image_path)
 
         # Compute scaling factor to fit inside page
@@ -443,8 +562,8 @@ def cycle_info(cycle_n, elements, styles, data):
             Patient data dictionary.
     """
     # Therapy Information Section
-    therapy_title = Paragraph(f"<b>Cycle {cycle_n}</b>", styles["Heading2"])
-    elements.append(therapy_title)
+    # therapy_title = Paragraph(f"<b>Cycle {cycle_n}</b>", styles["Heading2"])
+    # elements.append(therapy_title)
 
     # Therapy Information Table
     therapy_info = data.get(f"Cycle_0{cycle_n}", {})
@@ -467,22 +586,44 @@ def cycle_info(cycle_n, elements, styles, data):
     )
 
     # Add to document
-    elements.append(therapy_info_para)
-    elements.append(Spacer(1, 0.089 * inch))
+    # elements.append(therapy_info_para)
+    # elements.append(Spacer(1, 0.089 * inch))
 
-    fig_title = Paragraph(
-        "<b>Absorbed dose results for the organs at risk</b>", styles["Heading3"]
+    # fig_title = Paragraph(
+    #    "<b>Absorbed dose results for the organs at risk</b>", styles["Heading3"]
+    # )
+    # elements.append(fig_title)
+    cycle_header_block = KeepTogether(
+        [
+            Paragraph(f"<b>Cycle {cycle_n}</b>", styles["Heading2"]),
+            therapy_info_para,
+            Spacer(1, 0.089 * inch),
+            Paragraph(
+                "<b>Absorbed dose results for the organs at risk</b>",
+                styles["Heading3"],
+            ),
+        ]
     )
-    elements.append(fig_title)
+
+    elements.append(cycle_header_block)
 
     organ_data_Gy_GBq = [
-        ["Organ", "TIA (h)", "AD (Gy/GBq)", "AD (Gy)", "BED (Gy)"],
+        ["Organ", "TIA (h)", "Mass (g)", "AD (Gy/GBq)", "AD (Gy)", "BED (Gy)"],
         [
             "Kidneys",
             round(
-                (
-                    therapy_info[0]["VOIs"]["Kidney_Left"]["TIA_h"]
-                    + therapy_info[0]["VOIs"]["Kidney_Right"]["TIA_h"]
+                sum(
+                    therapy_info[0]["VOIs"][k]["TIA_h"]
+                    for k in therapy_info[0]["VOIs"]
+                    if k.startswith("Kidney_")
+                ),
+                2,
+            ),
+            round(
+                sum(
+                    therapy_info[0]["VOIs"][k]["volumes_mL"]["mean"]
+                    for k in therapy_info[0]["VOIs"]
+                    if k.startswith("Kidney_")
                 ),
                 2,
             ),
@@ -493,6 +634,7 @@ def cycle_info(cycle_n, elements, styles, data):
         [
             "Red Marrow",
             round((therapy_info[0]["VOIs"]["BoneMarrow"]["TIA_h"]), 2),
+            round(therapy_info[0]["VOIs"]["BoneMarrow"]["volumes_mL"]["mean"], 2),
             round(therapy_info[0]["Organ-level_AD"]["Red Marrow"]["AD[Gy/GBq]"], 2),
             round(therapy_info[0]["Organ-level_AD"]["Red Marrow"]["AD[Gy]"], 2),
             "-",
@@ -509,13 +651,52 @@ def cycle_info(cycle_n, elements, styles, data):
                 2,
             ),
             round(
+                (
+                    therapy_info[0]["VOIs"]["ParotidGland_Left"]["volumes_mL"]["mean"]
+                    + therapy_info[0]["VOIs"]["ParotidGland_Right"]["volumes_mL"][
+                        "mean"
+                    ]
+                    + therapy_info[0]["VOIs"]["SubmandibularGland_Left"]["volumes_mL"][
+                        "mean"
+                    ]
+                    + therapy_info[0]["VOIs"]["SubmandibularGland_Right"]["volumes_mL"][
+                        "mean"
+                    ]
+                ),
+                2,
+            ),
+            round(
                 therapy_info[0]["Organ-level_AD"]["Salivary Glands"]["AD[Gy/GBq]"], 2
             ),
             round(therapy_info[0]["Organ-level_AD"]["Salivary Glands"]["AD[Gy]"], 2),
             "-",
         ],
+        [
+            "Liver",
+            round((therapy_info[0]["VOIs"]["Liver"]["TIA_h"]), 2),
+            round(therapy_info[0]["VOIs"]["Liver"]["volumes_mL"]["mean"], 2),
+            round(therapy_info[0]["Organ-level_AD"]["Liver"]["AD[Gy/GBq]"], 2),
+            round(therapy_info[0]["Organ-level_AD"]["Liver"]["AD[Gy]"], 2),
+            "-",
+        ],
+        [
+            "Spleen",
+            round((therapy_info[0]["VOIs"]["Spleen"]["TIA_h"]), 2),
+            round(therapy_info[0]["VOIs"]["Spleen"]["volumes_mL"]["mean"], 2),
+            round(therapy_info[0]["Organ-level_AD"]["Spleen"]["AD[Gy/GBq]"], 2),
+            round(therapy_info[0]["Organ-level_AD"]["Spleen"]["AD[Gy]"], 2),
+            "-",
+        ],
+        [
+            "Total Body",
+            round((therapy_info[0]["VOIs"]["WholeBody"]["TIA_h"]), 2),
+            round(therapy_info[0]["VOIs"]["WholeBody"]["volumes_mL"]["mean"], 2),
+            round(therapy_info[0]["Organ-level_AD"]["Total Body"]["AD[Gy/GBq]"], 2),
+            round(therapy_info[0]["Organ-level_AD"]["Total Body"]["AD[Gy]"], 2),
+            "-",
+        ],
     ]
-    organ_table_Gy_GBq = Table(organ_data_Gy_GBq, colWidths=[1.5 * inch, 1.2 * inch])
+    organ_table_Gy_GBq = Table(organ_data_Gy_GBq, colWidths=[1.5 * inch, 1.15 * inch])
     organ_table_Gy_GBq.setStyle(
         TableStyle(
             [
