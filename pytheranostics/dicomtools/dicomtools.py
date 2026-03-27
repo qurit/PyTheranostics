@@ -46,16 +46,22 @@ class DicomModify:
         if "siemens" in self.ds.Manufacturer.lower():
             self.ds.SeriesTime = self.ds.AcquisitionTime
             self.ds.ContentTime = self.ds.AcquisitionTime
+        elif "ge" in self.ds.Manufacturer.lower():  # i think it applies to ge as well
+            self.ds.SeriesTime = self.ds.AcquisitionTime
+            self.ds.ContentTime = self.ds.AcquisitionTime
 
         # Get the frame duration in seconds
         frame_duration = (
             self.ds.RotationInformationSequence[0].ActualFrameDuration / 1000
         )
         # get number of projections because manufacturers scale by this in the dicomfile
-        n_proj = (
-            self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
-            * n_detectors
-        )
+        if "siemens" in self.ds.Manufacturer.lower():
+            n_proj = (
+                self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
+                * n_detectors
+            )
+        elif "ge" in self.ds.Manufacturer.lower():
+            n_proj = self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
         # get voxel volume in ml
         vox_vol = np.append(
             np.asarray(self.ds.PixelSpacing), float(self.ds.SliceThickness)
