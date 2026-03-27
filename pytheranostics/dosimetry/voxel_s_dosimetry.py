@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 class VoxelSDosimetry(BaseDosimetry):
-    """Voxel S Dosimetry class.
+    """Voxel S-value dosimetry workflow.
 
-    Computes parameters of fit for time activity curves at the region (organ/lesion) level,
-    and apply them at the voxel level for voxels belonging to user-defined regions.
+    Computes time-activity fits at the region level and propagates the resulting
+    kinetics to voxels belonging to user-defined regions.
     """
 
     def __init__(
@@ -128,7 +128,12 @@ class VoxelSDosimetry(BaseDosimetry):
         return None
 
     def apply_voxel_s(self) -> None:
-        """Apply convolution over TIA map."""
+        """Convolve the voxel TIA map with the selected dose kernel.
+
+        Resamples the TIA map to the kernel grid, optionally applies local
+        density-based dose scaling using CT, and stores the resulting dose map on
+        the configured NM or CT output grid.
+        """
         ref_time_id = self.config["ReferenceTimePoint"]
         output_grid = str(self.config.get("VoxelSOutputGrid", "NM")).upper()
         logger.info("Applying voxel-S dosimetry using %s output grid.", output_grid)
@@ -226,7 +231,21 @@ class VoxelSDosimetry(BaseDosimetry):
     def _build_reference_image_with_spacing(
         ref_image: SimpleITK.Image, spacing_mm: Tuple[float, float, float]
     ) -> SimpleITK.Image:
-        """Create a blank reference image using a new spacing on the same physical frame."""
+        """Create a blank reference image on the same physical frame.
+
+        Parameters
+        ----------
+        ref_image : SimpleITK.Image
+            Source image providing origin, direction, and physical extent.
+        spacing_mm : tuple of float
+            Requested output spacing in millimeters.
+
+        Returns
+        -------
+        SimpleITK.Image
+            Blank image with the requested spacing and a size adjusted to preserve
+            the source physical coverage.
+        """
         original_spacing = ref_image.GetSpacing()[:3]
         original_size = ref_image.GetSize()[:3]
         new_size = [
@@ -246,7 +265,20 @@ class VoxelSDosimetry(BaseDosimetry):
 
     @staticmethod
     def _scalar_voxel_size_mm(image: SimpleITK.Image, image_name: str) -> float:
-        """Return a scalar voxel size for isotropic-kernel selection."""
+        """Return a scalar voxel size for isotropic kernel selection.
+
+        Parameters
+        ----------
+        image : SimpleITK.Image
+            Image whose spacing is used for kernel selection.
+        image_name : str
+            Label used in warning messages when the image spacing is anisotropic.
+
+        Returns
+        -------
+        float
+            Mean voxel spacing in millimeters across the first three axes.
+        """
         spacing = tuple(float(value) for value in image.GetSpacing()[:3])
         mean_spacing = float(numpy.mean(spacing))
         if not numpy.allclose(spacing, mean_spacing, atol=0.1):
@@ -262,7 +294,18 @@ class VoxelSDosimetry(BaseDosimetry):
     def _resample_tia_to_target_grid(
         self, target_img: SimpleITK.Image
     ) -> numpy.ndarray:
-        """Resample TIA totals per voxel through a temporary density representation."""
+        """Resample the TIA map to a target grid while preserving total activity.
+
+        Parameters
+        ----------
+        target_img : SimpleITK.Image
+            Target image defining the output voxel grid.
+
+        Returns
+        -------
+        numpy.ndarray
+            Resampled TIA map on the target grid, expressed in MBq h per voxel.
+        """
         logger.info(
             "Resampling TIA map to kernel grid using voxel-volume normalization to preserve total activity."
         )
@@ -301,14 +344,43 @@ class VoxelSDosimetry(BaseDosimetry):
 
     @staticmethod
     def _voxel_volume_ml(image: SimpleITK.Image) -> float:
-        """Return the voxel volume in mL from image spacing in mm."""
+        """Return the voxel volume in milliliters.
+
+        Parameters
+        ----------
+        image : SimpleITK.Image
+            Image whose spacing defines the voxel dimensions.
+
+        Returns
+        -------
+        float
+            Voxel volume in milliliters.
+        """
         spacing = image.GetSpacing()[:3]
         return float(spacing[0] * spacing[1] * spacing[2] / 1000.0)
 
     def _resolve_output_grid_reference(
         self, ref_time_id: int, output_grid: str
     ) -> Tuple[SimpleITK.Image, Optional[numpy.ndarray]]:
-        """Return the reference image and optional body mask for the requested output grid."""
+        """Return the reference image and optional body mask for an output grid.
+
+        Parameters
+        ----------
+        ref_time_id : int
+            Time point used as the reference for image and mask lookup.
+        output_grid : str
+            Output grid selector. Supported values are ``"NM"`` and ``"CT"``.
+
+        Returns
+        -------
+        tuple
+            Reference image and an optional whole-body mask on that grid.
+
+        Raises
+        ------
+        ValueError
+            If ``output_grid`` is not supported.
+        """
         if output_grid == "NM":
             return (
                 self.nm_data.images[ref_time_id],
@@ -325,7 +397,13 @@ class VoxelSDosimetry(BaseDosimetry):
         )
 
     def run_MC(self) -> None:  # TODO: finish the code!!!!!
-        """Run MC."""
+        """Run the Monte Carlo dosimetry workflow.
+
+        Raises
+        ------
+        NotImplementedError
+            Always raised because the Monte Carlo workflow is not implemented yet.
+        """
         raise NotImplementedError("MC is not implemmented yet.")
         n_cpu = self.config["#CPU"]
         n_primaries = self.config["#primaries"]
@@ -395,9 +473,8 @@ class VoxelSDosimetry(BaseDosimetry):
     def compute_dose(self) -> None:
         """Compute dose by performing the following steps.
 
-        Compute TIA at the region level.
-        Get parameters of fit from region and compute TIA at the voxel level.
-        Convolve TIA map with Dose kernel and (optional) scale with CT density.
+        Computes TIA at the region level, propagates the fit to the voxel level,
+        and then applies the configured voxel-S or Monte Carlo dose engine.
         """
         self.compute_tia()
         self.compute_voxel_tia()
