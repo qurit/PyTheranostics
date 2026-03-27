@@ -328,16 +328,61 @@ def initialize_biokinetics_from_prior_cycle(
             and roi_info["biokinectics_from_previous_cycle"]
         ):
 
-            # Get previous cycle parameters:
-            fixed_param, with_uptake, all_params, washout_ratio = (
-                extract_exponential_params_from_json(
-                    json_data=prior_treatment_data, cycle=cycle, region=roi
-                )
-            )
+            # --- original behavior ---
+            if roi in prior_treatment_data[cycle][0]["VOIs"]:
 
+                fixed_param, with_uptake, all_params, washout_ratio = (
+                    extract_exponential_params_from_json(
+                        json_data=prior_treatment_data,
+                        cycle=cycle,
+                        region=roi,
+                    )
+                )
+
+                fit_order = len(all_params) // 2
+
+            # --- NEW fallback for new lesions ---
+            else:
+                fixed_params_list = []
+                with_uptake = False
+                washout_ratio = None
+
+                for voi_name, voi_data in prior_treatment_data[cycle][0][
+                    "VOIs"
+                ].items():
+                    if "Lesion" in voi_name and voi_data.get("fitting_eq") == 1:
+
+                        fixed_i, with_uptake_i, all_i, washout_ratio_i = (
+                            extract_exponential_params_from_json(
+                                json_data=prior_treatment_data,
+                                cycle=cycle,
+                                region=voi_name,
+                            )
+                        )
+
+                        fixed_params_list.append(fixed_i)
+                        with_uptake = with_uptake or with_uptake_i
+                        washout_ratio = washout_ratio_i
+
+                if len(fixed_params_list) == 0:
+                    raise ValueError(
+                        f"No lesions with fit_order == 1 found in {cycle} "
+                        f"to initialize {roi}"
+                    )
+
+                # mean of dictionaries (same keys guaranteed)
+                fixed_param = {
+                    key: sum(d[key] for d in fixed_params_list) / len(fixed_params_list)
+                    for key in fixed_params_list[0]
+                }
+
+                fit_order = 1
+                all_params = fixed_param
+
+            # --- unchanged ---
             config["VOIs"][roi] = {
                 "fixed_parameters": fixed_param,
-                "fit_order": len(all_params) // 2,
+                "fit_order": fit_order,
                 "param_init": all_params,
                 "with_uptake": with_uptake,
                 "washout_ratio": washout_ratio,
