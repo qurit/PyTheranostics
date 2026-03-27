@@ -129,6 +129,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# VS Code settings
+.vscode
 
 # Other
 Notebooks
@@ -138,3 +140,4 @@ pytheranostics/.vscode
 
 pytheranostics/data/s-values
 pytheranostics/data/ICRP_phantom_masses
+pytheranostics/data/voxel_kernels
