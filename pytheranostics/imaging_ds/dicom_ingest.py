@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _split_dicom_datetime(dt_val: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Split a DICOM DT value into date (YYYYMMDD) and time (HHMMSS).
-    """
+    """Split a DICOM DT value into date (YYYYMMDD) and time (HHMMSS)."""
     if not dt_val:
         return None, None
     val = str(dt_val).split(".")[0]
