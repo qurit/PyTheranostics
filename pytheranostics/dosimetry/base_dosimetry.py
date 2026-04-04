@@ -477,6 +477,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         lmfit.model.ModelResult
                 The best fit model based on Akaike Information Criterion.
         """
+        y_data = numpy.array(region_data["Activity_MBq"], dtype=float)
+        sigma_config = self.config["VOIs"][region].get("sigma", None)
+
+        if sigma_config is None:
+            sigma = None
+        elif sigma_config["type"] == "fraction":
+            sigma = sigma_config["value"] * y_data
+        elif sigma_config["type"] == "sqrt":
+            sigma = numpy.sqrt(y_data)
+        elif sigma_config["type"] == "absolute":
+            sigma = numpy.full_like(y_data, sigma_config["value"], dtype=float)
+        else:
+            raise ValueError(f"Unknown sigma type: {sigma_config['type']}")
+
         # If fit_order is defined by user:
         if self.config["rois"][region]["fit_order"] is not None:
             fit_results, _ = exponential_fit_lmfit(
@@ -487,6 +501,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 bounds=self.config["rois"][region]["bounds"],
                 params_init=self.config["rois"][region]["param_init"],
                 with_uptake=self.config["rois"][region]["with_uptake"],
+                sigma=sigma,
             )
 
             return fit_results
