@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Final
 
@@ -22,9 +25,20 @@ from pytheranostics.imaging_ds.dicom_ingest import auto_setup_dosimetry_study_in
 _VALIDATION_ASSETS: Final[Path] = (
     Path(__file__).resolve().parent / "data" / "voxel_dosimetry_validation"
 )
-_RTSTRUCTS_DIR: Final[Path] = _VALIDATION_ASSETS / "rtstructs"
 _EXPECTED_RESULTS_CSV: Final[Path] = _VALIDATION_ASSETS / "expected_results.csv"
 _EXPECTED_DF_AD_CSV: Final[Path] = _VALIDATION_ASSETS / "expected_df_ad.csv"
+_RTSTRUCT_ZENODO_RECORD_ID: Final[str] = "21893683"
+_RTSTRUCT_ZENODO_RECORD_API_URL: Final[str] = (
+    f"https://zenodo.org/api/records/{_RTSTRUCT_ZENODO_RECORD_ID}"
+)
+_RTSTRUCT_DOWNLOAD_TIMEOUT_S: Final[int] = 120
+_ZENODO_USER_AGENT: Final[str] = "PyTheranostics test suite"
+_EXPECTED_RTSTRUCT_FILENAMES: Final[tuple[str, ...]] = (
+    "rtstruct_scan1.dcm",
+    "rtstruct_scan2.dcm",
+    "rtstruct_scan3.dcm",
+    "rtstruct_scan4.dcm",
+)
 _OPTIONAL_CONFIG_FILES: Final[tuple[str, ...]] = (
     "voi_mappings_config.json",
     "dosimetry_fit_defaults.json",
@@ -40,15 +54,15 @@ _LIST_LIKE_RESULTS_COLUMNS: Final[set[str]] = {
 }
 
 
-def _skip_if_validation_assets_missing() -> None:
+def _skip_if_validation_reference_assets_missing() -> None:
     missing = [
         path.name
-        for path in (_RTSTRUCTS_DIR, _EXPECTED_RESULTS_CSV, _EXPECTED_DF_AD_CSV)
+        for path in (_EXPECTED_RESULTS_CSV, _EXPECTED_DF_AD_CSV)
         if not path.exists()
     ]
     if missing:
         pytest.skip(
-            "Voxel dosimetry validation assets are not available. Missing: "
+            "Voxel dosimetry validation reference assets are not available. Missing: "
             + ", ".join(missing)
             + f". Populate {_VALIDATION_ASSETS} to enable this test."
         )
@@ -61,9 +75,60 @@ def _copy_optional_validation_configs(project_base: Path) -> None:
             shutil.copy2(src, project_base / config_name)
 
 
-def _copy_rtstruct_assets(project_base: Path) -> None:
+def _download_url_to_file(url: str, output_path: Path) -> None:
+    request = urllib.request.Request(url, headers={"User-Agent": _ZENODO_USER_AGENT})
+    with urllib.request.urlopen(
+        request, timeout=_RTSTRUCT_DOWNLOAD_TIMEOUT_S
+    ) as response, output_path.open("wb") as output_file:
+        shutil.copyfileobj(response, output_file)
+
+
+def _download_rtstruct_assets(project_base: Path) -> None:
     target_dir = project_base / "rtstructs"
-    shutil.copytree(_RTSTRUCTS_DIR, target_dir, dirs_exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    request = urllib.request.Request(
+        _RTSTRUCT_ZENODO_RECORD_API_URL,
+        headers={"User-Agent": _ZENODO_USER_AGENT},
+    )
+    with urllib.request.urlopen(
+        request, timeout=_RTSTRUCT_DOWNLOAD_TIMEOUT_S
+    ) as response:
+        record = json.load(response)
+
+    file_records = record.get("files", [])
+    if not file_records:
+        raise FileNotFoundError(
+            f"Zenodo record {_RTSTRUCT_ZENODO_RECORD_ID} does not list any files."
+        )
+
+    files_by_name = {
+        str(file_record.get("key", "")): file_record for file_record in file_records
+    }
+    missing = [
+        filename
+        for filename in _EXPECTED_RTSTRUCT_FILENAMES
+        if filename not in files_by_name
+    ]
+    if missing:
+        discovered = sorted(filename for filename in files_by_name if filename)
+        raise FileNotFoundError(
+            "Zenodo RTSTRUCT assets are incomplete. Missing: "
+            + ", ".join(missing)
+            + ". Discovered: "
+            + (", ".join(discovered) if discovered else "none")
+        )
+
+    for filename in _EXPECTED_RTSTRUCT_FILENAMES:
+        links = files_by_name[filename].get("links", {})
+        download_url = (
+            links.get("content") or links.get("download") or links.get("self")
+        )
+        if not download_url:
+            raise FileNotFoundError(
+                f"Zenodo file '{filename}' does not include a download link."
+            )
+        _download_url_to_file(download_url, target_dir / filename)
 
 
 def _load_reference_frame(csv_path: Path) -> pd.DataFrame:
@@ -173,7 +238,7 @@ def _prepare_frame_for_comparison(
 @pytest.mark.integration
 @pytest.mark.slow
 def test_voxel_dosimetry_pipeline_matches_reference(tmp_path: Path) -> None:
-    _skip_if_validation_assets_missing()
+    _skip_if_validation_reference_assets_missing()
 
     project_base = tmp_path / "snmmi_dosimetry_validation_project"
     init_project(project_base)
@@ -184,7 +249,14 @@ def test_voxel_dosimetry_pipeline_matches_reference(tmp_path: Path) -> None:
     except RuntimeError as exc:
         pytest.skip(f"SNMMI dosimetry dataset could not be fetched: {exc}")
 
-    _copy_rtstruct_assets(project_base)
+    try:
+        _download_rtstruct_assets(project_base)
+    except (
+        FileNotFoundError,
+        OSError,
+        urllib.error.URLError,
+    ) as exc:
+        pytest.skip(f"RTSTRUCT validation assets could not be fetched: {exc}")
 
     study_info, ct_paths, spect_paths, rtstruct_files = (
         auto_setup_dosimetry_study_inventory(
