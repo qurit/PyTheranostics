@@ -12,8 +12,16 @@ The precomputed RT-STRUCT DICOM files are downloaded on demand from Zenodo
 record `21893683`: https://zenodo.org/records/21893683.
 
 The validation test is implemented in `tests/test_voxel_dosimetry_validation.py`.
-It will skip automatically unless both CSV files are present or the remote
-RT-STRUCT files cannot be fetched.
+GitHub Actions may skip this test when the external SNMMI Deep Blue dataset
+rejects CI-hosted downloads. The Zenodo RT-STRUCT files are still expected to
+download and validate when the test runs. Before opening a pull request,
+developers should run it locally:
+
+```bash
+pytest tests/test_voxel_dosimetry_validation.py -rs
+```
+
+Outside CI, SNMMI data-fetch failures fail the test instead of skipping it.
 
 Recommended contents of the CSV files:
 - Include only stable, comparable columns.
