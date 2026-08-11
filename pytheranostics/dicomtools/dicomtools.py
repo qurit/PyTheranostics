@@ -9,44 +9,106 @@ import numpy as np
 import pandas as pd
 import pydicom
 import SimpleITK
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileDataset
 from pydicom.uid import generate_uid
 
 from pytheranostics.shared.radioactive_decay import get_activity_at_injection
 
 
 class DicomModify:
-    """Helper that edits DICOM headers/pixel data for quantitative SPECT studies."""
+    """Edit DICOM headers and pixel data for quantitative SPECT studies.
 
-    def __init__(self, fname, CF):
-        """Load the DICOM file and store calibration info."""
-        self.ds = pydicom.dcmread(fname)
-        self.CF = CF
-        self.fname = fname
+    Parameters
+    ----------
+    fname : str
+        Path to the source DICOM file.
+    CF : float
+        Camera calibration factor used to convert count-rate data to activity
+        concentration.
+    """
+
+    def __init__(self, fname: str, CF: float) -> None:
+        """Load a DICOM file and store calibration information.
+
+        Parameters
+        ----------
+        fname : str
+            Path to the source DICOM file.
+        CF : float
+            Camera calibration factor used to convert count-rate data to
+            activity concentration, in units of MBq/(counts/s).
+        """
+        self.ds: FileDataset = pydicom.dcmread(fname)
+        self.CF: float = CF
+        self.fname: str = fname
 
     def make_bqml_suv(
         self,
-        weight,
-        height,
-        injection_date,
-        pre_inj_activity,
-        pre_inj_time,
-        post_inj_activity,
-        post_inj_time,
-        injection_time,
-        activity_meter_scale_factor,
-        half_life=574300,
-        radiopharmaceutical="Lutetium-PSMA-617",
-        n_detectors=2,
-    ):
-        """Convert raw counts to BQML/SUV units and update the header accordingly."""
+        weight: float,
+        height: float,
+        injection_date: str,
+        pre_inj_activity: float,
+        pre_inj_time: str,
+        post_inj_activity: float,
+        post_inj_time: str,
+        injection_time: str,
+        activity_meter_scale_factor: float = 1.0,
+        half_life: float = 574300,
+        radiopharmaceutical: str = "Lutetium-PSMA-617",
+        n_detectors: int = 2,
+    ) -> pd.DataFrame:
+        """Convert raw counts to BQML/SUV units and update DICOM metadata.
+
+        Parameters
+        ----------
+        weight : float
+            Patient weight in kilograms.
+        height : float
+            Patient height in centimeters.
+        injection_date : str
+            Injection date formatted as ``YYYYMMDD``.
+        pre_inj_activity : float
+            Pre-injection syringe activity in MBq.
+        pre_inj_time : str
+            Time of the pre-injection syringe measurement formatted as
+            ``HHMM``.
+        post_inj_activity : float
+            Post-injection syringe activity in MBq.
+        post_inj_time : str
+            Time of the post-injection syringe measurement formatted as
+            ``HHMM``.
+        injection_time : str
+            Injection time formatted as ``HHMM``.
+        activity_meter_scale_factor : float
+            Scale factor applied to the calculated injected activity. Default is 1.0.
+        half_life : float, optional
+            Radionuclide half-life in seconds. The default is 574300.
+        radiopharmaceutical : str, optional
+            Radiopharmaceutical name written to the DICOM metadata. The default
+            is ``"Lutetium-PSMA-617"``.
+        n_detectors : int, optional
+            Number of detectors used to correct Siemens projection counts. The
+            default is 2.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One-row summary of patient, injection, and scan timing metadata.
+
+        Notes
+        -----
+        This method mutates ``self.ds`` in place. Call :meth:`save` to write the
+        modified dataset to disk.
+        """
         # Half-life is in seconds
 
+        manufacturer = self.ds.Manufacturer.lower()
+
         # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
-        if "siemens" in self.ds.Manufacturer.lower():
+        if "siemens" in manufacturer:
             self.ds.SeriesTime = self.ds.AcquisitionTime
             self.ds.ContentTime = self.ds.AcquisitionTime
-        elif "ge" in self.ds.Manufacturer.lower():  # i think it applies to ge as well
+        elif "ge" in manufacturer:  # i think it applies to ge as well
             self.ds.SeriesTime = self.ds.AcquisitionTime
             self.ds.ContentTime = self.ds.AcquisitionTime
 
@@ -55,13 +117,18 @@ class DicomModify:
             self.ds.RotationInformationSequence[0].ActualFrameDuration / 1000
         )
         # get number of projections because manufacturers scale by this in the dicomfile
-        if "siemens" in self.ds.Manufacturer.lower():
+        if "siemens" in manufacturer:
             n_proj = (
                 self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
                 * n_detectors
             )
-        elif "ge" in self.ds.Manufacturer.lower():
+        elif "ge" in manufacturer:
             n_proj = self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
+        else:
+            raise ValueError(
+                "Unsupported DICOM manufacturer for projection scaling: "
+                f"{self.ds.Manufacturer}"
+            )
         # get voxel volume in ml
         vox_vol = np.append(
             np.asarray(self.ds.PixelSpacing), float(self.ds.SliceThickness)
@@ -196,18 +263,37 @@ class DicomModify:
         # self.ds.MediaStorageSOPInstaceUID
         return inj_df
 
-    def save(self):
-        """Persist the modified dataset alongside the original file."""
+    def save(self) -> None:
+        """Persist the modified dataset alongside the original file.
+
+        Notes
+        -----
+        The output path is generated by appending ``"_out.dcm"`` to the input
+        file stem.
+        """
         self.ds.save_as(f"{self.fname.split('.dcm')[0]}_out.dcm")
 
 
-def dicom_slope_intercept(img):
-    """Calculate GE-style slope/intercept for converting floats to signed int16.
+def dicom_slope_intercept(img: np.ndarray) -> Tuple[float, float]:
+    """Calculate GE-style slope and intercept values.
 
-    GE PET images are stored as signed int16 values with magnitude limited to
-    32767. The computed slope ensures the largest absolute voxel value in the
-    floating-point array (e.g., MBq/mL) maps to this range once quantized, while
-    the intercept remains zero (GE convention).
+    Parameters
+    ----------
+    img : numpy.ndarray
+        Floating-point image array to be quantized into signed 16-bit DICOM
+        pixel data.
+
+    Returns
+    -------
+    tuple of float
+        Slope and intercept used to recover real-world voxel values from the
+        stored integer pixel data.
+
+    Notes
+    -----
+    GE PET images are stored as signed ``int16`` values with magnitude limited
+    to 32767. The computed slope maps the largest absolute voxel value to this
+    range once quantized, while the intercept remains zero.
     """
     max_val = np.max(img)
     min_val = np.min(img)
