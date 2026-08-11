@@ -99,6 +99,9 @@ Once your environment is set up, you can use these commands:
 # Run all tests
 pytest
 
+# Run the external voxel dosimetry validation test before opening a PR
+pytest tests/test_voxel_dosimetry_validation.py -rs
+
 # Run only smoke tests (fast)
 pytest -m smoke
 
@@ -120,6 +123,13 @@ pre-commit run --all-files
 # Run quality checks (combination)
 pytest -m smoke && black --check . && isort --check-only . && flake8 && mypy pytheranostics
 ```
+
+The voxel dosimetry validation test downloads the SNMMI Deep Blue dataset and
+RT-STRUCT files from Zenodo. GitHub Actions may skip this test if Deep Blue
+rejects CI-hosted downloads, so contributors should run it locally before
+opening a pull request. Outside CI, SNMMI data-fetch failures are treated as
+test failures rather than skips. Zenodo RT-STRUCT download or validation
+failures are always test failures when the validation test runs.
 
 ### Type Checking with Mypy
 
