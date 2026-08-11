@@ -82,7 +82,7 @@ class DicomModify:
         activity_meter_scale_factor : float
             Scale factor applied to the calculated injected activity. Default is 1.0.
         half_life : float, optional
-            Radionuclide half-life in seconds. The default is 574300.
+            Radionuclide half-life in seconds. The default is 574300 for Lu-177.
         radiopharmaceutical : str, optional
             Radiopharmaceutical name written to the DICOM metadata. The default
             is ``"Lutetium-PSMA-617"``.
@@ -136,8 +136,7 @@ class DicomModify:
         vox_vol = np.prod(vox_vol / 10)
 
         # Get image in Bq/ml
-        A = self.ds.pixel_array
-        A.astype(np.float64)
+        A = self.ds.pixel_array.astype(np.float64)
         A = A / (frame_duration * n_proj) * self.CF * 1e6 / vox_vol
 
         slope, intercept = dicom_slope_intercept(A)
@@ -147,8 +146,7 @@ class DicomModify:
 
         # bring the new image to the pixel bytes
         self.ds.PixelData = A.tobytes()
-
-        self.ds.PixelData
+        _update_int16_pixel_metadata(self.ds, A, slope, intercept)
 
         # update DICOM tags
         # self.ds.Units = 'BQML'
@@ -302,6 +300,36 @@ def dicom_slope_intercept(img: np.ndarray) -> Tuple[float, float]:
     intercept = 0  # GE has assigned it to zero
 
     return float(slope), float(intercept)
+
+
+def _update_int16_pixel_metadata(
+    ds: FileDataset,
+    pixel_array: np.ndarray,
+    slope: float,
+    intercept: float,
+) -> None:
+    """Update DICOM pixel metadata for signed 16-bit stored pixel data.
+
+    Parameters
+    ----------
+    ds : pydicom.dataset.FileDataset
+        Dataset whose ``PixelData`` has been rewritten.
+    pixel_array : numpy.ndarray
+        Signed 16-bit stored-value pixel array written to ``PixelData``.
+    slope : float
+        Rescale slope that maps stored pixel values back to real-world values.
+    intercept : float
+        Rescale intercept that maps stored pixel values back to real-world
+        values.
+    """
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 1
+    ds.SmallestImagePixelValue = int(pixel_array.min())
+    ds.LargestImagePixelValue = int(pixel_array.max())
+    ds.RescaleSlope = str(slope)
+    ds.RescaleIntercept = str(intercept)
 
 
 def generate_basic_dcm_tags(
