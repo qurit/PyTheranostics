@@ -102,38 +102,51 @@ class DicomModify:
         """
         # Half-life is in seconds
 
-        manufacturer = self.ds.Manufacturer.lower()
+        if n_detectors <= 0:
+            raise ValueError(f"n_detectors must be positive; got {n_detectors}.")
+
+        manufacturer_name = _require_dicom_text(self.ds, "Manufacturer")
+        manufacturer = manufacturer_name.lower()
 
         # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
         if "siemens" in manufacturer:
-            self.ds.SeriesTime = self.ds.AcquisitionTime
-            self.ds.ContentTime = self.ds.AcquisitionTime
+            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
+            self.ds.SeriesTime = acquisition_time
+            self.ds.ContentTime = acquisition_time
         elif "ge" in manufacturer:  # i think it applies to ge as well
-            self.ds.SeriesTime = self.ds.AcquisitionTime
-            self.ds.ContentTime = self.ds.AcquisitionTime
+            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
+            self.ds.SeriesTime = acquisition_time
+            self.ds.ContentTime = acquisition_time
 
         # Get the frame duration in seconds
-        frame_duration = (
-            self.ds.RotationInformationSequence[0].ActualFrameDuration / 1000
+        rotation_info = _require_dicom_sequence_item(
+            self.ds, "RotationInformationSequence"
         )
+        actual_frame_duration = _require_positive_dicom_float(
+            rotation_info,
+            "ActualFrameDuration",
+            context="RotationInformationSequence[0]",
+        )
+        frame_duration = actual_frame_duration / 1000
+
         # get number of projections because manufacturers scale by this in the dicomfile
+        frames_in_rotation = _require_positive_dicom_int(
+            rotation_info,
+            "NumberOfFramesInRotation",
+            context="RotationInformationSequence[0]",
+        )
         if "siemens" in manufacturer:
-            n_proj = (
-                self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
-                * n_detectors
-            )
+            n_proj = frames_in_rotation * n_detectors
         elif "ge" in manufacturer:
-            n_proj = self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
+            n_proj = frames_in_rotation
         else:
             raise ValueError(
                 "Unsupported DICOM manufacturer for projection scaling: "
-                f"{self.ds.Manufacturer}"
+                f"{manufacturer_name}"
             )
+
         # get voxel volume in ml
-        vox_vol = np.append(
-            np.asarray(self.ds.PixelSpacing), float(self.ds.SliceThickness)
-        )
-        vox_vol = np.prod(vox_vol / 10)
+        vox_vol = _get_voxel_volume_ml(self.ds)
 
         # Get image in Bq/ml
         A = self.ds.pixel_array.astype(np.float64)
@@ -150,7 +163,8 @@ class DicomModify:
 
         # update DICOM tags
         # self.ds.Units = 'BQML'
-        self.ds.SeriesDescription = "QSPECT_" + self.ds.SeriesDescription
+        series_description = _require_dicom_text(self.ds, "SeriesDescription")
+        self.ds.SeriesDescription = "QSPECT_" + series_description
 
         # add the RealWorldValueMappingSequence tag [0040,9096]
         self.ds.add_new([0x0040, 0x9096], "SQ", [])
@@ -180,7 +194,7 @@ class DicomModify:
         self.ds.PatientSize = str(height / 100)  # in m
 
         self.ds.DecayCorrection = "START"
-        self.ds.CorrectedImage.insert(0, "DECY")
+        _prepend_corrected_image_value(self.ds, "DECY")
 
         self.ds.add_new([0x0054, 0x0016], "SQ", [])
         self.ds.RadiopharmaceuticalInformationSequence += [Dataset()]
@@ -197,8 +211,12 @@ class DicomModify:
         )
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
-        scan_datetime = datetime.strptime(
-            self.ds.SeriesDate + self.ds.SeriesTime, "%Y%m%d%H%M%S.%f"
+        series_date = _require_dicom_text(self.ds, "SeriesDate")
+        series_time = _require_dicom_text(self.ds, "SeriesTime")
+        scan_datetime = _parse_dicom_date_time(
+            series_date,
+            series_time,
+            context="SeriesDate/SeriesTime",
         )
         delta_scan_inj = (scan_datetime - start_datetime).total_seconds() / (
             60 * 60 * 24
@@ -212,7 +230,7 @@ class DicomModify:
         )
 
         inj_dic = {
-            "patient_id": [self.ds.PatientID],
+            "patient_id": [_require_dicom_text(self.ds, "PatientID")],
             "weight_kg": [weight],
             "height_m": [height],
             "pre_inj_activity_MBq": [pre_inj_activity],
@@ -247,15 +265,11 @@ class DicomModify:
         ].RadiopharmaceuticalStartDateTime = start_datetime.strftime("%Y%m%d%H%M%S.%f")
 
         # for storing as new series data
-        sop_ins_uid = self.ds.SOPInstanceUID
-        b = sop_ins_uid.split(".")
-        b[-1] = str(int(b[-1]) + 1)
-        self.ds.SOPInstanceUID = ".".join(b)
+        sop_ins_uid = _require_dicom_text(self.ds, "SOPInstanceUID")
+        self.ds.SOPInstanceUID = _increment_uid_suffix(sop_ins_uid, "SOPInstanceUID")
 
-        ser_ins_uid = self.ds.SeriesInstanceUID
-        b = ser_ins_uid.split(".")
-        b.pop()
-        prefix = ".".join(b) + "."
+        ser_ins_uid = _require_dicom_text(self.ds, "SeriesInstanceUID")
+        prefix = _uid_prefix_for_generated_uid(ser_ins_uid, "SeriesInstanceUID")
         self.ds.SeriesInstanceUID = generate_uid(prefix=prefix)
 
         # self.ds.MediaStorageSOPInstaceUID
@@ -330,6 +344,239 @@ def _update_int16_pixel_metadata(
     ds.LargestImagePixelValue = int(pixel_array.max())
     ds.RescaleSlope = str(slope)
     ds.RescaleIntercept = str(intercept)
+
+
+def _require_dicom_value(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> Any:
+    """Return a required DICOM value or raise a clear validation error."""
+    if not hasattr(ds, keyword):
+        raise ValueError(f"Required DICOM tag '{keyword}' is missing from {context}.")
+
+    value = getattr(ds, keyword)
+    if value is None:
+        raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
+    if isinstance(value, str) and not value.strip():
+        raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
+
+    return value
+
+
+def _require_dicom_text(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> str:
+    """Return a required DICOM value as stripped text."""
+    value = _require_dicom_value(ds, keyword, context)
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
+
+    return text
+
+
+def _require_dicom_float(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> float:
+    """Return a required DICOM value as a float."""
+    value = _require_dicom_value(ds, keyword, context)
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be numeric; "
+            f"got {value!r}."
+        ) from exc
+
+
+def _require_dicom_int(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> int:
+    """Return a required DICOM value as an integer."""
+    value = _require_dicom_value(ds, keyword, context)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be an integer; "
+            f"got {value!r}."
+        ) from exc
+
+
+def _require_positive_dicom_float(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> float:
+    """Return a required DICOM value as a positive float."""
+    value = _require_dicom_float(ds, keyword, context)
+    if value <= 0:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be positive; "
+            f"got {value}."
+        )
+
+    return value
+
+
+def _require_positive_dicom_int(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> int:
+    """Return a required DICOM value as a positive integer."""
+    value = _require_dicom_int(ds, keyword, context)
+    if value <= 0:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be positive; "
+            f"got {value}."
+        )
+
+    return value
+
+
+def _require_dicom_sequence_item(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+    index: int = 0,
+) -> Dataset:
+    """Return a required item from a DICOM sequence."""
+    sequence = _require_dicom_value(ds, keyword, context)
+    try:
+        item = sequence[index]
+    except (IndexError, TypeError) as exc:
+        raise ValueError(
+            f"Required DICOM sequence '{keyword}' in {context} must contain "
+            f"item {index}."
+        ) from exc
+
+    if not isinstance(item, Dataset):
+        raise ValueError(
+            f"Item {index} of DICOM sequence '{keyword}' in {context} must be "
+            f"a Dataset; got {type(item).__name__}."
+        )
+
+    return item
+
+
+def _get_voxel_volume_ml(ds: Dataset) -> float:
+    """Return voxel volume in milliliters from required spacing tags."""
+    pixel_spacing = _require_dicom_value(ds, "PixelSpacing")
+    try:
+        spacing_mm = np.asarray(pixel_spacing, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Required DICOM tag 'PixelSpacing' must contain numeric row and "
+            f"column spacing values; got {pixel_spacing!r}."
+        ) from exc
+
+    if spacing_mm.size < 2:
+        raise ValueError(
+            "Required DICOM tag 'PixelSpacing' must contain row and column "
+            f"spacing values; got {pixel_spacing!r}."
+        )
+
+    if np.any(spacing_mm[:2] <= 0):
+        raise ValueError(
+            "Required DICOM tag 'PixelSpacing' must contain positive row and "
+            f"column spacing values; got {pixel_spacing!r}."
+        )
+
+    slice_thickness_mm = _require_positive_dicom_float(ds, "SliceThickness")
+    voxel_dimensions_mm = np.append(spacing_mm[:2], slice_thickness_mm)
+    voxel_volume_ml = float(np.prod(voxel_dimensions_mm / 10))
+    if voxel_volume_ml <= 0:
+        raise ValueError(
+            "Voxel volume calculated from PixelSpacing and SliceThickness must "
+            f"be positive; got {voxel_volume_ml} ml."
+        )
+
+    return voxel_volume_ml
+
+
+def _parse_dicom_date_time(date: str, time_value: str, context: str) -> datetime:
+    """Parse DICOM DA/TM text into a datetime."""
+    for time_format in ("%H%M%S.%f", "%H%M%S", "%H%M"):
+        try:
+            return datetime.strptime(date + time_value, "%Y%m%d" + time_format)
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"DICOM {context} must be formatted as YYYYMMDD and HHMM[SS[.ffffff]]; "
+        f"got {date!r} and {time_value!r}."
+    )
+
+
+def _increment_uid_suffix(uid: str, keyword: str) -> str:
+    """Increment the final numeric component of a DICOM UID."""
+    uid_parts = uid.split(".")
+    if (
+        not uid_parts
+        or "" in uid_parts
+        or not all(part.isdigit() for part in uid_parts)
+    ):
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' must be a dot-separated numeric "
+            f"UID ending in a numeric component; got {uid!r}."
+        )
+
+    uid_parts[-1] = str(int(uid_parts[-1]) + 1)
+    return ".".join(uid_parts)
+
+
+def _uid_prefix_for_generated_uid(uid: str, keyword: str) -> str:
+    """Return a UID prefix suitable for pydicom.uid.generate_uid."""
+    uid_parts = uid.split(".")
+    if len(uid_parts) < 2 or "" in uid_parts:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' must be a dot-separated UID with "
+            f"at least two components; got {uid!r}."
+        )
+    if not all(part.isdigit() for part in uid_parts):
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' must contain only numeric UID "
+            f"components; got {uid!r}."
+        )
+
+    prefix = ".".join(uid_parts[:-1]) + "."
+    if len(prefix) > 54:
+        raise ValueError(
+            f"UID prefix derived from DICOM tag '{keyword}' is too long for "
+            f"generate_uid; got {len(prefix)} characters."
+        )
+
+    return prefix
+
+
+def _prepend_corrected_image_value(ds: Dataset, value: str) -> None:
+    """Prepend a CorrectedImage value, creating the tag if needed."""
+    corrected_image = getattr(ds, "CorrectedImage", [])
+    if corrected_image is None:
+        values = []
+    elif isinstance(corrected_image, str):
+        values = [corrected_image]
+    else:
+        try:
+            values = list(corrected_image)
+        except TypeError as exc:
+            raise ValueError(
+                "DICOM tag 'CorrectedImage' must be text or a multi-value "
+                f"sequence; got {corrected_image!r}."
+            ) from exc
+
+    if value not in values:
+        values.insert(0, value)
+
+    ds.CorrectedImage = values
 
 
 def generate_basic_dcm_tags(
