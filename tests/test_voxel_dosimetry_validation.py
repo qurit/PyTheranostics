@@ -12,6 +12,7 @@ from typing import Final
 
 import numpy as np
 import pandas as pd
+import pydicom
 import pytest
 from pandas.testing import assert_frame_equal
 
@@ -33,6 +34,7 @@ _RTSTRUCT_ZENODO_RECORD_API_URL: Final[str] = (
 )
 _RTSTRUCT_DOWNLOAD_TIMEOUT_S: Final[int] = 120
 _ZENODO_USER_AGENT: Final[str] = "PyTheranostics test suite"
+_RTSTRUCT_SOP_CLASS_UID: Final[str] = "1.2.840.10008.5.1.4.1.1.481.3"
 _EXPECTED_RTSTRUCT_FILENAMES: Final[tuple[str, ...]] = (
     "rtstruct_scan1.dcm",
     "rtstruct_scan2.dcm",
@@ -83,7 +85,32 @@ def _download_url_to_file(url: str, output_path: Path) -> None:
         shutil.copyfileobj(response, output_file)
 
 
-def _download_rtstruct_assets(project_base: Path) -> None:
+def _validate_rtstruct_file(rtstruct_path: Path) -> None:
+    try:
+        ds = pydicom.dcmread(rtstruct_path, stop_before_pixels=True)
+    except Exception as exc:
+        raise ValueError(f"{rtstruct_path.name} is not a readable DICOM file.") from exc
+
+    missing_sequences = [
+        sequence_name
+        for sequence_name in (
+            "ROIContourSequence",
+            "StructureSetROISequence",
+            "RTROIObservationsSequence",
+        )
+        if not hasattr(ds, sequence_name)
+    ]
+    sop_class_uid = str(getattr(ds, "SOPClassUID", ""))
+    if sop_class_uid != _RTSTRUCT_SOP_CLASS_UID or missing_sequences:
+        raise ValueError(
+            f"{rtstruct_path.name} is not a valid RT Structure Set DICOM. "
+            f"Modality={getattr(ds, 'Modality', None)!r}, "
+            f"SOPClassUID={sop_class_uid!r}, "
+            f"missing sequences={missing_sequences or 'none'}."
+        )
+
+
+def _download_rtstruct_assets(project_base: Path) -> list[Path]:
     target_dir = project_base / "rtstructs"
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -128,7 +155,11 @@ def _download_rtstruct_assets(project_base: Path) -> None:
             raise FileNotFoundError(
                 f"Zenodo file '{filename}' does not include a download link."
             )
-        _download_url_to_file(download_url, target_dir / filename)
+        rtstruct_path = target_dir / filename
+        _download_url_to_file(download_url, rtstruct_path)
+        _validate_rtstruct_file(rtstruct_path)
+
+    return [target_dir / filename for filename in _EXPECTED_RTSTRUCT_FILENAMES]
 
 
 def _load_reference_frame(csv_path: Path) -> pd.DataFrame:
@@ -250,11 +281,12 @@ def test_voxel_dosimetry_pipeline_matches_reference(tmp_path: Path) -> None:
         pytest.skip(f"SNMMI dosimetry dataset could not be fetched: {exc}")
 
     try:
-        _download_rtstruct_assets(project_base)
+        downloaded_rtstruct_files = _download_rtstruct_assets(project_base)
     except (
         FileNotFoundError,
         OSError,
         urllib.error.URLError,
+        ValueError,
     ) as exc:
         pytest.skip(f"RTSTRUCT validation assets could not be fetched: {exc}")
 
@@ -273,6 +305,13 @@ def test_voxel_dosimetry_pipeline_matches_reference(tmp_path: Path) -> None:
     assert (
         rtstruct_files
     ), "No RTSTRUCT files were discovered by the validation pipeline."
+    assert len(study_info["time_points"]) == len(downloaded_rtstruct_files)
+
+    study_info["rtstruct_files"] = [str(path) for path in downloaded_rtstruct_files]
+    for time_point, rtstruct_file in zip(
+        study_info["time_points"], downloaded_rtstruct_files
+    ):
+        time_point["rtstruct_file"] = str(rtstruct_file)
 
     long_ct, long_spect, _, _ = create_studies_with_masks(
         patient_id=study_info["patient_id"],
