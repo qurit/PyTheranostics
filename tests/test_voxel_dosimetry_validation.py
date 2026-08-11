@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import urllib.error
@@ -54,6 +55,19 @@ _LIST_LIKE_RESULTS_COLUMNS: Final[set[str]] = {
     "R_squared_AIC",
     "Lambda_eff",
 }
+
+
+def _skip_snmmi_fetch_failure_in_ci_or_fail_locally(reason: str) -> None:
+    message = (
+        f"{reason}\n\n"
+        "GitHub Actions is allowed to skip this external validation test because "
+        "the SNMMI Deep Blue dataset can reject CI-hosted downloads. Before "
+        "opening a PR, run this test locally with:\n"
+        "  pytest tests/test_voxel_dosimetry_validation.py -rs"
+    )
+    if os.environ.get("CI", "").lower() == "true":
+        pytest.skip(message)
+    pytest.fail(message)
 
 
 def _skip_if_validation_reference_assets_missing() -> None:
@@ -278,7 +292,9 @@ def test_voxel_dosimetry_pipeline_matches_reference(tmp_path: Path) -> None:
     try:
         fetch_snmmi_dosimetry_challenge(data_home=str(project_base))
     except RuntimeError as exc:
-        pytest.skip(f"SNMMI dosimetry dataset could not be fetched: {exc}")
+        _skip_snmmi_fetch_failure_in_ci_or_fail_locally(
+            f"SNMMI dosimetry dataset could not be fetched: {exc}"
+        )
 
     try:
         downloaded_rtstruct_files = _download_rtstruct_assets(project_base)
@@ -288,7 +304,9 @@ def test_voxel_dosimetry_pipeline_matches_reference(tmp_path: Path) -> None:
         urllib.error.URLError,
         ValueError,
     ) as exc:
-        pytest.skip(f"RTSTRUCT validation assets could not be fetched: {exc}")
+        pytest.fail(
+            "RTSTRUCT validation assets could not be fetched or validated: " f"{exc}"
+        )
 
     study_info, ct_paths, spect_paths, rtstruct_files = (
         auto_setup_dosimetry_study_inventory(
