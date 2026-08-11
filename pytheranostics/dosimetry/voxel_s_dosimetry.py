@@ -1,8 +1,9 @@
 """Module for voxel-level dosimetry calculations."""
 
+import logging
 import os
 import shutil
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy
 import pandas
@@ -16,12 +17,14 @@ from pytheranostics.imaging_ds.longitudinal_study import LongitudinalStudy
 from pytheranostics.imaging_tools.tools import itk_image_from_array, resample_to_target
 from pytheranostics.shared.resources import resource_path
 
+logger = logging.getLogger(__name__)
+
 
 class VoxelSDosimetry(BaseDosimetry):
-    """Voxel S Dosimetry class.
+    """Voxel S-value dosimetry workflow.
 
-    Computes parameters of fit for time activity curves at the region (organ/lesion) level,
-    and apply them at the voxel level for voxels belonging to user-defined regions.
+    Computes time-activity fits at the region level and propagates the resulting
+    kinetics to voxels belonging to user-defined regions.
     """
 
     def __init__(
@@ -71,6 +74,12 @@ class VoxelSDosimetry(BaseDosimetry):
 
         for region, region_data in self.results.iterrows():
 
+            # Type check:
+            if not isinstance(region, str):
+                raise TypeError(
+                    f"Region names should be strings. Found {type(region)} instead."
+                )
+
             if region == "WholeBody":
                 continue  # We do not want to double count voxels!
 
@@ -90,7 +99,7 @@ class VoxelSDosimetry(BaseDosimetry):
             region_tia = region_data["TIA_MBq_h"]
 
             region_fit_params = region_data["Fit_params"]  # fit params
-            exp_order = self.config["rois"][region]["fit_order"]
+            exp_order = self.config["VOIs"][region]["fit_order"]
             region_fit, _, _ = get_exponential(
                 order=exp_order, param_init=None, decayconst=1.0
             )  # Decay-constant not used here.
@@ -119,22 +128,55 @@ class VoxelSDosimetry(BaseDosimetry):
         return None
 
     def apply_voxel_s(self) -> None:
-        """Apply convolution over TIA map."""
+        """Convolve the voxel TIA map with the selected dose kernel.
+
+        Resamples the TIA map to the kernel grid, optionally applies local
+        density-based dose scaling using CT, and stores the resulting dose map on
+        the configured NM or CT output grid.
+        """
         ref_time_id = self.config["ReferenceTimePoint"]
-        nm_voxel_mm = self.nm_data.images[ref_time_id].GetSpacing()[0]
+        output_grid = str(self.config.get("VoxelSOutputGrid", "NM")).upper()
+        logger.info("Applying voxel-S dosimetry using %s output grid.", output_grid)
+        output_ref_image, output_mask = self._resolve_output_grid_reference(
+            ref_time_id=ref_time_id, output_grid=output_grid
+        )
+        tia_ref_image = self.tia_map.images[0]
+        tia_voxel_mm = self._scalar_voxel_size_mm(tia_ref_image, image_name="TIA map")
+        logger.info("Selecting dose kernel from TIA map spacing %.3f mm.", tia_voxel_mm)
+
+        if self.nm_data.meta[0].Radionuclide is None:
+            raise ValueError(
+                "Radionuclide information is required in nm_data meta to apply voxel S-value convolution."
+            )
 
         dose_kernel = DoseVoxelKernel(
-            isotope=self.nm_data.meta[0].Radionuclide, voxel_size_mm=nm_voxel_mm
+            isotope=self.nm_data.meta[0].Radionuclide, voxel_size_mm=tia_voxel_mm
         )
+        logger.info(
+            "Using %s kernel with voxel size %.3f mm and matrix size %d.",
+            dose_kernel.isotope,
+            dose_kernel.voxel_size_mm,
+            dose_kernel.matrix_size,
+        )
+        kernel_ref_image = self._build_reference_image_with_spacing(
+            ref_image=tia_ref_image,
+            spacing_mm=(
+                dose_kernel.voxel_size_mm,
+                dose_kernel.voxel_size_mm,
+                dose_kernel.voxel_size_mm,
+            ),
+        )
+        tia_kernel_grid = self._resample_tia_to_target_grid(target_img=kernel_ref_image)
 
-        # Resample CT to NM (Default using linear interpolator)
+        logger.info("Resampling CT to the kernel grid for density scaling.")
         resampled_ct = resample_to_target(
             source_img=self.ct_data.images[ref_time_id],
-            target_img=self.nm_data.images[ref_time_id],
+            target_img=kernel_ref_image,
         )
 
-        dose_map_array = dose_kernel.tia_to_dose(
-            tia_mbq_s=self.tia_map.array_at(0) * self.toMBqs,
+        logger.info("Computing dose on the kernel grid.")
+        kernel_dose_array = dose_kernel.tia_to_dose(
+            tia_mbq_s=tia_kernel_grid * self.toMBqs,
             ct=(
                 numpy.transpose(
                     SimpleITK.GetArrayFromImage(resampled_ct), axes=(1, 2, 0)
@@ -143,27 +185,225 @@ class VoxelSDosimetry(BaseDosimetry):
                 else None
             ),
         )
+        kernel_dose_img = itk_image_from_array(
+            array=numpy.transpose(kernel_dose_array, axes=(2, 0, 1)),
+            ref_image=kernel_ref_image,
+        )
+        logger.info(
+            "Resampling dose map from kernel grid to %s output grid.", output_grid
+        )
+        dose_map_array = numpy.transpose(
+            SimpleITK.GetArrayFromImage(
+                resample_to_target(
+                    source_img=kernel_dose_img,
+                    target_img=output_ref_image,
+                    default_value=0.0,
+                )
+            ),
+            axes=(1, 2, 0),
+        )
 
         # Create ITK Image Object and embed it into a LongitudinalStudy
-        # Clear dose outside patient body:
-        dose_map_array *= self.nm_data.masks[ref_time_id]["WholeBody"]
+        # Clear dose outside patient body on the chosen output grid when a mask exists.
+        if output_mask is not None:
+            logger.info("Applying WholeBody mask on the %s output grid.", output_grid)
+            dose_map_array *= output_mask
 
+        logger.info("Storing voxel-S dose map on the %s output grid.", output_grid)
         self.dose_map = LongitudinalStudy(
             images={
                 0: itk_image_from_array(
                     array=numpy.transpose(dose_map_array, axes=(2, 0, 1)),
-                    ref_image=self.nm_data.images[ref_time_id],
+                    ref_image=output_ref_image,
                 )
             },
             meta={0: self.nm_data.meta[ref_time_id]},
         )
 
-        self.dose_map.masks[0] = self.nm_data.masks[0].copy()
+        if output_grid == "NM" and ref_time_id in self.nm_data.masks:
+            self.dose_map.masks[0] = self.nm_data.masks[ref_time_id].copy()
+        elif output_grid == "CT" and ref_time_id in self.ct_data.masks:
+            self.dose_map.masks[0] = self.ct_data.masks[ref_time_id].copy()
 
         return None
 
+    @staticmethod
+    def _build_reference_image_with_spacing(
+        ref_image: SimpleITK.Image, spacing_mm: Tuple[float, float, float]
+    ) -> SimpleITK.Image:
+        """Create a blank reference image on the same physical frame.
+
+        Parameters
+        ----------
+        ref_image : SimpleITK.Image
+            Source image providing origin, direction, and physical extent.
+        spacing_mm : tuple of float
+            Requested output spacing in millimeters.
+
+        Returns
+        -------
+        SimpleITK.Image
+            Blank image with the requested spacing and a size adjusted to preserve
+            the source physical coverage.
+        """
+        original_spacing = ref_image.GetSpacing()[:3]
+        original_size = ref_image.GetSize()[:3]
+        new_size = [
+            max(
+                1,
+                int(
+                    round(original_size[idx] * original_spacing[idx] / spacing_mm[idx])
+                ),
+            )
+            for idx in range(3)
+        ]
+        target_img = SimpleITK.Image(new_size, ref_image.GetPixelID())
+        target_img.SetSpacing(spacing_mm)
+        target_img.SetOrigin(ref_image.GetOrigin())
+        target_img.SetDirection(ref_image.GetDirection())
+        return target_img
+
+    @staticmethod
+    def _scalar_voxel_size_mm(image: SimpleITK.Image, image_name: str) -> float:
+        """Return a scalar voxel size for isotropic kernel selection.
+
+        Parameters
+        ----------
+        image : SimpleITK.Image
+            Image whose spacing is used for kernel selection.
+        image_name : str
+            Label used in warning messages when the image spacing is anisotropic.
+
+        Returns
+        -------
+        float
+            Mean voxel spacing in millimeters across the first three axes.
+        """
+        spacing = tuple(float(value) for value in image.GetSpacing()[:3])
+        mean_spacing = float(numpy.mean(spacing))
+        if not numpy.allclose(spacing, mean_spacing, atol=0.1):
+            logger.warning(
+                "%s spacing %s mm is anisotropic. Kernel selection will use the "
+                "mean voxel size %.3f mm and resample to the chosen isotropic grid.",
+                image_name,
+                spacing,
+                mean_spacing,
+            )
+        return mean_spacing
+
+    def _resample_tia_to_target_grid(
+        self, target_img: SimpleITK.Image
+    ) -> numpy.ndarray:
+        """Resample the TIA map to a target grid while preserving total activity.
+
+        Parameters
+        ----------
+        target_img : SimpleITK.Image
+            Target image defining the output voxel grid.
+
+        Returns
+        -------
+        numpy.ndarray
+            Resampled TIA map on the target grid, expressed in MBq h per voxel.
+        """
+        logger.info(
+            "Resampling TIA map to kernel grid using voxel-volume normalization to preserve total activity."
+        )
+        tia_array = self.tia_map.array_at(0).astype(numpy.float64)
+        source_voxel_volume_ml = self._voxel_volume_ml(self.tia_map.images[0])
+        target_voxel_volume_ml = self._voxel_volume_ml(target_img)
+
+        tia_density = tia_array / source_voxel_volume_ml
+        tia_density_img = itk_image_from_array(
+            array=numpy.transpose(tia_density, axes=(2, 0, 1)),
+            ref_image=self.tia_map.images[0],
+        )
+        resampled_density_img = resample_to_target(
+            source_img=tia_density_img,
+            target_img=target_img,
+            default_value=0.0,
+        )
+        resampled_density = numpy.transpose(
+            SimpleITK.GetArrayFromImage(resampled_density_img),
+            axes=(1, 2, 0),
+        ).astype(numpy.float64)
+        resampled_tia = resampled_density * target_voxel_volume_ml
+
+        source_total = float(numpy.sum(tia_array))
+        resampled_total = float(numpy.sum(resampled_tia))
+        logger.info(
+            "TIA totals before renormalization: source=%.6g MBq h, resampled=%.6g MBq h.",
+            source_total,
+            resampled_total,
+        )
+        if source_total > 0.0 and resampled_total > 0.0:
+            resampled_tia *= source_total / resampled_total
+            logger.info("Renormalized resampled TIA map to preserve total activity.")
+
+        return resampled_tia
+
+    @staticmethod
+    def _voxel_volume_ml(image: SimpleITK.Image) -> float:
+        """Return the voxel volume in milliliters.
+
+        Parameters
+        ----------
+        image : SimpleITK.Image
+            Image whose spacing defines the voxel dimensions.
+
+        Returns
+        -------
+        float
+            Voxel volume in milliliters.
+        """
+        spacing = image.GetSpacing()[:3]
+        return float(spacing[0] * spacing[1] * spacing[2] / 1000.0)
+
+    def _resolve_output_grid_reference(
+        self, ref_time_id: int, output_grid: str
+    ) -> Tuple[SimpleITK.Image, Optional[numpy.ndarray]]:
+        """Return the reference image and optional body mask for an output grid.
+
+        Parameters
+        ----------
+        ref_time_id : int
+            Time point used as the reference for image and mask lookup.
+        output_grid : str
+            Output grid selector. Supported values are ``"NM"`` and ``"CT"``.
+
+        Returns
+        -------
+        tuple
+            Reference image and an optional whole-body mask on that grid.
+
+        Raises
+        ------
+        ValueError
+            If ``output_grid`` is not supported.
+        """
+        if output_grid == "NM":
+            return (
+                self.nm_data.images[ref_time_id],
+                self.nm_data.masks[ref_time_id].get("WholeBody"),
+            )
+        if output_grid == "CT":
+            ct_mask = None
+            if ref_time_id in self.ct_data.masks:
+                ct_mask = self.ct_data.masks[ref_time_id].get("WholeBody")
+            return self.ct_data.images[ref_time_id], ct_mask
+
+        raise ValueError(
+            f"VoxelSOutputGrid '{output_grid}' is not supported. Use 'NM' or 'CT'."
+        )
+
     def run_MC(self) -> None:  # TODO: finish the code!!!!!
-        """Run MC."""
+        """Run the Monte Carlo dosimetry workflow.
+
+        Raises
+        ------
+        NotImplementedError
+            Always raised because the Monte Carlo workflow is not implemented yet.
+        """
         raise NotImplementedError("MC is not implemmented yet.")
         n_cpu = self.config["#CPU"]
         n_primaries = self.config["#primaries"]
@@ -233,12 +473,23 @@ class VoxelSDosimetry(BaseDosimetry):
     def compute_dose(self) -> None:
         """Compute dose by performing the following steps.
 
-        Compute TIA at the region level.
-        Get parameters of fit from region and compute TIA at the voxel level.
-        Convolve TIA map with Dose kernel and (optional) scale with CT density.
+        Computes TIA at the region level, propagates the fit to the voxel level,
+        and then applies the configured voxel-S or Monte Carlo dose engine.
         """
         self.compute_tia()
         self.compute_voxel_tia()
+
+        ref_time_id = self.config["ReferenceTimePoint"]
+        self.nm_data.save_image_to_nii_at(
+            time_id=ref_time_id, out_path=self.db_dir, name="_nm_ref"
+        )
+        self.ct_data.save_image_to_nii_at(
+            time_id=ref_time_id, out_path=self.db_dir, name="_ct_ref"
+        )
+        self.tia_map.save_image_to_nii_at(
+            time_id=0, out_path=self.db_dir, name="_tia_map"
+        )
+
         if self.config["Method"] == "Voxel-S-value":
             self.apply_voxel_s()
         elif self.config["Method"] == "Monte-Carlo":
