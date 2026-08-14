@@ -101,6 +101,36 @@
       "new_name": null
     },
     {
+      "voi_name": "patella",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "tibia",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "fibula",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "tarsal",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "metatarsal",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "phalanges_feet",
+      "include": true,
+      "new_name": null
+    },
+    {
       "voi_name": "gallbladder",
       "include": true,
       "new_name": null
@@ -141,6 +171,31 @@
       "new_name": null
     },
     {
+      "voi_name": "heart_atrium_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "heart_atrium_right",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "heart_myocardium",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "heart_ventricle_left",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "heart_ventricle_right",
+      "include": true,
+      "new_name": null
+    },
+    {
       "voi_name": "hip_left",
       "include": true,
       "new_name": null
@@ -158,6 +213,31 @@
     {
       "voi_name": "humerus_right",
       "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "radius",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "ulna",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "carpal",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "metacarpal",
+      "include": true,
+      "new_name": null
+    },
+    {
+      "voi_name": "phalanges_hand",
+      "include": true,
       "new_name": null
     },
     {
@@ -258,6 +338,11 @@
     {
       "voi_name": "prostate",
       "include": false,
+      "new_name": null
+    },
+    {
+      "voi_name": "pulmonary_artery",
+      "include": true,
       "new_name": null
     },
     {
