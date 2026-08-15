@@ -10,20 +10,36 @@ import nibabel as nib
 import pydicom
 from rt_utils import RTStructBuilder
 
+CONTOUR_MODES = ("voxel_center", "voxel_edge")
+
 
 class RTStructConverter:
     """Convert NIfTI segmentation masks to DICOM RT-STRUCT."""
 
-    def __init__(self, ct_dicom_folder: str):
+    def __init__(self, ct_dicom_folder: str, contour_mode: str = "voxel_center"):
         """Initialize the RT-STRUCT converter.
 
         Parameters
         ----------
         ct_dicom_folder : str
             Path to CT DICOM series folder.
+        contour_mode : str, optional
+            ``"voxel_center"`` preserves rt-utils' original behavior.
+            ``"voxel_edge"`` traces the outer voxel edges, matching the
+            Slicer/Plastimatch-style approach used by PDIB-Segmentator.
         """
         self.ct_dicom_folder = ct_dicom_folder
+        if contour_mode not in CONTOUR_MODES:
+            raise ValueError(
+                f"Unknown contour_mode {contour_mode!r}; expected one of "
+                f"{CONTOUR_MODES}."
+            )
+        self.contour_mode = contour_mode
         self.rtstruct = RTStructBuilder.create_new(dicom_series_path=ct_dicom_folder)
+
+    def _add_roi(self, mask, name: str):
+        """Add an ROI using this converter's selected contour strategy."""
+        self.rtstruct.add_roi(mask=mask, name=name, contour_mode=self.contour_mode)
 
     def add_mask_from_nifti(
         self,
@@ -62,7 +78,7 @@ class RTStructConverter:
             mask_array = mask_array[::-1, :, :]
 
         # Add to RT-STRUCT
-        self.rtstruct.add_roi(mask=mask_array, name=roi_name)
+        self._add_roi(mask=mask_array, name=roi_name)
         print(f"Added ROI: {roi_name}")
 
     def add_masks_from_folder_with_config(
@@ -176,7 +192,7 @@ class RTStructConverter:
                         combined_mask = combined_mask | mask_array
 
             if combined_mask is not None:
-                self.rtstruct.add_roi(mask=combined_mask, name=combined_name)
+                self._add_roi(mask=combined_mask, name=combined_name)
                 print(
                     f"Added combined ROI: {combined_name} (from {len(source_list)} sources)"
                 )
