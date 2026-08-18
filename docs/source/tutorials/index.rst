@@ -10,5 +10,5 @@ Hands-on walkthroughs that demonstrate common PyTheranostics workflows.
    dicom_organization/dicom_organization
    Data_Ingestion_Examples/Data_Ingestion_Examples
    segmentation/total_segmentator_tutorial
-   SPECT2SUV/SPECT2SUV
+   qSPECT/qSPECT_Tutorial
    ROI_Mapping_Tutorial/ROI_Mapping_Tutorial
