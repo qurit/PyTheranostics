@@ -1,5 +1,6 @@
 """Utility functions for reading and modifying nuclear medicine DICOM files."""
 
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ _MANUFACTURER_ALIASES = {
     "siemens healthineers": "siemens",
     "siemens medical solutions": "siemens",
     "siemens medical systems": "siemens",
+    "siemens nm": "siemens",
     "ge": "ge",
     "ge healthcare": "ge",
     "ge medical systems": "ge",
@@ -241,7 +243,7 @@ class DicomModify:
         inj_dic = {
             "patient_id": [_require_dicom_text(self.ds, "PatientID")],
             "weight_kg": [weight],
-            "height_m": [height],
+            "height_cm": [height],
             "pre_inj_activity_MBq": [pre_inj_activity],
             "pre_inj_datetime": [pre_inj_datetime],
             "post_inj_activity_MBq": [post_inj_activity],
@@ -394,14 +396,20 @@ def _normalize_dicom_manufacturer(ds: Dataset) -> str:
     manufacturer = _require_dicom_text(ds, "Manufacturer")
     normalized = " ".join(manufacturer.casefold().replace("_", " ").split())
 
-    if normalized not in _MANUFACTURER_ALIASES:
-        supported = ", ".join(sorted(set(_MANUFACTURER_ALIASES.values())))
-        raise ValueError(
-            f"Unsupported DICOM manufacturer for QSPECT conversion: "
-            f"{manufacturer!r}. Supported manufacturers: {supported}."
-        )
+    if normalized in _MANUFACTURER_ALIASES:
+        return _MANUFACTURER_ALIASES[normalized]
 
-    return _MANUFACTURER_ALIASES[normalized]
+    # Manufacturer values commonly include a modality, division, or model name.
+    if "siemens" in normalized:
+        return "siemens"
+    if re.search(r"(?:^|[^a-z0-9])ge(?:$|[^a-z0-9])", normalized):
+        return "ge"
+
+    supported = ", ".join(sorted(set(_MANUFACTURER_ALIASES.values())))
+    raise ValueError(
+        f"Unsupported DICOM manufacturer for QSPECT conversion: "
+        f"{manufacturer!r}. Supported manufacturers: {supported}."
+    )
 
 
 def _require_dicom_float(
