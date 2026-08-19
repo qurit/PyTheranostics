@@ -2,9 +2,10 @@
 
 import re
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -68,6 +69,7 @@ class DicomModify:
         half_life: float = 574300,
         radiopharmaceutical: str = "Lutetium-PSMA-617",
         n_detectors: int = 2,
+        siemens_frame_duration_fallback: Optional[float] = None,
     ) -> pd.DataFrame:
         """Convert raw counts to BQML/SUV units and update DICOM metadata.
 
@@ -101,6 +103,10 @@ class DicomModify:
         n_detectors : int, optional
             Number of detectors used to correct Siemens projection counts. The
             default is 2.
+        siemens_frame_duration_fallback : float, optional
+            Frame duration in seconds to use for Siemens data when
+            ``ActualFrameDuration`` is missing or invalid. By default no
+            fallback is used and invalid DICOM metadata raises ``ValueError``.
 
         Returns
         -------
@@ -133,12 +139,11 @@ class DicomModify:
         rotation_info = _require_dicom_sequence_item(
             self.ds, "RotationInformationSequence"
         )
-        actual_frame_duration = _require_positive_dicom_float(
+        frame_duration = _get_frame_duration_seconds(
             rotation_info,
-            "ActualFrameDuration",
-            context="RotationInformationSequence[0]",
+            manufacturer,
+            siemens_frame_duration_fallback,
         )
-        frame_duration = actual_frame_duration / 1000
 
         # get number of projections because manufacturers scale by this in the dicomfile
         frames_in_rotation = _require_positive_dicom_int(
@@ -375,6 +380,50 @@ def _require_dicom_value(
         raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
 
     return value
+
+
+def _get_frame_duration_seconds(
+    rotation_info: Dataset,
+    manufacturer: str,
+    siemens_fallback: Optional[float] = None,
+) -> float:
+    """Return the DICOM frame duration, with an opt-in Siemens fallback.
+
+    ``ActualFrameDuration`` is stored in milliseconds, while the fallback is
+    supplied in seconds to match the value used by the conversion calculation.
+    """
+    if siemens_fallback is not None:
+        try:
+            siemens_fallback = float(siemens_fallback)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "siemens_frame_duration_fallback must be a positive number "
+                f"of seconds; got {siemens_fallback!r}."
+            ) from exc
+        if not np.isfinite(siemens_fallback) or siemens_fallback <= 0:
+            raise ValueError(
+                "siemens_frame_duration_fallback must be a positive number "
+                f"of seconds; got {siemens_fallback!r}."
+            )
+
+    try:
+        duration_ms = _require_positive_dicom_float(
+            rotation_info,
+            "ActualFrameDuration",
+            context="RotationInformationSequence[0]",
+        )
+    except ValueError:
+        if manufacturer != "siemens" or siemens_fallback is None:
+            raise
+        warnings.warn(
+            "Siemens ActualFrameDuration is missing or invalid; using "
+            f"siemens_frame_duration_fallback={siemens_fallback} seconds.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return siemens_fallback
+
+    return duration_ms / 1000
 
 
 def _require_dicom_text(
