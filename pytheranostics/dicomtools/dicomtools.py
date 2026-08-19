@@ -183,7 +183,7 @@ class DicomModify:
         self.ds.SeriesDescription = "QSPECT_" + series_description
 
         # add the RealWorldValueMappingSequence tag [0040,9096]
-        self.ds.add_new([0x0040, 0x9096], "SQ", [])
+        self.ds.add_new((0x0040, 0x9096), "SQ", [])
         self.ds.RealWorldValueMappingSequence += [Dataset(), Dataset()]
 
         for i in range(2):
@@ -197,7 +197,7 @@ class DicomModify:
             )
 
             self.ds.RealWorldValueMappingSequence[i].LUTLabel = "BQML"
-            self.ds.RealWorldValueMappingSequence[i].add_new([0x0040, 0x08EA], "SQ", [])
+            self.ds.RealWorldValueMappingSequence[i].add_new((0x0040, 0x08EA), "SQ", [])
             self.ds.RealWorldValueMappingSequence[i].MeasurementUnitsCodeSequence += [
                 Dataset()
             ]
@@ -212,7 +212,7 @@ class DicomModify:
         self.ds.DecayCorrection = "START"
         _prepend_corrected_image_value(self.ds, "DECY")
 
-        self.ds.add_new([0x0054, 0x0016], "SQ", [])
+        self.ds.add_new((0x0054, 0x0016), "SQ", [])
         self.ds.RadiopharmaceuticalInformationSequence += [Dataset()]
 
         # values for net injected activity and injection date and time
