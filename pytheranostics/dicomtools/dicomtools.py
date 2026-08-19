@@ -171,7 +171,8 @@ class DicomModify:
         slope, intercept = dicom_slope_intercept(A)
 
         # update the PixelData
-        A = np.int16((A - intercept) / slope)  # GE dicom is signed so np.int16
+        # GE DICOM is signed, so use int16.
+        A = ((A - intercept) / slope).astype(np.int16)
 
         # bring the new image to the pixel bytes
         self.ds.PixelData = A.tobytes()
