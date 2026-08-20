@@ -351,8 +351,8 @@ def _update_int16_pixel_metadata(
     Notes
     -----
     Quantitative scaling is stored in ``RealWorldValueMappingSequence``. The
-    conventional rescale transformation is therefore kept as an identity to
-    prevent readers from applying the quantitative scale twice.
+    conventional rescale transformation is therefore removed to prevent stale
+    source metadata or readers from applying an additional scale.
     """
     ds.BitsAllocated = 16
     ds.BitsStored = 16
@@ -360,8 +360,9 @@ def _update_int16_pixel_metadata(
     ds.PixelRepresentation = 1
     ds.SmallestImagePixelValue = int(pixel_array.min())
     ds.LargestImagePixelValue = int(pixel_array.max())
-    ds.RescaleSlope = "1.0"
-    ds.RescaleIntercept = "0.0"
+    for keyword in ("RescaleSlope", "RescaleIntercept", "RescaleType"):
+        if keyword in ds:
+            del ds[keyword]
 
 
 def _require_dicom_value(
