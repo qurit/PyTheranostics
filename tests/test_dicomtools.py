@@ -78,15 +78,17 @@ def test_get_frame_duration_seconds_rejects_invalid_fallback(fallback):
         _get_frame_duration_seconds(rotation_info, "siemens", fallback)
 
 
-def test_update_int16_pixel_metadata_keeps_rescale_as_identity():
+def test_update_int16_pixel_metadata_removes_conventional_rescale_mapping():
     dataset = Dataset()
     dataset.RescaleSlope = "42.0"
     dataset.RescaleIntercept = "7.0"
+    dataset.RescaleType = "US"
     pixels = np.array([[-2, 0, 3]], dtype=np.int16)
 
     _update_int16_pixel_metadata(dataset, pixels)
 
-    assert float(dataset.RescaleSlope) == 1.0
-    assert float(dataset.RescaleIntercept) == 0.0
+    assert "RescaleSlope" not in dataset
+    assert "RescaleIntercept" not in dataset
+    assert "RescaleType" not in dataset
     assert dataset.SmallestImagePixelValue == -2
     assert dataset.LargestImagePixelValue == 3
