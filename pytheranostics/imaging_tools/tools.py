@@ -313,7 +313,8 @@ def apply_qspect_dcm_scaling(
             dcm_data.RealWorldValueMappingSequence[0].RealWorldValueIntercept
         )
         logger.info(
-            "Applying DICOM quantitative scaling for NM: slope=%s intercept=%s.",
+            "Applying NM quantitative scaling obtained from DICOM "
+            "RealWorldValueMappingSequence: slope=%s intercept=%s.",
             slope,
             intercept,
         )
