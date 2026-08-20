@@ -16,6 +16,7 @@ import pandas as pd
 import pydicom
 import pytest
 from pandas.testing import assert_frame_equal
+from pydicom.sequence import Sequence
 
 from pytheranostics import init_project
 from pytheranostics.data_fetchers import fetch_snmmi_dosimetry_challenge
@@ -126,6 +127,17 @@ def _validate_rtstruct_file(rtstruct_path: Path) -> None:
         )
 
 
+def _ensure_rt_utils_compatible(rtstruct_path: Path) -> None:
+    """Add optional metadata whose presence is required by ``rt-utils``."""
+    ds = pydicom.dcmread(rtstruct_path)
+    if not hasattr(ds, "RTROIObservationsSequence"):
+        # This sequence is optional in an RT Structure Set and is not needed to
+        # construct masks. rt-utils nevertheless requires the attribute to be
+        # present when loading an existing RTSTRUCT.
+        ds.RTROIObservationsSequence = Sequence()
+        ds.save_as(rtstruct_path)
+
+
 def _download_rtstruct_assets(project_base: Path) -> list[Path]:
     target_dir = project_base / "rtstructs"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -174,6 +186,7 @@ def _download_rtstruct_assets(project_base: Path) -> list[Path]:
         rtstruct_path = target_dir / filename
         _download_url_to_file(download_url, rtstruct_path)
         _validate_rtstruct_file(rtstruct_path)
+        _ensure_rt_utils_compatible(rtstruct_path)
 
     return [target_dir / filename for filename in _EXPECTED_RTSTRUCT_FILENAMES]
 
