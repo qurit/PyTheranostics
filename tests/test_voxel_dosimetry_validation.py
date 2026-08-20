@@ -105,12 +105,14 @@ def _validate_rtstruct_file(rtstruct_path: Path) -> None:
     except Exception as exc:
         raise ValueError(f"{rtstruct_path.name} is not a readable DICOM file.") from exc
 
+    # RTROIObservationsSequence is optional RTSTRUCT metadata and is not used by
+    # the mask-loading pipeline.  Some valid, anonymized RT Structure Sets omit
+    # it, including the validation assets hosted on Zenodo.
     missing_sequences = [
         sequence_name
         for sequence_name in (
             "ROIContourSequence",
             "StructureSetROISequence",
-            "RTROIObservationsSequence",
         )
         if not hasattr(ds, sequence_name)
     ]
