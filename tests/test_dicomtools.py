@@ -1,9 +1,11 @@
+import numpy as np
 import pytest
 from pydicom.dataset import Dataset
 
 from pytheranostics.dicomtools.dicomtools import (
     _get_frame_duration_seconds,
     _normalize_dicom_manufacturer,
+    _update_int16_pixel_metadata,
 )
 
 
@@ -74,3 +76,17 @@ def test_get_frame_duration_seconds_rejects_invalid_fallback(fallback):
 
     with pytest.raises(ValueError, match="must be a positive number"):
         _get_frame_duration_seconds(rotation_info, "siemens", fallback)
+
+
+def test_update_int16_pixel_metadata_keeps_rescale_as_identity():
+    dataset = Dataset()
+    dataset.RescaleSlope = "42.0"
+    dataset.RescaleIntercept = "7.0"
+    pixels = np.array([[-2, 0, 3]], dtype=np.int16)
+
+    _update_int16_pixel_metadata(dataset, pixels)
+
+    assert float(dataset.RescaleSlope) == 1.0
+    assert float(dataset.RescaleIntercept) == 0.0
+    assert dataset.SmallestImagePixelValue == -2
+    assert dataset.LargestImagePixelValue == 3

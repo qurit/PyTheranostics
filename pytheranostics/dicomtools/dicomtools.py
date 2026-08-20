@@ -176,7 +176,7 @@ class DicomModify:
 
         # bring the new image to the pixel bytes
         self.ds.PixelData = A.tobytes()
-        _update_int16_pixel_metadata(self.ds, A, slope, intercept)
+        _update_int16_pixel_metadata(self.ds, A)
 
         # update DICOM tags
         # self.ds.Units = 'BQML'
@@ -338,8 +338,6 @@ def dicom_slope_intercept(img: np.ndarray) -> Tuple[float, float]:
 def _update_int16_pixel_metadata(
     ds: FileDataset,
     pixel_array: np.ndarray,
-    slope: float,
-    intercept: float,
 ) -> None:
     """Update DICOM pixel metadata for signed 16-bit stored pixel data.
 
@@ -349,11 +347,12 @@ def _update_int16_pixel_metadata(
         Dataset whose ``PixelData`` has been rewritten.
     pixel_array : numpy.ndarray
         Signed 16-bit stored-value pixel array written to ``PixelData``.
-    slope : float
-        Rescale slope that maps stored pixel values back to real-world values.
-    intercept : float
-        Rescale intercept that maps stored pixel values back to real-world
-        values.
+
+    Notes
+    -----
+    Quantitative scaling is stored in ``RealWorldValueMappingSequence``. The
+    conventional rescale transformation is therefore kept as an identity to
+    prevent readers from applying the quantitative scale twice.
     """
     ds.BitsAllocated = 16
     ds.BitsStored = 16
@@ -361,8 +360,8 @@ def _update_int16_pixel_metadata(
     ds.PixelRepresentation = 1
     ds.SmallestImagePixelValue = int(pixel_array.min())
     ds.LargestImagePixelValue = int(pixel_array.max())
-    ds.RescaleSlope = str(slope)
-    ds.RescaleIntercept = str(intercept)
+    ds.RescaleSlope = "1.0"
+    ds.RescaleIntercept = "0.0"
 
 
 def _require_dicom_value(
