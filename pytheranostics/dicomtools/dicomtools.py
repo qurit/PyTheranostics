@@ -26,6 +26,7 @@ _MANUFACTURER_ALIASES = {
     "ge healthcare": "ge",
     "ge medical systems": "ge",
 }
+_GE_PIXEL_SCALE_TAG = (0x0011, 0x103B)
 
 
 class DicomModify:
@@ -116,7 +117,12 @@ class DicomModify:
         Notes
         -----
         This method mutates ``self.ds`` in place. Call :meth:`save` to write the
-        modified dataset to disk.
+        modified dataset to disk. For GE data, the stored pixels are multiplied
+        by private DICOM tag ``(0011,103B) Pixel Scale`` when it is present.
+        The camera calibration factor must independently match the GE
+        reconstruction protocol, including the factor-of-four count scaling
+        caused by ``projections multiplication`` when resolution recovery is
+        enabled.
         """
         # Half-life is in seconds
 
@@ -166,6 +172,10 @@ class DicomModify:
 
         # Get image in Bq/ml
         A = self.ds.pixel_array.astype(np.float64)
+        ge_pixel_scale = 1.0
+        if manufacturer == "ge":
+            ge_pixel_scale = _get_ge_pixel_scale(self.ds)
+            A *= ge_pixel_scale
         A = A / (frame_duration * n_proj) * self.CF * 1e6 / vox_vol
 
         slope, intercept = dicom_slope_intercept(A)
@@ -250,6 +260,7 @@ class DicomModify:
             "patient_id": [_require_dicom_text(self.ds, "PatientID")],
             "weight_kg": [weight],
             "height_cm": [height],
+            "ge_pixel_scale": [ge_pixel_scale],
             "pre_inj_activity_MBq": [pre_inj_activity],
             "pre_inj_datetime": [pre_inj_datetime],
             "post_inj_activity_MBq": [post_inj_activity],
@@ -363,6 +374,67 @@ def _update_int16_pixel_metadata(
     for keyword in ("RescaleSlope", "RescaleIntercept", "RescaleType"):
         if keyword in ds:
             del ds[keyword]
+
+
+def _get_ge_pixel_scale(ds: Dataset) -> float:
+    """Return the GE private Pixel Scale correction, defaulting to one.
+
+    GE may reduce reconstructed stored counts to remain within the 16-bit pixel
+    range. Private tag ``(0011,103B)`` records the multiplier required to
+    recover the quantitative count values.
+
+    Parameters
+    ----------
+    ds : pydicom.dataset.Dataset
+        GE DICOM dataset containing the optional private Pixel Scale tag.
+
+    Returns
+    -------
+    float
+        Positive multiplier to apply to the stored pixel array.
+
+    Raises
+    ------
+    ValueError
+        If the tag is present but is not a finite positive number.
+    """
+    element = ds.get(_GE_PIXEL_SCALE_TAG)
+    if element is None:
+        return 1.0
+
+    value = element.value
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("ascii").strip(" \x00")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                "GE Pixel Scale DICOM tag (0011,103B) must contain a positive "
+                f"numeric value; got non-ASCII bytes {value!r}."
+            ) from exc
+
+    try:
+        pixel_scale = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "GE Pixel Scale DICOM tag (0011,103B) must contain a positive "
+            f"numeric value; got {value!r}."
+        ) from exc
+
+    if not np.isfinite(pixel_scale) or pixel_scale <= 0:
+        raise ValueError(
+            "GE Pixel Scale DICOM tag (0011,103B) must contain a finite positive "
+            f"value; got {value!r}."
+        )
+
+    if not np.isclose(pixel_scale, 1.0):
+        warnings.warn(
+            "Applying GE Pixel Scale from DICOM tag (0011,103B): "
+            f"stored counts will be multiplied by {pixel_scale}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    return pixel_scale
 
 
 def _require_dicom_value(
