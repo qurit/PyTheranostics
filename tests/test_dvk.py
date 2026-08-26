@@ -1,5 +1,9 @@
 """Tests for DoseVoxelKernel CSV loading and selection."""
 
+import hashlib
+import io
+import json
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -95,3 +99,44 @@ def test_dose_voxel_kernel_downloads_when_no_csv_exists(
 
     assert created["called"] is True
     assert kernel.kernel.shape == (3, 3, 3)
+
+
+def test_kernel_download_retries_truncated_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A truncated Zenodo response should be retried before ZIP extraction."""
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w") as archive:
+        archive.writestr(
+            "177Lu/177LU_6.647D_99%_5mm_3x3x3.csv",
+            "1,2\n3,4\n",
+        )
+    archive_bytes = archive_buffer.getvalue()
+    checksum = hashlib.md5(archive_bytes).hexdigest()
+    record = {
+        "files": [
+            {
+                "key": "177Lu.zip",
+                "size": len(archive_bytes),
+                "checksum": f"md5:{checksum}",
+                "links": {"self": "https://example.test/177Lu.zip"},
+            }
+        ]
+    }
+    responses = [
+        json.dumps(record).encode(),
+        archive_bytes[: len(archive_bytes) // 2],
+        archive_bytes,
+    ]
+
+    def fake_urlopen(request, timeout):
+        assert timeout == dvk._ZENODO_DOWNLOAD_TIMEOUT_S
+        return io.BytesIO(responses.pop(0))
+
+    monkeypatch.setattr(dvk.urllib.request, "urlopen", fake_urlopen)
+
+    kernel_dir = tmp_path / "voxel_kernels"
+    dvk._download_kernels_from_zenodo("Lu177", kernel_dir)
+
+    assert not responses
+    assert (kernel_dir / "177Lu" / "177LU_6.647D_99%_5mm_3x3x3.csv").is_file()

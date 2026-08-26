@@ -9,7 +9,7 @@ validation test:
 - `dosimetry_fit_defaults.json` (optional): custom ROI fit defaults for the validation run
 
 The precomputed RT-STRUCT DICOM files are downloaded on demand from Zenodo
-record `21893683`: https://zenodo.org/records/21893683.
+record `22036568`: https://zenodo.org/records/22036568.
 
 The validation test is implemented in `tests/test_voxel_dosimetry_validation.py`.
 GitHub Actions may skip this test when the external SNMMI Deep Blue dataset
