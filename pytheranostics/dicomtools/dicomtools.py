@@ -1,94 +1,190 @@
 """Utility functions for reading and modifying nuclear medicine DICOM files."""
 
+import re
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import pydicom
 import SimpleITK
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileDataset
 from pydicom.uid import generate_uid
 
 from pytheranostics.shared.radioactive_decay import get_activity_at_injection
 
+_MANUFACTURER_ALIASES = {
+    "siemens": "siemens",
+    "siemens healthineers": "siemens",
+    "siemens medical solutions": "siemens",
+    "siemens medical systems": "siemens",
+    "siemens nm": "siemens",
+    "ge": "ge",
+    "ge healthcare": "ge",
+    "ge medical systems": "ge",
+}
+
 
 class DicomModify:
-    """Helper that edits DICOM headers/pixel data for quantitative SPECT studies."""
+    """Edit DICOM headers and pixel data for quantitative SPECT studies.
 
-    def __init__(self, fname, CF):
-        """Load the DICOM file and store calibration info."""
-        self.ds = pydicom.dcmread(fname)
-        self.CF = CF
-        self.fname = fname
+    Parameters
+    ----------
+    fname : str
+        Path to the source DICOM file.
+    CF : float
+        Camera calibration factor used to convert count-rate data to activity
+        concentration.
+    """
+
+    def __init__(self, fname: str, CF: float) -> None:
+        """Load a DICOM file and store calibration information.
+
+        Parameters
+        ----------
+        fname : str
+            Path to the source DICOM file.
+        CF : float
+            Camera calibration factor used to convert count-rate data to
+            activity concentration, in units of MBq/(counts/s).
+        """
+        self.ds: FileDataset = pydicom.dcmread(fname)
+        self.CF: float = CF
+        self.fname: str = fname
 
     def make_bqml_suv(
         self,
-        weight,
-        height,
-        injection_date,
-        pre_inj_activity,
-        pre_inj_time,
-        post_inj_activity,
-        post_inj_time,
-        injection_time,
-        activity_meter_scale_factor,
-        half_life=574300,
-        radiopharmaceutical="Lutetium-PSMA-617",
-        n_detectors=2,
-    ):
-        """Convert raw counts to BQML/SUV units and update the header accordingly."""
+        weight: float,
+        height: float,
+        injection_date: str,
+        pre_inj_activity: float,
+        pre_inj_time: str,
+        post_inj_activity: float,
+        post_inj_time: str,
+        injection_time: str,
+        activity_meter_scale_factor: float = 1.0,
+        half_life: float = 574300,
+        radiopharmaceutical: str = "Lutetium-PSMA-617",
+        n_detectors: int = 2,
+        siemens_frame_duration_fallback: Optional[float] = None,
+    ) -> pd.DataFrame:
+        """Convert raw counts to BQML/SUV units and update DICOM metadata.
+
+        Parameters
+        ----------
+        weight : float
+            Patient weight in kilograms.
+        height : float
+            Patient height in centimeters.
+        injection_date : str
+            Injection date formatted as ``YYYYMMDD``.
+        pre_inj_activity : float
+            Pre-injection syringe activity in MBq.
+        pre_inj_time : str
+            Time of the pre-injection syringe measurement formatted as
+            ``HHMM``.
+        post_inj_activity : float
+            Post-injection syringe activity in MBq.
+        post_inj_time : str
+            Time of the post-injection syringe measurement formatted as
+            ``HHMM``.
+        injection_time : str
+            Injection time formatted as ``HHMM``.
+        activity_meter_scale_factor : float
+            Scale factor applied to the calculated injected activity. Default is 1.0.
+        half_life : float, optional
+            Radionuclide half-life in seconds. The default is 574300 for Lu-177.
+        radiopharmaceutical : str, optional
+            Radiopharmaceutical name written to the DICOM metadata. The default
+            is ``"Lutetium-PSMA-617"``.
+        n_detectors : int, optional
+            Number of detectors used to correct Siemens projection counts. The
+            default is 2.
+        siemens_frame_duration_fallback : float, optional
+            Frame duration in seconds to use for Siemens data when
+            ``ActualFrameDuration`` is missing or invalid. By default no
+            fallback is used and invalid DICOM metadata raises ``ValueError``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One-row summary of patient, injection, and scan timing metadata.
+
+        Notes
+        -----
+        This method mutates ``self.ds`` in place. Call :meth:`save` to write the
+        modified dataset to disk.
+        """
         # Half-life is in seconds
 
+        if n_detectors <= 0:
+            raise ValueError(f"n_detectors must be positive; got {n_detectors}.")
+
+        manufacturer = _normalize_dicom_manufacturer(self.ds)
+
         # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
-        if "siemens" in self.ds.Manufacturer.lower():
-            self.ds.SeriesTime = self.ds.AcquisitionTime
-            self.ds.ContentTime = self.ds.AcquisitionTime
-        elif "ge" in self.ds.Manufacturer.lower():  # i think it applies to ge as well
-            self.ds.SeriesTime = self.ds.AcquisitionTime
-            self.ds.ContentTime = self.ds.AcquisitionTime
+        if manufacturer == "siemens":
+            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
+            self.ds.SeriesTime = acquisition_time
+            self.ds.ContentTime = acquisition_time
+        elif manufacturer == "ge":  # i think it applies to ge as well
+            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
+            self.ds.SeriesTime = acquisition_time
+            self.ds.ContentTime = acquisition_time
 
         # Get the frame duration in seconds
-        frame_duration = (
-            self.ds.RotationInformationSequence[0].ActualFrameDuration / 1000
+        rotation_info = _require_dicom_sequence_item(
+            self.ds, "RotationInformationSequence"
         )
+        frame_duration = _get_frame_duration_seconds(
+            rotation_info,
+            manufacturer,
+            siemens_frame_duration_fallback,
+        )
+
         # get number of projections because manufacturers scale by this in the dicomfile
-        if "siemens" in self.ds.Manufacturer.lower():
-            n_proj = (
-                self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
-                * n_detectors
-            )
-        elif "ge" in self.ds.Manufacturer.lower():
-            n_proj = self.ds.RotationInformationSequence[0].NumberOfFramesInRotation
-        # get voxel volume in ml
-        vox_vol = np.append(
-            np.asarray(self.ds.PixelSpacing), float(self.ds.SliceThickness)
+        frames_in_rotation = _require_positive_dicom_int(
+            rotation_info,
+            "NumberOfFramesInRotation",
+            context="RotationInformationSequence[0]",
         )
-        vox_vol = np.prod(vox_vol / 10)
+        if manufacturer == "siemens":
+            n_proj = frames_in_rotation * n_detectors
+        elif manufacturer == "ge":
+            n_proj = frames_in_rotation
+        else:
+            raise ValueError(
+                "Unsupported DICOM manufacturer for projection scaling: "
+                f"{_require_dicom_text(self.ds, 'Manufacturer')}"
+            )
+
+        # get voxel volume in ml
+        vox_vol = _get_voxel_volume_ml(self.ds)
 
         # Get image in Bq/ml
-        A = self.ds.pixel_array
-        A.astype(np.float64)
+        A = self.ds.pixel_array.astype(np.float64)
         A = A / (frame_duration * n_proj) * self.CF * 1e6 / vox_vol
 
         slope, intercept = dicom_slope_intercept(A)
 
         # update the PixelData
-        A = np.int16((A - intercept) / slope)  # GE dicom is signed so np.int16
+        # GE DICOM is signed, so use int16.
+        A = ((A - intercept) / slope).astype(np.int16)
 
         # bring the new image to the pixel bytes
         self.ds.PixelData = A.tobytes()
-
-        self.ds.PixelData
+        _update_int16_pixel_metadata(self.ds, A)
 
         # update DICOM tags
         # self.ds.Units = 'BQML'
-        self.ds.SeriesDescription = "QSPECT_" + self.ds.SeriesDescription
+        series_description = _require_dicom_text(self.ds, "SeriesDescription")
+        self.ds.SeriesDescription = "QSPECT_" + series_description
 
         # add the RealWorldValueMappingSequence tag [0040,9096]
-        self.ds.add_new([0x0040, 0x9096], "SQ", [])
+        self.ds.add_new((0x0040, 0x9096), "SQ", [])
         self.ds.RealWorldValueMappingSequence += [Dataset(), Dataset()]
 
         for i in range(2):
@@ -102,7 +198,7 @@ class DicomModify:
             )
 
             self.ds.RealWorldValueMappingSequence[i].LUTLabel = "BQML"
-            self.ds.RealWorldValueMappingSequence[i].add_new([0x0040, 0x08EA], "SQ", [])
+            self.ds.RealWorldValueMappingSequence[i].add_new((0x0040, 0x08EA), "SQ", [])
             self.ds.RealWorldValueMappingSequence[i].MeasurementUnitsCodeSequence += [
                 Dataset()
             ]
@@ -115,9 +211,9 @@ class DicomModify:
         self.ds.PatientSize = str(height / 100)  # in m
 
         self.ds.DecayCorrection = "START"
-        self.ds.CorrectedImage.insert(0, "DECY")
+        _prepend_corrected_image_value(self.ds, "DECY")
 
-        self.ds.add_new([0x0054, 0x0016], "SQ", [])
+        self.ds.add_new((0x0054, 0x0016), "SQ", [])
         self.ds.RadiopharmaceuticalInformationSequence += [Dataset()]
 
         # values for net injected activity and injection date and time
@@ -132,8 +228,12 @@ class DicomModify:
         )
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
-        scan_datetime = datetime.strptime(
-            self.ds.SeriesDate + self.ds.SeriesTime, "%Y%m%d%H%M%S.%f"
+        series_date = _require_dicom_text(self.ds, "SeriesDate")
+        series_time = _require_dicom_text(self.ds, "SeriesTime")
+        scan_datetime = _parse_dicom_date_time(
+            series_date,
+            series_time,
+            context="SeriesDate/SeriesTime",
         )
         delta_scan_inj = (scan_datetime - start_datetime).total_seconds() / (
             60 * 60 * 24
@@ -147,9 +247,9 @@ class DicomModify:
         )
 
         inj_dic = {
-            "patient_id": [self.ds.PatientID],
+            "patient_id": [_require_dicom_text(self.ds, "PatientID")],
             "weight_kg": [weight],
-            "height_m": [height],
+            "height_cm": [height],
             "pre_inj_activity_MBq": [pre_inj_activity],
             "pre_inj_datetime": [pre_inj_datetime],
             "post_inj_activity_MBq": [post_inj_activity],
@@ -182,32 +282,49 @@ class DicomModify:
         ].RadiopharmaceuticalStartDateTime = start_datetime.strftime("%Y%m%d%H%M%S.%f")
 
         # for storing as new series data
-        sop_ins_uid = self.ds.SOPInstanceUID
-        b = sop_ins_uid.split(".")
-        b[-1] = str(int(b[-1]) + 1)
-        self.ds.SOPInstanceUID = ".".join(b)
+        sop_ins_uid = _require_dicom_text(self.ds, "SOPInstanceUID")
+        self.ds.SOPInstanceUID = _increment_uid_suffix(sop_ins_uid, "SOPInstanceUID")
 
-        ser_ins_uid = self.ds.SeriesInstanceUID
-        b = ser_ins_uid.split(".")
-        b.pop()
-        prefix = ".".join(b) + "."
+        ser_ins_uid = _require_dicom_text(self.ds, "SeriesInstanceUID")
+        prefix = _uid_prefix_for_generated_uid(ser_ins_uid, "SeriesInstanceUID")
         self.ds.SeriesInstanceUID = generate_uid(prefix=prefix)
 
         # self.ds.MediaStorageSOPInstaceUID
         return inj_df
 
-    def save(self):
-        """Persist the modified dataset alongside the original file."""
-        self.ds.save_as(f"{self.fname.split('.dcm')[0]}_out.dcm")
+    def save(self) -> None:
+        """Persist the modified dataset alongside the original file.
+
+        Notes
+        -----
+        The output path is generated by appending ``"_out"`` to the input file
+        stem and preserving the original suffix.
+        """
+        path = Path(self.fname)
+        output_path = path.with_name(f"{path.stem}_out{path.suffix}")
+        self.ds.save_as(output_path)
 
 
-def dicom_slope_intercept(img):
-    """Calculate GE-style slope/intercept for converting floats to signed int16.
+def dicom_slope_intercept(img: np.ndarray) -> Tuple[float, float]:
+    """Calculate GE-style slope and intercept values.
 
-    GE PET images are stored as signed int16 values with magnitude limited to
-    32767. The computed slope ensures the largest absolute voxel value in the
-    floating-point array (e.g., MBq/mL) maps to this range once quantized, while
-    the intercept remains zero (GE convention).
+    Parameters
+    ----------
+    img : numpy.ndarray
+        Floating-point image array to be quantized into signed 16-bit DICOM
+        pixel data.
+
+    Returns
+    -------
+    tuple of float
+        Slope and intercept used to recover real-world voxel values from the
+        stored integer pixel data.
+
+    Notes
+    -----
+    GE PET images are stored as signed ``int16`` values with magnitude limited
+    to 32767. The computed slope maps the largest absolute voxel value to this
+    range once quantized, while the intercept remains zero.
     """
     max_val = np.max(img)
     min_val = np.min(img)
@@ -216,6 +333,334 @@ def dicom_slope_intercept(img):
     intercept = 0  # GE has assigned it to zero
 
     return float(slope), float(intercept)
+
+
+def _update_int16_pixel_metadata(
+    ds: FileDataset,
+    pixel_array: np.ndarray,
+) -> None:
+    """Update DICOM pixel metadata for signed 16-bit stored pixel data.
+
+    Parameters
+    ----------
+    ds : pydicom.dataset.FileDataset
+        Dataset whose ``PixelData`` has been rewritten.
+    pixel_array : numpy.ndarray
+        Signed 16-bit stored-value pixel array written to ``PixelData``.
+
+    Notes
+    -----
+    Quantitative scaling is stored in ``RealWorldValueMappingSequence``. The
+    conventional rescale transformation is therefore removed to prevent stale
+    source metadata or readers from applying an additional scale.
+    """
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 1
+    ds.SmallestImagePixelValue = int(pixel_array.min())
+    ds.LargestImagePixelValue = int(pixel_array.max())
+    for keyword in ("RescaleSlope", "RescaleIntercept", "RescaleType"):
+        if keyword in ds:
+            del ds[keyword]
+
+
+def _require_dicom_value(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> Any:
+    """Return a required DICOM value or raise a clear validation error."""
+    if not hasattr(ds, keyword):
+        raise ValueError(f"Required DICOM tag '{keyword}' is missing from {context}.")
+
+    value = getattr(ds, keyword)
+    if value is None:
+        raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
+    if isinstance(value, str) and not value.strip():
+        raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
+
+    return value
+
+
+def _get_frame_duration_seconds(
+    rotation_info: Dataset,
+    manufacturer: str,
+    siemens_fallback: Optional[float] = None,
+) -> float:
+    """Return the DICOM frame duration, with an opt-in Siemens fallback.
+
+    ``ActualFrameDuration`` is stored in milliseconds, while the fallback is
+    supplied in seconds to match the value used by the conversion calculation.
+    """
+    if siemens_fallback is not None:
+        try:
+            siemens_fallback = float(siemens_fallback)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "siemens_frame_duration_fallback must be a positive number "
+                f"of seconds; got {siemens_fallback!r}."
+            ) from exc
+        if not np.isfinite(siemens_fallback) or siemens_fallback <= 0:
+            raise ValueError(
+                "siemens_frame_duration_fallback must be a positive number "
+                f"of seconds; got {siemens_fallback!r}."
+            )
+
+    try:
+        duration_ms = _require_positive_dicom_float(
+            rotation_info,
+            "ActualFrameDuration",
+            context="RotationInformationSequence[0]",
+        )
+    except ValueError:
+        if manufacturer != "siemens" or siemens_fallback is None:
+            raise
+        warnings.warn(
+            "Siemens ActualFrameDuration is missing or invalid; using "
+            f"siemens_frame_duration_fallback={siemens_fallback} seconds.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return siemens_fallback
+
+    return duration_ms / 1000
+
+
+def _require_dicom_text(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> str:
+    """Return a required DICOM value as stripped text."""
+    value = _require_dicom_value(ds, keyword, context)
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"Required DICOM tag '{keyword}' is empty in {context}.")
+
+    return text
+
+
+def _normalize_dicom_manufacturer(ds: Dataset) -> str:
+    """Return the supported canonical manufacturer name for a DICOM dataset."""
+    manufacturer = _require_dicom_text(ds, "Manufacturer")
+    normalized = " ".join(manufacturer.casefold().replace("_", " ").split())
+
+    if normalized in _MANUFACTURER_ALIASES:
+        return _MANUFACTURER_ALIASES[normalized]
+
+    # Manufacturer values commonly include a modality, division, or model name.
+    if "siemens" in normalized:
+        return "siemens"
+    if re.search(r"(?:^|[^a-z0-9])ge(?:$|[^a-z0-9])", normalized):
+        return "ge"
+
+    supported = ", ".join(sorted(set(_MANUFACTURER_ALIASES.values())))
+    raise ValueError(
+        f"Unsupported DICOM manufacturer for QSPECT conversion: "
+        f"{manufacturer!r}. Supported manufacturers: {supported}."
+    )
+
+
+def _require_dicom_float(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> float:
+    """Return a required DICOM value as a float."""
+    value = _require_dicom_value(ds, keyword, context)
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be numeric; "
+            f"got {value!r}."
+        ) from exc
+
+
+def _require_dicom_int(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> int:
+    """Return a required DICOM value as an integer."""
+    value = _require_dicom_value(ds, keyword, context)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be an integer; "
+            f"got {value!r}."
+        ) from exc
+
+
+def _require_positive_dicom_float(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> float:
+    """Return a required DICOM value as a positive float."""
+    value = _require_dicom_float(ds, keyword, context)
+    if value <= 0:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be positive; "
+            f"got {value}."
+        )
+
+    return value
+
+
+def _require_positive_dicom_int(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+) -> int:
+    """Return a required DICOM value as a positive integer."""
+    value = _require_dicom_int(ds, keyword, context)
+    if value <= 0:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' in {context} must be positive; "
+            f"got {value}."
+        )
+
+    return value
+
+
+def _require_dicom_sequence_item(
+    ds: Dataset,
+    keyword: str,
+    context: str = "DICOM dataset",
+    index: int = 0,
+) -> Dataset:
+    """Return a required item from a DICOM sequence."""
+    sequence = _require_dicom_value(ds, keyword, context)
+    try:
+        item = sequence[index]
+    except (IndexError, TypeError) as exc:
+        raise ValueError(
+            f"Required DICOM sequence '{keyword}' in {context} must contain "
+            f"item {index}."
+        ) from exc
+
+    if not isinstance(item, Dataset):
+        raise ValueError(
+            f"Item {index} of DICOM sequence '{keyword}' in {context} must be "
+            f"a Dataset; got {type(item).__name__}."
+        )
+
+    return item
+
+
+def _get_voxel_volume_ml(ds: Dataset) -> float:
+    """Return voxel volume in milliliters from required spacing tags."""
+    pixel_spacing = _require_dicom_value(ds, "PixelSpacing")
+    try:
+        spacing_mm = np.asarray(pixel_spacing, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Required DICOM tag 'PixelSpacing' must contain numeric row and "
+            f"column spacing values; got {pixel_spacing!r}."
+        ) from exc
+
+    if spacing_mm.size < 2:
+        raise ValueError(
+            "Required DICOM tag 'PixelSpacing' must contain row and column "
+            f"spacing values; got {pixel_spacing!r}."
+        )
+
+    if np.any(spacing_mm[:2] <= 0):
+        raise ValueError(
+            "Required DICOM tag 'PixelSpacing' must contain positive row and "
+            f"column spacing values; got {pixel_spacing!r}."
+        )
+
+    slice_thickness_mm = _require_positive_dicom_float(ds, "SliceThickness")
+    voxel_dimensions_mm = np.append(spacing_mm[:2], slice_thickness_mm)
+    voxel_volume_ml = float(np.prod(voxel_dimensions_mm / 10))
+    if voxel_volume_ml <= 0:
+        raise ValueError(
+            "Voxel volume calculated from PixelSpacing and SliceThickness must "
+            f"be positive; got {voxel_volume_ml} ml."
+        )
+
+    return voxel_volume_ml
+
+
+def _parse_dicom_date_time(date: str, time_value: str, context: str) -> datetime:
+    """Parse DICOM DA/TM text into a datetime."""
+    for time_format in ("%H%M%S.%f", "%H%M%S", "%H%M"):
+        try:
+            return datetime.strptime(date + time_value, "%Y%m%d" + time_format)
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"DICOM {context} must be formatted as YYYYMMDD and HHMM[SS[.ffffff]]; "
+        f"got {date!r} and {time_value!r}."
+    )
+
+
+def _increment_uid_suffix(uid: str, keyword: str) -> str:
+    """Increment the final numeric component of a DICOM UID."""
+    uid_parts = uid.split(".")
+    if (
+        not uid_parts
+        or "" in uid_parts
+        or not all(part.isdigit() for part in uid_parts)
+    ):
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' must be a dot-separated numeric "
+            f"UID ending in a numeric component; got {uid!r}."
+        )
+
+    uid_parts[-1] = str(int(uid_parts[-1]) + 1)
+    return ".".join(uid_parts)
+
+
+def _uid_prefix_for_generated_uid(uid: str, keyword: str) -> str:
+    """Return a UID prefix suitable for pydicom.uid.generate_uid."""
+    uid_parts = uid.split(".")
+    if len(uid_parts) < 2 or "" in uid_parts:
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' must be a dot-separated UID with "
+            f"at least two components; got {uid!r}."
+        )
+    if not all(part.isdigit() for part in uid_parts):
+        raise ValueError(
+            f"Required DICOM tag '{keyword}' must contain only numeric UID "
+            f"components; got {uid!r}."
+        )
+
+    prefix = ".".join(uid_parts[:-1]) + "."
+    if len(prefix) > 54:
+        raise ValueError(
+            f"UID prefix derived from DICOM tag '{keyword}' is too long for "
+            f"generate_uid; got {len(prefix)} characters."
+        )
+
+    return prefix
+
+
+def _prepend_corrected_image_value(ds: Dataset, value: str) -> None:
+    """Prepend a CorrectedImage value, creating the tag if needed."""
+    corrected_image = getattr(ds, "CorrectedImage", [])
+    if corrected_image is None:
+        values = []
+    elif isinstance(corrected_image, str):
+        values = [corrected_image]
+    else:
+        try:
+            values = list(corrected_image)
+        except TypeError as exc:
+            raise ValueError(
+                "DICOM tag 'CorrectedImage' must be text or a multi-value "
+                f"sequence; got {corrected_image!r}."
+            ) from exc
+
+    if value not in values:
+        values.insert(0, value)
+
+    ds.CorrectedImage = values
 
 
 def generate_basic_dcm_tags(
