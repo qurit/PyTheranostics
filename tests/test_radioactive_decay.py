@@ -71,9 +71,7 @@ def test_get_activity_at_injection_with_post_measurement_after_injection():
     expected_post = 14.4 * np.exp(np.log(2) * (37 * 60) / half_life)
 
     assert injection_datetime.isoformat() == "2022-06-16T09:18:00"
-    assert np.isclose(
-        injected_activity, expected_pre - expected_post, rtol=1e-10
-    )
+    assert np.isclose(injected_activity, expected_pre - expected_post, rtol=1e-10)
 
 
 @pytest.mark.parametrize(
