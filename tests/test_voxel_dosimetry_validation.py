@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -29,11 +30,12 @@ _VALIDATION_ASSETS: Final[Path] = (
 )
 _EXPECTED_RESULTS_CSV: Final[Path] = _VALIDATION_ASSETS / "expected_results.csv"
 _EXPECTED_DF_AD_CSV: Final[Path] = _VALIDATION_ASSETS / "expected_df_ad.csv"
-_RTSTRUCT_ZENODO_RECORD_ID: Final[str] = "21893683"
+_RTSTRUCT_ZENODO_RECORD_ID: Final[str] = "22036568"
 _RTSTRUCT_ZENODO_RECORD_API_URL: Final[str] = (
     f"https://zenodo.org/api/records/{_RTSTRUCT_ZENODO_RECORD_ID}"
 )
 _RTSTRUCT_DOWNLOAD_TIMEOUT_S: Final[int] = 120
+_RTSTRUCT_DOWNLOAD_ATTEMPTS: Final[int] = 3
 _ZENODO_USER_AGENT: Final[str] = "PyTheranostics test suite"
 _RTSTRUCT_SOP_CLASS_UID: Final[str] = "1.2.840.10008.5.1.4.1.1.481.3"
 _EXPECTED_RTSTRUCT_FILENAMES: Final[tuple[str, ...]] = (
@@ -91,12 +93,47 @@ def _copy_optional_validation_configs(project_base: Path) -> None:
             shutil.copy2(src, project_base / config_name)
 
 
-def _download_url_to_file(url: str, output_path: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": _ZENODO_USER_AGENT})
-    with urllib.request.urlopen(
-        request, timeout=_RTSTRUCT_DOWNLOAD_TIMEOUT_S
-    ) as response, output_path.open("wb") as output_file:
-        shutil.copyfileobj(response, output_file)
+def _download_url_to_file(
+    url: str,
+    output_path: Path,
+    *,
+    expected_size: int,
+    expected_checksum: str,
+) -> None:
+    checksum_algorithm, checksum_value = expected_checksum.split(":", maxsplit=1)
+    if checksum_algorithm != "md5":
+        raise ValueError(
+            f"Unsupported Zenodo checksum algorithm: {checksum_algorithm!r}."
+        )
+
+    failures = []
+    for attempt in range(1, _RTSTRUCT_DOWNLOAD_ATTEMPTS + 1):
+        request = urllib.request.Request(
+            url, headers={"User-Agent": _ZENODO_USER_AGENT}
+        )
+        digest = hashlib.md5()
+        downloaded_size = 0
+        with urllib.request.urlopen(
+            request, timeout=_RTSTRUCT_DOWNLOAD_TIMEOUT_S
+        ) as response, output_path.open("wb") as output_file:
+            while chunk := response.read(1024 * 1024):
+                output_file.write(chunk)
+                digest.update(chunk)
+                downloaded_size += len(chunk)
+
+        downloaded_checksum = digest.hexdigest()
+        if downloaded_size == expected_size and downloaded_checksum == checksum_value:
+            return
+
+        failures.append(
+            f"attempt {attempt}: size={downloaded_size}/{expected_size}, "
+            f"md5={downloaded_checksum}/{checksum_value}"
+        )
+
+    raise OSError(
+        f"Downloaded file '{output_path.name}' failed Zenodo integrity checks "
+        f"after {_RTSTRUCT_DOWNLOAD_ATTEMPTS} attempts: " + "; ".join(failures)
+    )
 
 
 def _validate_rtstruct_file(rtstruct_path: Path) -> None:
@@ -170,7 +207,13 @@ def _download_rtstruct_assets(project_base: Path) -> list[Path]:
                 f"Zenodo file '{filename}' does not include a download link."
             )
         rtstruct_path = target_dir / filename
-        _download_url_to_file(download_url, rtstruct_path)
+        file_record = files_by_name[filename]
+        _download_url_to_file(
+            download_url,
+            rtstruct_path,
+            expected_size=int(file_record["size"]),
+            expected_checksum=str(file_record["checksum"]),
+        )
         _validate_rtstruct_file(rtstruct_path)
 
     return [target_dir / filename for filename in _EXPECTED_RTSTRUCT_FILENAMES]

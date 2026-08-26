@@ -1,12 +1,39 @@
 """Tests for imaging tools utilities."""
 
+import logging
 import shutil
 
 import numpy as np
 import pytest
 import SimpleITK
+from pydicom.dataset import Dataset
+from pydicom.sequence import Sequence
 
 from pytheranostics.imaging_tools import tools
+
+
+def test_apply_qspect_scaling_logs_real_world_value_mapping_source(
+    tmp_path, monkeypatch, caplog
+):
+    dicom_path = tmp_path / "qspect.dcm"
+    dicom_path.touch()
+
+    mapping = Dataset()
+    mapping.RealWorldValueSlope = 2.0
+    mapping.RealWorldValueIntercept = 3.0
+    dataset = Dataset()
+    dataset.Modality = "NM"
+    dataset.DecayCorrection = "START"
+    dataset.RealWorldValueMappingSequence = Sequence([mapping])
+    monkeypatch.setattr(tools.pydicom, "dcmread", lambda *args, **kwargs: dataset)
+
+    input_array = np.arange(8, dtype=np.float32).reshape(2, 2, 2)
+    image = SimpleITK.GetImageFromArray(input_array)
+    with caplog.at_level(logging.INFO, logger=tools.__name__):
+        scaled = tools.apply_qspect_dcm_scaling(image, str(tmp_path))
+
+    np.testing.assert_allclose(SimpleITK.GetArrayFromImage(scaled), input_array * 2 + 3)
+    assert "obtained from DICOM RealWorldValueMappingSequence" in caplog.text
 
 
 def test_load_metadata_from_sample_spect_folder(spect_example_dir, tmp_path):

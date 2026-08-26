@@ -6,11 +6,13 @@ import numpy as np
 
 
 def decay_act(a_initial, delta_t, half_life):
-    """Return decayed activity after `delta_t` given the half-life."""
+    """Return activity corrected by ``delta_t`` given the half-life.
+
+    Positive time intervals decay activity forward in time. Negative time
+    intervals extrapolate a later measurement backward to an earlier time.
+    """
     if np.any(np.asarray(a_initial) < 0):
         raise ValueError("a_initial must be positive")
-    if np.any(np.asarray(delta_t) < 0):
-        raise ValueError("delta_t must be positive")
     if np.any(np.asarray(half_life) < 0):
         raise ValueError("half_life must be positive")
 
@@ -39,6 +41,19 @@ def get_activity_at_injection(
     inj_datetime = datetime.strptime(
         injection_date + injection_time + "00.00", "%Y%m%d%H%M%S.%f"
     )
+
+    if pre_datetime > inj_datetime:
+        raise ValueError(
+            "pre_inj_time must be at or before injection_time; "
+            f"got pre_inj_time={pre_inj_time!r} and "
+            f"injection_time={injection_time!r}."
+        )
+    if post_datetime < inj_datetime:
+        raise ValueError(
+            "post_inj_time must be at or after injection_time; "
+            f"got post_inj_time={post_inj_time!r} and "
+            f"injection_time={injection_time!r}."
+        )
 
     delta_inj_pre = (inj_datetime - pre_datetime).total_seconds()
     delta_post_inj = (inj_datetime - post_datetime).total_seconds()

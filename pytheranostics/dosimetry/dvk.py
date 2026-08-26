@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import logging
 import re
-import shutil
 import tempfile
 import urllib.error
 import urllib.request
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "voxel_kernels"
 _ZENODO_RECORD_ID = "7596345"
+_ZENODO_DOWNLOAD_ATTEMPTS = 3
+_ZENODO_DOWNLOAD_TIMEOUT_S = 120
+_ZENODO_USER_AGENT = "PyTheranostics dose-kernel downloader"
 _DEFAULT_CROP_SIZE_MM = 25.0
 _CSV_PATTERN = re.compile(
     r"^(?P<isotope>[0-9]+[A-Za-z]+)"
@@ -222,30 +226,96 @@ def _download_kernels_from_zenodo(isotope: str, kernel_dir: Path) -> None:
         If the archive download fails for a network-related reason.
     """
     zenodo_name = _zenodo_isotope_name(isotope)
-    url = (
-        f"https://zenodo.org/records/{_ZENODO_RECORD_ID}/files/"
-        f"{zenodo_name}.zip?download=1"
-    )
+    archive_name = f"{zenodo_name}.zip"
+    record_url = f"https://zenodo.org/api/records/{_ZENODO_RECORD_ID}"
 
     kernel_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        with urllib.request.urlopen(url, timeout=120) as response:
-            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_file:
-                shutil.copyfileobj(response, tmp_file)
-                archive_path = Path(tmp_file.name)
+        request = urllib.request.Request(
+            record_url, headers={"User-Agent": _ZENODO_USER_AGENT}
+        )
+        with urllib.request.urlopen(
+            request, timeout=_ZENODO_DOWNLOAD_TIMEOUT_S
+        ) as response:
+            record = json.load(response)
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             logger.error(
-                "No dose voxel kernel archive is available on Zenodo for isotope %s.",
-                isotope,
+                "Dose voxel kernel record %s is unavailable on Zenodo.",
+                _ZENODO_RECORD_ID,
             )
             raise NotImplementedError(
                 f"Dose voxel kernels for isotope '{isotope}' are not available on Zenodo."
             ) from exc
         raise
 
+    file_record = next(
+        (
+            item
+            for item in record.get("files", [])
+            if str(item.get("key", "")).casefold() == archive_name.casefold()
+        ),
+        None,
+    )
+    if file_record is None:
+        raise NotImplementedError(
+            f"Dose voxel kernels for isotope '{isotope}' are not available on Zenodo."
+        )
+
+    links = file_record.get("links", {})
+    download_url = links.get("content") or links.get("download") or links.get("self")
+    if not download_url:
+        raise FileNotFoundError(
+            f"Zenodo file '{archive_name}' does not include a download link."
+        )
+
+    expected_size = int(file_record["size"])
+    checksum_algorithm, expected_checksum = str(file_record["checksum"]).split(
+        ":", maxsplit=1
+    )
+    if checksum_algorithm != "md5":
+        raise ValueError(
+            f"Unsupported Zenodo checksum algorithm: {checksum_algorithm!r}."
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_file:
+        archive_path = Path(tmp_file.name)
+
     try:
+        failures = []
+        for attempt in range(1, _ZENODO_DOWNLOAD_ATTEMPTS + 1):
+            request = urllib.request.Request(
+                download_url, headers={"User-Agent": _ZENODO_USER_AGENT}
+            )
+            digest = hashlib.md5()
+            downloaded_size = 0
+            with urllib.request.urlopen(
+                request, timeout=_ZENODO_DOWNLOAD_TIMEOUT_S
+            ) as response, archive_path.open("wb") as archive_file:
+                while chunk := response.read(1024 * 1024):
+                    archive_file.write(chunk)
+                    digest.update(chunk)
+                    downloaded_size += len(chunk)
+
+            downloaded_checksum = digest.hexdigest()
+            if (
+                downloaded_size == expected_size
+                and downloaded_checksum == expected_checksum
+            ):
+                break
+
+            failures.append(
+                f"attempt {attempt}: size={downloaded_size}/{expected_size}, "
+                f"md5={downloaded_checksum}/{expected_checksum}"
+            )
+        else:
+            raise OSError(
+                f"Downloaded kernel archive '{archive_name}' failed Zenodo "
+                f"integrity checks after {_ZENODO_DOWNLOAD_ATTEMPTS} attempts: "
+                + "; ".join(failures)
+            )
+
         with zipfile.ZipFile(archive_path) as archive:
             csv_members = [
                 member
@@ -262,7 +332,7 @@ def _download_kernels_from_zenodo(isotope: str, kernel_dir: Path) -> None:
     finally:
         archive_path.unlink(missing_ok=True)
 
-    logger.info("Downloaded dose voxel kernels for %s from %s", isotope, url)
+    logger.info("Downloaded dose voxel kernels for %s from %s", isotope, download_url)
 
 
 def _ensure_kernel_files_available(
