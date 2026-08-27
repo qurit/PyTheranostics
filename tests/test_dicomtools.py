@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
 from pydicom.sequence import Sequence
-from pydicom.uid import ExplicitVRLittleEndian
+from pydicom.uid import UID, ExplicitVRLittleEndian
 
 from pytheranostics.dicomtools.dicomtools import (
     DicomModify,
@@ -13,9 +13,15 @@ from pytheranostics.dicomtools.dicomtools import (
 )
 
 
-def _write_minimal_ge_spect(path, pixel_scale=None):
+def _write_minimal_ge_spect(
+    path,
+    pixel_scale=None,
+    sop_instance_uid="1.2.826.0.1.3680043.8.498.1",
+    series_instance_uid="1.2.826.0.1.3680043.8.498.2",
+):
     file_meta = FileMetaDataset()
     file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    file_meta.MediaStorageSOPInstanceUID = sop_instance_uid
     dataset = FileDataset(path, {}, file_meta=file_meta, preamble=b"\0" * 128)
     dataset.Manufacturer = "GE MEDICAL SYSTEMS"
     dataset.Modality = "NM"
@@ -24,8 +30,8 @@ def _write_minimal_ge_spect(path, pixel_scale=None):
     dataset.SeriesTime = "090000"
     dataset.AcquisitionTime = "090000"
     dataset.SeriesDescription = "RECON_COUNTS"
-    dataset.SOPInstanceUID = "1.2.826.0.1.3680043.8.498.1"
-    dataset.SeriesInstanceUID = "1.2.826.0.1.3680043.8.498.2"
+    dataset.SOPInstanceUID = sop_instance_uid
+    dataset.SeriesInstanceUID = series_instance_uid
     dataset.Rows = 1
     dataset.Columns = 1
     dataset.NumberOfFrames = 1
@@ -191,3 +197,36 @@ def test_make_bqml_suv_applies_ge_pixel_scale(tmp_path):
     assert scaled_slope == pytest.approx(unscaled_slope * 4)
     assert unscaled_summary.loc[0, "ge_pixel_scale"] == 1.0
     assert scaled_summary.loc[0, "ge_pixel_scale"] == 4.0
+
+
+def test_make_bqml_suv_falls_back_for_long_uid_prefix(tmp_path):
+    source_path = tmp_path / "long_uid.dcm"
+    source_sop_uid = "2.16.840.1.114362.1.12164994.27025353676.690008536.501.7081"
+    source_series_uid = "2.16.840.1.114362.1.12164994.27025353676.690008536.501.7082"
+    _write_minimal_ge_spect(
+        source_path,
+        sop_instance_uid=source_sop_uid,
+        series_instance_uid=source_series_uid,
+    )
+
+    image = DicomModify(str(source_path), CF=1.0)
+    with pytest.warns(RuntimeWarning, match="too long for generate_uid"):
+        image.make_bqml_suv(
+            weight=70,
+            height=170,
+            injection_date="20220101",
+            pre_inj_activity=1000,
+            pre_inj_time="0800",
+            post_inj_activity=10,
+            post_inj_time="0820",
+            injection_time="0810",
+        )
+
+    new_sop_uid = str(image.ds.SOPInstanceUID)
+    new_series_uid = str(image.ds.SeriesInstanceUID)
+    assert UID(new_sop_uid).is_valid
+    assert UID(new_series_uid).is_valid
+    assert new_sop_uid != source_sop_uid
+    assert new_series_uid != source_series_uid
+    assert new_sop_uid != new_series_uid
+    assert str(image.ds.file_meta.MediaStorageSOPInstanceUID) == new_sop_uid
