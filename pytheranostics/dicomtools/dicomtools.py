@@ -294,11 +294,15 @@ class DicomModify:
 
         # for storing as new series data
         sop_ins_uid = _require_dicom_text(self.ds, "SOPInstanceUID")
-        self.ds.SOPInstanceUID = _increment_uid_suffix(sop_ins_uid, "SOPInstanceUID")
+        new_sop_ins_uid = _generate_new_uid_from_source(sop_ins_uid, "SOPInstanceUID")
+        self.ds.SOPInstanceUID = new_sop_ins_uid
+        if getattr(self.ds, "file_meta", None) is not None:
+            self.ds.file_meta.MediaStorageSOPInstanceUID = new_sop_ins_uid
 
         ser_ins_uid = _require_dicom_text(self.ds, "SeriesInstanceUID")
-        prefix = _uid_prefix_for_generated_uid(ser_ins_uid, "SeriesInstanceUID")
-        self.ds.SeriesInstanceUID = generate_uid(prefix=prefix)
+        self.ds.SeriesInstanceUID = _generate_new_uid_from_source(
+            ser_ins_uid, "SeriesInstanceUID"
+        )
 
         # self.ds.MediaStorageSOPInstaceUID
         return inj_df
@@ -672,25 +676,12 @@ def _parse_dicom_date_time(date: str, time_value: str, context: str) -> datetime
     )
 
 
-def _increment_uid_suffix(uid: str, keyword: str) -> str:
-    """Increment the final numeric component of a DICOM UID."""
-    uid_parts = uid.split(".")
-    if (
-        not uid_parts
-        or "" in uid_parts
-        or not all(part.isdigit() for part in uid_parts)
-    ):
-        raise ValueError(
-            f"Required DICOM tag '{keyword}' must be a dot-separated numeric "
-            f"UID ending in a numeric component; got {uid!r}."
-        )
+def _generate_new_uid_from_source(uid: str, keyword: str) -> str:
+    """Generate a new UID, preserving the source root when it safely fits.
 
-    uid_parts[-1] = str(int(uid_parts[-1]) + 1)
-    return ".".join(uid_parts)
-
-
-def _uid_prefix_for_generated_uid(uid: str, keyword: str) -> str:
-    """Return a UID prefix suitable for pydicom.uid.generate_uid."""
+    If removing the final component still leaves a prefix longer than pydicom's
+    54-character limit, a UID using pydicom's default root is generated instead.
+    """
     uid_parts = uid.split(".")
     if len(uid_parts) < 2 or "" in uid_parts:
         raise ValueError(
@@ -705,12 +696,16 @@ def _uid_prefix_for_generated_uid(uid: str, keyword: str) -> str:
 
     prefix = ".".join(uid_parts[:-1]) + "."
     if len(prefix) > 54:
-        raise ValueError(
+        warnings.warn(
             f"UID prefix derived from DICOM tag '{keyword}' is too long for "
-            f"generate_uid; got {len(prefix)} characters."
+            f"generate_uid ({len(prefix)} characters); generating a new UID "
+            "with pydicom's default root.",
+            RuntimeWarning,
+            stacklevel=2,
         )
+        return generate_uid()
 
-    return prefix
+    return generate_uid(prefix=prefix)
 
 
 def _prepend_corrected_image_value(ds: Dataset, value: str) -> None:
