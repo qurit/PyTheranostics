@@ -1,12 +1,59 @@
 import numpy as np
 import pytest
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
+from pydicom.sequence import Sequence
+from pydicom.uid import UID, ExplicitVRLittleEndian
 
 from pytheranostics.dicomtools.dicomtools import (
+    DicomModify,
     _get_frame_duration_seconds,
+    _get_ge_pixel_scale,
     _normalize_dicom_manufacturer,
     _update_int16_pixel_metadata,
 )
+
+
+def _write_minimal_ge_spect(
+    path,
+    pixel_scale=None,
+    sop_instance_uid="1.2.826.0.1.3680043.8.498.1",
+    series_instance_uid="1.2.826.0.1.3680043.8.498.2",
+):
+    file_meta = FileMetaDataset()
+    file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    file_meta.MediaStorageSOPInstanceUID = sop_instance_uid
+    dataset = FileDataset(path, {}, file_meta=file_meta, preamble=b"\0" * 128)
+    dataset.Manufacturer = "GE MEDICAL SYSTEMS"
+    dataset.Modality = "NM"
+    dataset.PatientID = "TEST001"
+    dataset.SeriesDate = "20220101"
+    dataset.SeriesTime = "090000"
+    dataset.AcquisitionTime = "090000"
+    dataset.SeriesDescription = "RECON_COUNTS"
+    dataset.SOPInstanceUID = sop_instance_uid
+    dataset.SeriesInstanceUID = series_instance_uid
+    dataset.Rows = 1
+    dataset.Columns = 1
+    dataset.NumberOfFrames = 1
+    dataset.SamplesPerPixel = 1
+    dataset.PhotometricInterpretation = "MONOCHROME2"
+    dataset.BitsAllocated = 16
+    dataset.BitsStored = 16
+    dataset.HighBit = 15
+    dataset.PixelRepresentation = 1
+    dataset.PixelSpacing = [10, 10]
+    dataset.SliceThickness = 10
+    dataset.CorrectedImage = ["ATTN"]
+    dataset.PixelData = np.array([100], dtype=np.int16).tobytes()
+
+    rotation = Dataset()
+    rotation.ActualFrameDuration = 1000
+    rotation.NumberOfFramesInRotation = 1
+    dataset.RotationInformationSequence = Sequence([rotation])
+    if pixel_scale is not None:
+        dataset.add_new((0x0011, 0x103B), "DS", str(pixel_scale))
+
+    dataset.save_as(path)
 
 
 @pytest.mark.parametrize(
@@ -92,3 +139,94 @@ def test_update_int16_pixel_metadata_removes_conventional_rescale_mapping():
     assert "RescaleType" not in dataset
     assert dataset.SmallestImagePixelValue == -2
     assert dataset.LargestImagePixelValue == 3
+
+
+def test_get_ge_pixel_scale_defaults_to_one_when_tag_is_absent():
+    assert _get_ge_pixel_scale(Dataset()) == 1.0
+
+
+@pytest.mark.parametrize(("vr", "value"), [("DS", "2.5"), ("UN", b"4.0\x00")])
+def test_get_ge_pixel_scale_reads_numeric_private_tag(vr, value):
+    dataset = Dataset()
+    dataset.add_new((0x0011, 0x103B), vr, value)
+
+    with pytest.warns(RuntimeWarning, match="Applying GE Pixel Scale"):
+        pixel_scale = _get_ge_pixel_scale(dataset)
+
+    assert pixel_scale == pytest.approx(
+        float(value.rstrip(b"\x00")) if isinstance(value, bytes) else float(value)
+    )
+
+
+@pytest.mark.parametrize("value", ["invalid", "0", "-2", "nan", b"\xff"])
+def test_get_ge_pixel_scale_rejects_invalid_values(value):
+    dataset = Dataset()
+    vr = "UN" if isinstance(value, bytes) else "LO"
+    dataset.add_new((0x0011, 0x103B), vr, value)
+
+    with pytest.raises(ValueError, match="GE Pixel Scale DICOM tag"):
+        _get_ge_pixel_scale(dataset)
+
+
+def test_make_bqml_suv_applies_ge_pixel_scale(tmp_path):
+    unscaled_path = tmp_path / "unscaled.dcm"
+    scaled_path = tmp_path / "scaled.dcm"
+    _write_minimal_ge_spect(unscaled_path)
+    _write_minimal_ge_spect(scaled_path, pixel_scale=4)
+
+    conversion_kwargs = {
+        "weight": 70,
+        "height": 170,
+        "injection_date": "20220101",
+        "pre_inj_activity": 1000,
+        "pre_inj_time": "0800",
+        "post_inj_activity": 10,
+        "post_inj_time": "0820",
+        "injection_time": "0810",
+    }
+    unscaled = DicomModify(str(unscaled_path), CF=1.0)
+    unscaled_summary = unscaled.make_bqml_suv(**conversion_kwargs)
+    scaled = DicomModify(str(scaled_path), CF=1.0)
+    with pytest.warns(RuntimeWarning, match="Applying GE Pixel Scale"):
+        scaled_summary = scaled.make_bqml_suv(**conversion_kwargs)
+
+    unscaled_slope = float(
+        unscaled.ds.RealWorldValueMappingSequence[0].RealWorldValueSlope
+    )
+    scaled_slope = float(scaled.ds.RealWorldValueMappingSequence[0].RealWorldValueSlope)
+    assert scaled_slope == pytest.approx(unscaled_slope * 4)
+    assert unscaled_summary.loc[0, "ge_pixel_scale"] == 1.0
+    assert scaled_summary.loc[0, "ge_pixel_scale"] == 4.0
+
+
+def test_make_bqml_suv_falls_back_for_long_uid_prefix(tmp_path):
+    source_path = tmp_path / "long_uid.dcm"
+    source_sop_uid = "2.16.840.1.114362.1.12164994.27025353676.690008536.501.7081"
+    source_series_uid = "2.16.840.1.114362.1.12164994.27025353676.690008536.501.7082"
+    _write_minimal_ge_spect(
+        source_path,
+        sop_instance_uid=source_sop_uid,
+        series_instance_uid=source_series_uid,
+    )
+
+    image = DicomModify(str(source_path), CF=1.0)
+    with pytest.warns(RuntimeWarning, match="too long for generate_uid"):
+        image.make_bqml_suv(
+            weight=70,
+            height=170,
+            injection_date="20220101",
+            pre_inj_activity=1000,
+            pre_inj_time="0800",
+            post_inj_activity=10,
+            post_inj_time="0820",
+            injection_time="0810",
+        )
+
+    new_sop_uid = str(image.ds.SOPInstanceUID)
+    new_series_uid = str(image.ds.SeriesInstanceUID)
+    assert UID(new_sop_uid).is_valid
+    assert UID(new_series_uid).is_valid
+    assert new_sop_uid != source_sop_uid
+    assert new_series_uid != source_series_uid
+    assert new_sop_uid != new_series_uid
+    assert str(image.ds.file_meta.MediaStorageSOPInstanceUID) == new_sop_uid
