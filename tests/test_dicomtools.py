@@ -28,6 +28,7 @@ def _write_minimal_ge_spect(
     dataset.PatientID = "TEST001"
     dataset.SeriesDate = "20220101"
     dataset.SeriesTime = "090000"
+    dataset.AcquisitionDate = "20220101"
     dataset.AcquisitionTime = "090000"
     dataset.SeriesDescription = "RECON_COUNTS"
     dataset.SOPInstanceUID = sop_instance_uid
@@ -211,6 +212,51 @@ def test_make_bqml_suv_applies_ge_pixel_scale(tmp_path):
     assert scaled_slope == pytest.approx(unscaled_slope * 4)
     assert unscaled_summary.loc[0, "ge_pixel_scale"] == 1.0
     assert scaled_summary.loc[0, "ge_pixel_scale"] == 4.0
+
+
+def test_make_bqml_suv_uses_acquisition_date_and_time_for_scan_datetime(tmp_path):
+    source_path = tmp_path / "acquisition_datetime.dcm"
+    _write_minimal_ge_spect(source_path)
+
+    image = DicomModify(str(source_path), CF=1.0)
+    image.ds.SeriesDate = "20220103"
+    image.ds.SeriesTime = "120000"
+    image.ds.AcquisitionDate = "20220102"
+    image.ds.AcquisitionTime = "101112.25"
+
+    summary = image.make_bqml_suv(
+        weight=70,
+        height=170,
+        injection_date="20220101",
+        pre_inj_activity=1000,
+        pre_inj_time="0800",
+        post_inj_activity=10,
+        post_inj_time="0820",
+        injection_time="0810",
+    )
+
+    assert summary.loc[0, "scan_datetime"].isoformat() == "2022-01-02T10:11:12.250000"
+
+
+@pytest.mark.parametrize("missing_keyword", ["AcquisitionDate", "AcquisitionTime"])
+def test_make_bqml_suv_requires_acquisition_date_and_time(tmp_path, missing_keyword):
+    source_path = tmp_path / f"missing_{missing_keyword}.dcm"
+    _write_minimal_ge_spect(source_path)
+
+    image = DicomModify(str(source_path), CF=1.0)
+    del image.ds[missing_keyword]
+
+    with pytest.raises(ValueError, match=missing_keyword):
+        image.make_bqml_suv(
+            weight=70,
+            height=170,
+            injection_date="20220101",
+            pre_inj_activity=1000,
+            pre_inj_time="0800",
+            post_inj_activity=10,
+            post_inj_time="0820",
+            injection_time="0810",
+        )
 
 
 def test_make_bqml_suv_falls_back_for_long_uid_prefix(tmp_path):
