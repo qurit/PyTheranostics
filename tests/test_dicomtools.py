@@ -139,6 +139,20 @@ def test_update_int16_pixel_metadata_removes_conventional_rescale_mapping():
     assert "RescaleType" not in dataset
     assert dataset.SmallestImagePixelValue == -2
     assert dataset.LargestImagePixelValue == 3
+    assert dataset[0x00280106].VR == "SS"
+    assert dataset[0x00280107].VR == "SS"
+
+
+def test_update_int16_pixel_metadata_resolves_existing_ambiguous_pixel_value_vr():
+    dataset = Dataset()
+    dataset.add_new((0x0028, 0x0106), "US or SS", 0)
+    dataset.add_new((0x0028, 0x0107), "US or SS", 1)
+    pixels = np.array([[-2, 0, 3]], dtype=np.int16)
+
+    _update_int16_pixel_metadata(dataset, pixels)
+
+    assert dataset[0x00280106].VR == "SS"
+    assert dataset[0x00280107].VR == "SS"
 
 
 def test_get_ge_pixel_scale_defaults_to_one_when_tag_is_absent():

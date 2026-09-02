@@ -375,6 +375,12 @@ def _update_int16_pixel_metadata(
     ds.PixelRepresentation = 1
     ds.SmallestImagePixelValue = int(pixel_array.min())
     ds.LargestImagePixelValue = int(pixel_array.max())
+    # These elements have the context-dependent VR "US or SS" in the DICOM
+    # dictionary.  Assignment updates the value of an existing element but can
+    # leave its ambiguous VR unchanged, which explicit-VR writers reject.  The
+    # converted Pixel Data is signed int16, so both elements must be SS.
+    ds[0x00280106].VR = "SS"
+    ds[0x00280107].VR = "SS"
     for keyword in ("RescaleSlope", "RescaleIntercept", "RescaleType"):
         if keyword in ds:
             del ds[keyword]
