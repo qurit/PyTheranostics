@@ -6,6 +6,7 @@ from pydicom.uid import UID, ExplicitVRLittleEndian
 
 from pytheranostics.dicomtools.dicomtools import (
     DicomModify,
+    _apply_input_pixel_mapping,
     _get_frame_duration_seconds,
     _get_ge_pixel_scale,
     _normalize_dicom_manufacturer,
@@ -156,6 +157,119 @@ def test_update_int16_pixel_metadata_resolves_existing_ambiguous_pixel_value_vr(
     assert dataset[0x00280107].VR == "SS"
 
 
+def test_apply_input_pixel_mapping_defaults_to_identity():
+    pixels = np.array([1, 2], dtype=np.int16)
+
+    mapped, source, slope, intercept = _apply_input_pixel_mapping(Dataset(), pixels)
+
+    np.testing.assert_array_equal(mapped, [1.0, 2.0])
+    assert source == "Identity"
+    assert slope == 1.0
+    assert intercept == 0.0
+
+
+def test_apply_input_pixel_mapping_uses_linear_rwvm():
+    dataset = Dataset()
+    mapping = Dataset()
+    mapping.RealWorldValueSlope = 0.25
+    mapping.RealWorldValueIntercept = 2.0
+    dataset.RealWorldValueMappingSequence = Sequence([mapping])
+
+    mapped, source, slope, intercept = _apply_input_pixel_mapping(
+        dataset, np.array([4, 8], dtype=np.int16)
+    )
+
+    np.testing.assert_array_equal(mapped, [3.0, 4.0])
+    assert source == "RealWorldValueMappingSequence"
+    assert slope == 0.25
+    assert intercept == 2.0
+
+
+def test_apply_input_pixel_mapping_rwvm_takes_precedence_over_rescale():
+    dataset = Dataset()
+    mapping = Dataset()
+    mapping.RealWorldValueSlope = 2.0
+    mapping.RealWorldValueIntercept = 1.0
+    dataset.RealWorldValueMappingSequence = Sequence([mapping])
+    dataset.RescaleSlope = "100"
+    dataset.RescaleIntercept = "1000"
+
+    mapped, source, _, _ = _apply_input_pixel_mapping(dataset, np.array([3]))
+
+    np.testing.assert_array_equal(mapped, [7.0])
+    assert source == "RealWorldValueMappingSequence"
+
+
+@pytest.mark.parametrize(
+    ("slope", "intercept", "expected"),
+    [
+        ("2", "3", [5.0, 7.0]),
+        ("2", None, [2.0, 4.0]),
+        (None, "3", [4.0, 5.0]),
+    ],
+)
+def test_apply_input_pixel_mapping_uses_rescale_defaults(slope, intercept, expected):
+    dataset = Dataset()
+    if slope is not None:
+        dataset.RescaleSlope = slope
+    if intercept is not None:
+        dataset.RescaleIntercept = intercept
+
+    mapped, source, _, _ = _apply_input_pixel_mapping(dataset, np.array([1, 2]))
+
+    np.testing.assert_array_equal(mapped, expected)
+    assert source == "Rescale"
+
+
+def test_apply_input_pixel_mapping_accepts_identical_rwvm_items():
+    dataset = Dataset()
+    mappings = []
+    for _ in range(2):
+        mapping = Dataset()
+        mapping.RealWorldValueSlope = 0.5
+        mapping.RealWorldValueIntercept = 0.0
+        mappings.append(mapping)
+    dataset.RealWorldValueMappingSequence = Sequence(mappings)
+
+    mapped, _, _, _ = _apply_input_pixel_mapping(dataset, np.array([2, 4]))
+
+    np.testing.assert_array_equal(mapped, [1.0, 2.0])
+
+
+def test_apply_input_pixel_mapping_rejects_conflicting_rwvm_items():
+    dataset = Dataset()
+    first = Dataset()
+    first.RealWorldValueSlope = 1.0
+    first.RealWorldValueIntercept = 0.0
+    second = Dataset()
+    second.RealWorldValueSlope = 2.0
+    second.RealWorldValueIntercept = 0.0
+    dataset.RealWorldValueMappingSequence = Sequence([first, second])
+
+    with pytest.raises(ValueError, match="conflicting linear mappings"):
+        _apply_input_pixel_mapping(dataset, np.array([1]))
+
+
+def test_apply_input_pixel_mapping_rejects_incomplete_rwvm():
+    dataset = Dataset()
+    mapping = Dataset()
+    mapping.RealWorldValueSlope = 1.0
+    dataset.RealWorldValueMappingSequence = Sequence([mapping])
+
+    with pytest.raises(ValueError, match="RealWorldValueIntercept"):
+        _apply_input_pixel_mapping(dataset, np.array([1]))
+
+
+def test_apply_input_pixel_mapping_rejects_non_linear_rwvm():
+    dataset = Dataset()
+    mapping = Dataset()
+    mapping.RealWorldValueLUTData = [1.0, 2.0]
+    dataset.RealWorldValueMappingSequence = Sequence([mapping])
+
+    with pytest.raises(ValueError, match="unsupported non-linear"):
+        _apply_input_pixel_mapping(dataset, np.array([1]))
+
+
 def test_get_ge_pixel_scale_defaults_to_one_when_tag_is_absent():
     assert _get_ge_pixel_scale(Dataset()) == 1.0
 
@@ -210,8 +324,49 @@ def test_make_bqml_suv_applies_ge_pixel_scale(tmp_path):
     )
     scaled_slope = float(scaled.ds.RealWorldValueMappingSequence[0].RealWorldValueSlope)
     assert scaled_slope == pytest.approx(unscaled_slope * 4)
+    assert unscaled_summary.loc[0, "input_mapping_source"] == "Identity"
+    assert unscaled_summary.loc[0, "input_mapping_slope"] == 1.0
+    assert unscaled_summary.loc[0, "input_mapping_intercept"] == 0.0
     assert unscaled_summary.loc[0, "ge_pixel_scale"] == 1.0
     assert scaled_summary.loc[0, "ge_pixel_scale"] == 4.0
+
+
+def test_make_bqml_suv_applies_input_rwvm_once_and_reports_it(tmp_path):
+    identity_path = tmp_path / "identity.dcm"
+    mapped_path = tmp_path / "mapped.dcm"
+    _write_minimal_ge_spect(identity_path)
+    _write_minimal_ge_spect(mapped_path)
+
+    conversion_kwargs = {
+        "weight": 70,
+        "height": 170,
+        "injection_date": "20220101",
+        "pre_inj_activity": 1000,
+        "pre_inj_time": "0800",
+        "post_inj_activity": 10,
+        "post_inj_time": "0820",
+        "injection_time": "0810",
+    }
+    identity = DicomModify(str(identity_path), CF=1.0)
+    identity.make_bqml_suv(**conversion_kwargs)
+
+    mapped = DicomModify(str(mapped_path), CF=1.0)
+    input_mapping = Dataset()
+    input_mapping.RealWorldValueSlope = 0.25
+    input_mapping.RealWorldValueIntercept = 0.0
+    mapped.ds.RealWorldValueMappingSequence = Sequence([input_mapping])
+    summary = mapped.make_bqml_suv(**conversion_kwargs)
+
+    identity_output_slope = float(
+        identity.ds.RealWorldValueMappingSequence[0].RealWorldValueSlope
+    )
+    mapped_output_slope = float(
+        mapped.ds.RealWorldValueMappingSequence[0].RealWorldValueSlope
+    )
+    assert mapped_output_slope == pytest.approx(identity_output_slope * 0.25)
+    assert summary.loc[0, "input_mapping_source"] == "RealWorldValueMappingSequence"
+    assert summary.loc[0, "input_mapping_slope"] == 0.25
+    assert summary.loc[0, "input_mapping_intercept"] == 0.0
 
 
 def test_make_bqml_suv_uses_acquisition_date_and_time_for_scan_datetime(tmp_path):
