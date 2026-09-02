@@ -131,13 +131,19 @@ class DicomModify:
 
         manufacturer = _normalize_dicom_manufacturer(self.ds)
 
+        acquisition_date = _require_dicom_text(self.ds, "AcquisitionDate")
+        acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
+        scan_datetime = _parse_dicom_date_time(
+            acquisition_date,
+            acquisition_time,
+            context="AcquisitionDate/AcquisitionTime",
+        )
+
         # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
         if manufacturer == "siemens":
-            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
             self.ds.SeriesTime = acquisition_time
             self.ds.ContentTime = acquisition_time
         elif manufacturer == "ge":  # i think it applies to ge as well
-            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
             self.ds.SeriesTime = acquisition_time
             self.ds.ContentTime = acquisition_time
 
@@ -238,13 +244,6 @@ class DicomModify:
         )
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
-        series_date = _require_dicom_text(self.ds, "SeriesDate")
-        series_time = _require_dicom_text(self.ds, "SeriesTime")
-        scan_datetime = _parse_dicom_date_time(
-            series_date,
-            series_time,
-            context="SeriesDate/SeriesTime",
-        )
         delta_scan_inj = (scan_datetime - start_datetime).total_seconds() / (
             60 * 60 * 24
         )
