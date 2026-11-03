@@ -240,6 +240,7 @@ def convert_masks_to_rtstruct(
     rtstruct_output_dir: str | Path = "./RTStructs",
     config_path: Optional[str | Path] = None,
     export_csv: bool = True,
+    contour_mode: str = "voxel_center",
 ) -> Dict[str, Dict[str, Path]]:
     """Convert NIfTI segmentation masks to RT-STRUCT files.
 
@@ -258,6 +259,10 @@ def convert_masks_to_rtstruct(
         Path to total_seg_config.json. If None, checks current directory.
     export_csv : bool, optional
         If True, writes all_rois.csv in rtstruct_output_dir, by default True.
+    contour_mode : {"voxel_center", "voxel_edge"}, optional
+        Contour placement strategy. ``"voxel_center"`` retains the existing
+        rt-utils behavior. ``"voxel_edge"`` follows the outside edges of mask
+        voxels and matches PDIB-Segmentator/Slicer-style output.
 
     Returns
     -------
@@ -295,7 +300,9 @@ def convert_masks_to_rtstruct(
             out_file = rt_out_dir / f"rtstruct_{tp}.dcm"
             print(f"RT-STRUCT: patient={patient_id} timepoint={tp} -> {out_file}")
 
-            converter = RTStructConverter(ct_dicom_folder=str(ct_path))
+            converter = RTStructConverter(
+                ct_dicom_folder=str(ct_path), contour_mode=contour_mode
+            )
 
             if use_config:
                 converter.add_masks_from_folder_with_config(
