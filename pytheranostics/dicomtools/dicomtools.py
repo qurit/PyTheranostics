@@ -117,8 +117,11 @@ class DicomModify:
         Notes
         -----
         This method mutates ``self.ds`` in place. Call :meth:`save` to write the
-        modified dataset to disk. For GE data, the stored pixels are multiplied
-        by private DICOM tag ``(0011,103B) Pixel Scale`` when it is present.
+        modified dataset to disk. Input stored pixels are mapped using a linear
+        ``RealWorldValueMappingSequence`` when present, otherwise with
+        ``RescaleSlope`` and ``RescaleIntercept`` when present. For GE data, the
+        mapped pixels are subsequently multiplied by private DICOM tag
+        ``(0011,103B) Pixel Scale`` when it is present.
         The camera calibration factor must independently match the GE
         reconstruction protocol, including the factor-of-four count scaling
         caused by ``projections multiplication`` when resolution recovery is
@@ -131,13 +134,19 @@ class DicomModify:
 
         manufacturer = _normalize_dicom_manufacturer(self.ds)
 
+        acquisition_date = _require_dicom_text(self.ds, "AcquisitionDate")
+        acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
+        scan_datetime = _parse_dicom_date_time(
+            acquisition_date,
+            acquisition_time,
+            context="AcquisitionDate/AcquisitionTime",
+        )
+
         # Siemens has an issue setting up the times. We are using the Acquisition time which is the time of the start of the last bed to harmonize.
         if manufacturer == "siemens":
-            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
             self.ds.SeriesTime = acquisition_time
             self.ds.ContentTime = acquisition_time
         elif manufacturer == "ge":  # i think it applies to ge as well
-            acquisition_time = _require_dicom_text(self.ds, "AcquisitionTime")
             self.ds.SeriesTime = acquisition_time
             self.ds.ContentTime = acquisition_time
 
@@ -171,7 +180,9 @@ class DicomModify:
         vox_vol = _get_voxel_volume_ml(self.ds)
 
         # Get image in Bq/ml
-        A = self.ds.pixel_array.astype(np.float64)
+        A, input_mapping_source, input_mapping_slope, input_mapping_intercept = (
+            _apply_input_pixel_mapping(self.ds, self.ds.pixel_array)
+        )
         ge_pixel_scale = 1.0
         if manufacturer == "ge":
             ge_pixel_scale = _get_ge_pixel_scale(self.ds)
@@ -238,13 +249,6 @@ class DicomModify:
         )
         total_injected_activity = total_injected_activity * activity_meter_scale_factor
 
-        series_date = _require_dicom_text(self.ds, "SeriesDate")
-        series_time = _require_dicom_text(self.ds, "SeriesTime")
-        scan_datetime = _parse_dicom_date_time(
-            series_date,
-            series_time,
-            context="SeriesDate/SeriesTime",
-        )
         delta_scan_inj = (scan_datetime - start_datetime).total_seconds() / (
             60 * 60 * 24
         )
@@ -260,6 +264,9 @@ class DicomModify:
             "patient_id": [_require_dicom_text(self.ds, "PatientID")],
             "weight_kg": [weight],
             "height_cm": [height],
+            "input_mapping_source": [input_mapping_source],
+            "input_mapping_slope": [input_mapping_slope],
+            "input_mapping_intercept": [input_mapping_intercept],
             "ge_pixel_scale": [ge_pixel_scale],
             "pre_inj_activity_MBq": [pre_inj_activity],
             "pre_inj_datetime": [pre_inj_datetime],
@@ -375,9 +382,114 @@ def _update_int16_pixel_metadata(
     ds.PixelRepresentation = 1
     ds.SmallestImagePixelValue = int(pixel_array.min())
     ds.LargestImagePixelValue = int(pixel_array.max())
+    # These elements have the context-dependent VR "US or SS" in the DICOM
+    # dictionary.  Assignment updates the value of an existing element but can
+    # leave its ambiguous VR unchanged, which explicit-VR writers reject.  The
+    # converted Pixel Data is signed int16, so both elements must be SS.
+    ds[0x00280106].VR = "SS"
+    ds[0x00280107].VR = "SS"
     for keyword in ("RescaleSlope", "RescaleIntercept", "RescaleType"):
         if keyword in ds:
             del ds[keyword]
+
+
+def _apply_input_pixel_mapping(
+    ds: Dataset,
+    pixel_array: np.ndarray,
+) -> Tuple[np.ndarray, str, float, float]:
+    """Map stored input pixels to the values represented by the DICOM.
+
+    A linear Real World Value Mapping takes precedence over the conventional
+    rescale transformation. Multiple RWVM items are accepted only when they all
+    specify the same linear mapping; range-specific and non-linear mappings are
+    deliberately rejected rather than being applied ambiguously.
+    """
+    pixels = np.asarray(pixel_array, dtype=np.float64)
+
+    if "RealWorldValueMappingSequence" in ds:
+        sequence = ds.RealWorldValueMappingSequence
+        if sequence is None or len(sequence) == 0:
+            raise ValueError(
+                "DICOM RealWorldValueMappingSequence is present but empty."
+            )
+
+        mappings = []
+        for index, item in enumerate(sequence):
+            context = f"RealWorldValueMappingSequence[{index}]"
+            if not isinstance(item, Dataset):
+                raise ValueError(f"{context} must be a DICOM Dataset.")
+            if "RealWorldValueLUTData" in item:
+                raise ValueError(
+                    f"{context} contains unsupported non-linear "
+                    "RealWorldValueLUTData."
+                )
+
+            slope = _require_finite_mapping_float(item, "RealWorldValueSlope", context)
+            intercept = _require_finite_mapping_float(
+                item, "RealWorldValueIntercept", context
+            )
+            if slope == 0:
+                raise ValueError(f"{context} RealWorldValueSlope must be non-zero.")
+            mappings.append((slope, intercept))
+
+        slope, intercept = mappings[0]
+        if any(
+            not (
+                np.isclose(other_slope, slope)
+                and np.isclose(other_intercept, intercept)
+            )
+            for other_slope, other_intercept in mappings[1:]
+        ):
+            raise ValueError(
+                "Multiple RealWorldValueMappingSequence items contain conflicting "
+                "linear mappings; range-specific mappings are not supported."
+            )
+
+        return (
+            pixels * slope + intercept,
+            "RealWorldValueMappingSequence",
+            slope,
+            intercept,
+        )
+
+    if "RescaleSlope" in ds or "RescaleIntercept" in ds:
+        slope = (
+            _require_finite_mapping_float(ds, "RescaleSlope", "DICOM dataset")
+            if "RescaleSlope" in ds
+            else 1.0
+        )
+        intercept = (
+            _require_finite_mapping_float(ds, "RescaleIntercept", "DICOM dataset")
+            if "RescaleIntercept" in ds
+            else 0.0
+        )
+        if slope == 0:
+            raise ValueError("DICOM RescaleSlope must be non-zero.")
+        return pixels * slope + intercept, "Rescale", slope, intercept
+
+    return pixels, "Identity", 1.0, 0.0
+
+
+def _require_finite_mapping_float(
+    ds: Dataset,
+    keyword: str,
+    context: str,
+) -> float:
+    """Return a required finite numeric mapping value."""
+    value = _require_dicom_value(ds, keyword, context)
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"DICOM mapping value '{keyword}' in {context} must be numeric; "
+            f"got {value!r}."
+        ) from exc
+    if not np.isfinite(numeric_value):
+        raise ValueError(
+            f"DICOM mapping value '{keyword}' in {context} must be finite; "
+            f"got {value!r}."
+        )
+    return numeric_value
 
 
 def _get_ge_pixel_scale(ds: Dataset) -> float:
