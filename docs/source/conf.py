@@ -14,8 +14,17 @@ project = "PyTheranostics"
 copyright = "2024, Carlos Uribe"
 author = "Carlos Uribe"
 
-# The full version, including alpha/beta/rc tags
-release = "0.1.0"
+# The full version, including alpha/beta/rc tags. Read from the installed
+# distribution rather than hard-coded, so a release never leaves the
+# documentation claiming the previous version.
+try:
+    from importlib.metadata import version as _version
+
+    release = _version("pytheranostics")
+except Exception:  # PackageNotFoundError, or a bare checkout with no metadata
+    release = "0.2.0"
+
+version = ".".join(release.split(".")[:2])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -26,9 +35,11 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.githubpages",
     "sphinx.ext.mathjax",
+    "sphinx.ext.intersphinx",
     "myst_parser",
     "nbsphinx",
     "sphinx_copybutton",
+    "sphinx_design",
 ]
 
 templates_path = ["_templates"]
@@ -41,14 +52,64 @@ source_suffix = {
 
 autodoc_mock_imports = ["radiomics", "gatetools", "itk"]
 
-# The name of the Pygments (syntax highlighting) style to use.
-pygments_style = "sphinx"
+# The name of the Pygments (syntax highlighting) style to use. Furo picks a
+# different one per colour scheme, so both are set.
+pygments_style = "friendly"
+pygments_dark_style = "material"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
+html_title = f"PyTheranostics {release}"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+html_favicon = "_static/logo-light.svg"
+html_copy_source = False
+html_show_sphinx = False
+
+html_theme_options = {
+    # Two emblems, so the sidebar mark stays legible in either colour scheme.
+    "light_logo": "logo-light.svg",
+    "dark_logo": "logo-dark.svg",
+    "navigation_with_keys": True,
+    "top_of_page_buttons": ["view", "edit"],
+    "source_repository": "https://github.com/qurit/PyTheranostics/",
+    "source_branch": "dev",
+    "source_directory": "docs/source/",
+    "light_css_variables": {
+        "color-brand-primary": "#0f766e",
+        "color-brand-content": "#0d7a70",
+        "color-api-name": "#b45309",
+        "color-api-pre-name": "#0f766e",
+        "font-stack": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', "
+        "Helvetica, Arial, sans-serif",
+        "font-stack--monospace": "'JetBrains Mono', 'SF Mono', Menlo, "
+        "Consolas, monospace",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#5eead4",
+        "color-brand-content": "#7dd3fc",
+        "color-api-name": "#fbbf24",
+        "color-api-pre-name": "#5eead4",
+    },
+}
+
+# -- Intersphinx -------------------------------------------------------------
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "pydicom": ("https://pydicom.github.io/pydicom/stable/", None),
+}
+
+# Shields and badge services rate-limit CI, and GitHub renders them on demand.
+linkcheck_ignore = [
+    r"https://img\.shields\.io/.*",
+]
 
 # -- Extension configuration -------------------------------------------------
 napoleon_google_docstring = True
@@ -71,7 +132,12 @@ nbsphinx_codecell_lexer = "python"
 myst_enable_extensions = [
     "colon_fence",
     "deflist",
+    "dollarmath",
+    "fieldlist",
+    "attrs_inline",
+    "smartquotes",
 ]
+myst_heading_anchors = 3
 
 _CONTRIB_EXTENSION = "sphinxcontrib.contributors"
 try:

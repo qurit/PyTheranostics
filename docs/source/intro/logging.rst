@@ -257,6 +257,6 @@ If you're upgrading from a version that used ``print()`` statements, no code cha
 See Also
 --------
 
-* :ref:`overview` - General introduction to PyTheranostics
-* :ref:`installation` - Installation instructions
+* :ref:`intro-overview` - General introduction to PyTheranostics
+* :ref:`intro-install` - Installation instructions
 * `Python Logging Documentation <https://docs.python.org/3/library/logging.html>`_ - Official Python logging guide
