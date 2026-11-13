@@ -1,0 +1,29 @@
+# Fails if any medical image data is present in the repository.
+#
+# Patient imaging must never enter git history: it cannot be fully removed
+# afterwards, because GitHub retains pull-request refs and Git LFS objects
+# that a history rewrite does not touch.
+name: No medical images
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  no-medical-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Keep LFS files as pointers; the check flags those by path anyway
+          # and we must not pull patient data onto the runner.
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scan every tracked file
+        run: python scripts/check_no_medical_images.py --all
