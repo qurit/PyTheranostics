@@ -494,6 +494,20 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
         self, region_data: pandas.Series, region: str
     ) -> lmfit.model.ModelResult:
         """Select the best fit based on Akaike Information Criterion."""
+        y_data = numpy.array(region_data["Activity_MBq"], dtype=float)
+        sigma_config = self.config["VOIs"][region].get("sigma", None)
+
+        if sigma_config is None:
+            sigma = None
+        elif sigma_config["type"] == "fraction":
+            sigma = sigma_config["value"] * y_data
+        elif sigma_config["type"] == "sqrt":
+            sigma = numpy.sqrt(y_data)
+        elif sigma_config["type"] == "absolute":
+            sigma = numpy.full_like(y_data, sigma_config["value"], dtype=float)
+        else:
+            raise ValueError(f"Unknown sigma type: {sigma_config['type']}")
+
         # If fit_order is defined by user:
         if self.config["VOIs"][region]["fit_order"] is not None:
             print(region)
@@ -506,6 +520,7 @@ class BaseDosimetry(metaclass=abc.ABCMeta):
                 params_init=self.config["VOIs"][region]["param_init"],
                 with_uptake=self.config["VOIs"][region]["with_uptake"],
                 washout_ratio=self.config["VOIs"][region]["washout_ratio"],
+                sigma=sigma,
             )
 
             return fit_results
