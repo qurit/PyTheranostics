@@ -47,6 +47,15 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-medical-images
+        name: block medical image data (DICOM, NIfTI, NRRD)
+        entry: python
+        args: ["scripts/check_no_medical_images.py"]
+        language: python
+        pass_filenames: true
+
+  - repo: local
+    hooks:
       - id: pytest-smoke
         name: pytest (smoke tests only)
         entry: python

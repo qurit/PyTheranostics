@@ -21,24 +21,6 @@ them through the dosimetry workflow: organising a study's DICOM, making a SPECT
 quantitative, segmenting volumes of interest, fitting their time–activity
 curves, and calculating the absorbed dose in target organs.
 
-.. code-block:: python
-
-   import pytheranostics as pth
-
-   # Start a project with the standard directory layout and config templates
-   pth.init_project("./PR21-001")
-
-   # Make a reconstructed SPECT quantitative, in Bq/mL and SUV-ready
-   spect = pth.DicomModify("./spect/016.dcm", CF=0.108)   # MBq per count rate
-   spect.make_bqml_suv(
-       weight=113.4, height=178.5,
-       injection_date="20220616",
-       pre_inj_activity=7450, pre_inj_time="0804",
-       post_inj_activity=14.4, post_inj_time="0955",
-       injection_time="0918",
-   )
-   spect.save()
-
 Install it with:
 
 .. code-block:: bash
