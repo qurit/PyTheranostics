@@ -1,7 +1,5 @@
 """Test configuration and fixtures for PyTheranostics."""
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -38,17 +36,3 @@ def sample_activity():
 def sample_time_points():
     """Create sample time points."""
     return np.array([0, 1, 2, 3, 4])
-
-
-@pytest.fixture(scope="session")
-def docs_examples_dir() -> Path:
-    """Return the path to the documentation example data directory."""
-    return (
-        Path(__file__).resolve().parent.parent / "docs" / "source" / "examples" / "data"
-    )
-
-
-@pytest.fixture(scope="session")
-def spect_example_dir(docs_examples_dir: Path) -> Path:
-    """Directory containing sample SPECT DICOM images."""
-    return docs_examples_dir / "testimages"
