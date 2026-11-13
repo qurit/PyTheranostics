@@ -8,7 +8,7 @@ name: No medical images
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    branches: [main]
 
 jobs:
   no-medical-images:
