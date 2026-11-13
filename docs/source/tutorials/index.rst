@@ -12,3 +12,4 @@ Hands-on walkthroughs that demonstrate common PyTheranostics workflows.
    segmentation/total_segmentator_tutorial
    qSPECT/qSPECT_Tutorial
    ROI_Mapping_Tutorial/ROI_Mapping_Tutorial
+   Dosimetry_Pipeline/voxel_based_dosimetry_with_lu177_dose_kernel

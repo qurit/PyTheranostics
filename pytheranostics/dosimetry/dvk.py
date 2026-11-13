@@ -672,6 +672,7 @@ class DoseVoxelKernel:
         correction in near-water soft tissues.
 
         Methodological limitations:
+
         - It uses only the local density of the target voxel and ignores transport
           effects from surrounding tissues.
         - It does not account for material composition differences beyond the
