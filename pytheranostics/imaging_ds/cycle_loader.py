@@ -7,9 +7,10 @@ from the folder structure produced by the DICOM receiver or manual organization.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pydicom
 import SimpleITK
@@ -171,12 +172,19 @@ def extract_injection_from_first_tp_spect(
             weight_g = int(round(float(pw) * 1000.0))
         except Exception:
             pass
-
+    height_cm: Optional[int] = None
+    pw = getattr(ds, "PatientSize", None)  # cm
+    if pw is not None:
+        try:
+            height_cm = int(round(float(pw) * 100.0))
+        except Exception:
+            pass
     return {
         "InjectionDate": inj_date or "",
         "InjectionTime": inj_time or "",
         "InjectedActivity": injected_activity,  # Bq (int) or None
         "PatientWeight_g": weight_g,
+        "PatientHeight_cm": height_cm,
     }
 
 
@@ -217,26 +225,69 @@ def prepare_cycle_inputs(
 # --- New high-level orchestration API ---------------------------------------------------------
 
 
+def _get_canonical_mappings() -> Dict[str, str]:
+    """Load canonical name mappings from config file.
+
+    Searches for voi_mappings_config.json in order:
+    1. Current directory (project-specific)
+    2. One level up (project root)
+    3. Package template (defaults)
+
+    Returns
+    -------
+    Dict[str, str]
+        Mapping of abbreviated/common names to canonical names.
+        Returns empty dict if no config found.
+    """
+    search_paths = [
+        Path.cwd() / "voi_mappings_config.json",
+        Path.cwd().parent / "voi_mappings_config.json",
+    ]
+
+    for config_path in search_paths:
+        if config_path.exists():
+            try:
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    if "canonical_mappings" in config:
+                        canon_config = config["canonical_mappings"]
+                        if isinstance(canon_config, dict):
+                            return canon_config.get("mappings", {})
+            except Exception:
+                continue
+
+    # Try package template
+    try:
+        import importlib.resources as pkg_resources
+
+        template_path = pkg_resources.files("pytheranostics.data").joinpath(
+            "configuration_templates/voi_mappings_config.json"
+        )
+        with open(template_path, "r") as f:
+            config = json.load(f)
+            if "canonical_mappings" in config:
+                canon_config = config["canonical_mappings"]
+                if isinstance(canon_config, dict):
+                    return canon_config.get("mappings", {})
+    except Exception:
+        pass
+
+    return {}
+
+
 def _canonical_mask_name(name: str) -> str:
-    """Map RTSTRUCT ROI names to canonical pyTheranostics mask names.
+    """Apply canonical name mappings from config.
 
     Best-effort normalization used for auto mapping. Keeps unknown names as-is.
+    Mappings are loaded from voi_mappings_config.json.
     """
     # Strip modality suffixes often used in notebooks (e.g., _m for CT-based, _a for activity)
     base = name
     if base.endswith("_m") or base.endswith("_a"):
         base = base[:-2]
 
-    # Common synonyms/abbreviations
-    replacements = {
-        "Kidney_L": "Kidney_Left",
-        "Kidney_R": "Kidney_Right",
-        "Parotid_L": "ParotidGland_Left",
-        "Parotid_R": "ParotidGland_Right",
-        "Submandibular_L": "SubmandibularGland_Left",
-        "Submandibular_R": "SubmandibularGland_Right",
-        "WBCT": "WholeBody",
-    }
+    # Load canonical mappings from config
+    replacements = _get_canonical_mappings()
     return replacements.get(base, base)
 
 
@@ -249,10 +300,11 @@ def _build_auto_mapping(mask_keys: List[str]) -> Dict[str, str]:
 
 
 def create_studies_with_masks(
-    storage_root: str | Path,
-    patient_id: str,
-    cycle_no: int,
+    storage_root: Optional[str | Path] = None,
+    patient_id: Optional[str] = None,
+    cycle_no: Optional[int] = None,
     *,
+    study_info: Optional[Dict[str, Any]] = None,
     calibration_factor: Optional[float] = None,
     parallel: bool = True,
     max_workers: Optional[int] = None,
@@ -276,12 +328,18 @@ def create_studies_with_masks(
 
     Parameters
     ----------
-    storage_root : str | Path
-        Base directory where organized data lives.
-    patient_id : str
-        Patient identifier.
-    cycle_no : int
-        Cycle number (1-based).
+    storage_root : str | Path, optional
+        Base directory where organized data lives. Used with patient_id + cycle_no
+        for the legacy folder-structured loading behavior.
+    patient_id : str, optional
+        Patient identifier used with storage_root.
+    cycle_no : int, optional
+        Cycle number (1-based), used with storage_root.
+    study_info : dict, optional
+        Study dictionary returned by auto_setup_dosimetry_study() or
+        auto_setup_dosimetry_study_inventory(). If provided, CT/SPECT/RTSTRUCT
+        paths are loaded from this dictionary and storage_root/patient_id/cycle_no
+        are not required.
     calibration_factor : float, optional
         Optional SPECT calibration factor (Bq per count/sec) applied during image load.
     parallel : bool
@@ -334,9 +392,89 @@ def create_studies_with_masks(
     )
 
     # 1) Discover paths and injection metadata
-    ct_paths, spect_paths, rtstruct_files, inj = prepare_cycle_inputs(
-        storage_root, patient_id, cycle_no
-    )
+    if study_info is not None:
+        tp_items = study_info.get("time_points", [])
+        if tp_items:
+            ct_paths = [
+                Path(tp["ct_path"]) if tp.get("ct_path") else None for tp in tp_items
+            ]
+            spect_paths = [
+                Path(tp["spect_path"]) if tp.get("spect_path") else None
+                for tp in tp_items
+            ]
+            rtstruct_files = [
+                Path(tp["rtstruct_file"]) if tp.get("rtstruct_file") else None
+                for tp in tp_items
+            ]
+            first_tp_with_inj = next(
+                (
+                    tp
+                    for tp in tp_items
+                    if isinstance(tp.get("injection_info"), dict)
+                    and tp.get("injection_info")
+                ),
+                None,
+            )
+            inj_info = (
+                first_tp_with_inj.get("injection_info", {})
+                if first_tp_with_inj is not None
+                else {}
+            )
+        else:
+            ct_paths = [Path(p) if p else None for p in study_info.get("ct_paths", [])]
+            spect_paths = [
+                Path(p) if p else None for p in study_info.get("spect_paths", [])
+            ]
+            rtstruct_files = [
+                Path(p) if p else None for p in study_info.get("rtstruct_files", [])
+            ]
+            inj_info = {}
+
+        max_len = max(len(ct_paths), len(spect_paths), len(rtstruct_files), 0)
+        ct_paths.extend([None] * (max_len - len(ct_paths)))
+        spect_paths.extend([None] * (max_len - len(spect_paths)))
+        rtstruct_files.extend([None] * (max_len - len(rtstruct_files)))
+
+        weight_g = inj_info.get("PatientWeight_g")
+        if weight_g is None:
+            weight_g = inj_info.get("patient_weight_g")
+        if weight_g is None and inj_info.get("patient_weight_kg") is not None:
+            try:
+                weight_g = int(round(float(inj_info["patient_weight_kg"]) * 1000.0))
+            except Exception:
+                weight_g = None
+
+        injected_activity = (
+            inj_info.get("InjectedActivity")
+            if "InjectedActivity" in inj_info
+            else inj_info.get("injected_activity")
+        )
+        if injected_activity is not None:
+            try:
+                injected_activity = int(round(float(injected_activity)))
+            except Exception:
+                pass
+
+        inj = {
+            "InjectionDate": inj_info.get("InjectionDate")
+            or inj_info.get("injection_date")
+            or "",
+            "InjectionTime": _extract_hhmmss(
+                inj_info.get("InjectionTime") or inj_info.get("injection_time")
+            )
+            or "",
+            "InjectedActivity": injected_activity,
+            "PatientWeight_g": weight_g,
+            "PatientHeight_cm": inj_info.get("PatientHeight_cm"),
+        }
+    else:
+        if storage_root is None or patient_id is None or cycle_no is None:
+            raise ValueError(
+                "Either provide study_info, or provide storage_root + patient_id + cycle_no."
+            )
+        ct_paths, spect_paths, rtstruct_files, inj = prepare_cycle_inputs(
+            storage_root, patient_id, cycle_no
+        )
 
     # 2) Build longitudinal studies from DICOM once
     ct_dirs = [str(p) for p in ct_paths if p is not None]
@@ -371,6 +509,11 @@ def create_studies_with_masks(
             # Build NM masks only if target available
             target_img = next(iter(longSPECT.images.values()), None)
 
+        if target_img is None:
+            raise RuntimeError(
+                f"No SPECT image available for timepoint {time_id} to resample NM masks"
+            )
+
         ct_masks, nm_masks = load_and_resample_RT_to_target(
             ref_dicom_ct_dir=str(ct_dir),
             rt_struct_file=str(rt_file),
@@ -382,7 +525,7 @@ def create_studies_with_masks(
         apply_spect_mapping = (final_spect_mapping is not None) or auto_map
 
         def _is_valid_target(name: str) -> bool:
-            if name in LongitudinalStudy._VALID_ORGAN_NAMES:
+            if name in LongitudinalStudy._get_valid_organ_names():
                 return True
             return re.match(r"^Lesion_([1-9]\d*)$", name) is not None
 
@@ -432,6 +575,7 @@ def create_studies_with_masks(
                 if final_spect_mapping is not None:
                     for k in nm_masks.keys():
                         dst = final_spect_mapping.get(k)
+
                         if dst is not None and _is_valid_target(dst):
                             spect_map_valid[k] = dst
                         else:

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import glob
+import logging
+import math
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
@@ -22,6 +25,8 @@ from pytheranostics.registration.ct_to_spect import (
     register_ct_to_spect,
     transform_ct_mask_to_spect,
 )
+
+logger = logging.getLogger(__name__)
 
 # TODO: Move under dicomtools, and have two sets: one generic (the current dicomtools.py) and on specific for pyTheranostic functions (containing
 # the code below)
@@ -91,22 +96,22 @@ def load_metadata(dir: str, modality: str) -> ImagingMetadata:
                         injected_activity > 20000
                     ):  # Activity likely in Bq instead of MBq
                         injected_activity /= 1e6
-                    print(
+                    logger.info(
                         f"Injected activity found in DICOM Header: {injected_activity:2.1f} MBq. Please verify."
                     )
                 except AttributeError:
                     # Sequence exists but RadionuclideTotalDose attribute is missing
-                    print(
+                    logger.warning(
                         "RadiopharmaceuticalInformationSequence found but RadionuclideTotalDose is missing."
                     )
             else:
                 # Sequence exists but is empty - this may indicate a data quality issue
-                print(
-                    "Warning: RadiopharmaceuticalInformationSequence is empty. This may indicate a data quality issue."
+                logger.warning(
+                    "RadiopharmaceuticalInformationSequence is empty. This may indicate a data quality issue."
                 )
 
         if injected_activity is None:
-            print("Using default injected activity: 7400 MBq")
+            logger.info("Using default injected activity: 7400 MBq")
             injected_activity = 7400.0
 
     # Global attributes. Should be the same in all slices!
@@ -181,64 +186,204 @@ def itk_image_from_array(
     return image
 
 
+def _parse_dicom_date_time(
+    date_val: Optional[str], time_val: Optional[str]
+) -> Optional[datetime]:
+    """Parse DICOM DA/TM values into a Python datetime."""
+    if not date_val:
+        return None
+
+    date_str = str(date_val)
+    time_str = str(time_val or "000000").split(".")[0]
+    if len(time_str) < 6:
+        time_str = time_str.ljust(6, "0")
+
+    try:
+        return datetime.strptime(f"{date_str}{time_str[:6]}", "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+
+
+def _parse_dicom_datetime(dt_val: Optional[str]) -> Optional[datetime]:
+    """Parse a DICOM DT value into a Python datetime."""
+    if not dt_val:
+        return None
+
+    value = str(dt_val).split(".")[0]
+    if len(value) < 8:
+        return None
+
+    return _parse_dicom_date_time(value[:8], value[8:14] if len(value) > 8 else None)
+
+
+def _get_acquisition_start_datetime(ds: pydicom.Dataset) -> Optional[datetime]:
+    """Return the best available acquisition-start datetime from a DICOM dataset."""
+    for date_key, time_key in [
+        ("AcquisitionDate", "AcquisitionTime"),
+        ("SeriesDate", "SeriesTime"),
+        ("ContentDate", "ContentTime"),
+        ("StudyDate", "StudyTime"),
+    ]:
+        dt = _parse_dicom_date_time(
+            getattr(ds, date_key, None), getattr(ds, time_key, None)
+        )
+        if dt is not None:
+            return dt
+    return None
+
+
+def _get_radiopharm_admin_datetime_and_half_life(
+    ds: pydicom.Dataset,
+) -> Tuple[Optional[datetime], Optional[float]]:
+    """Return radiopharmaceutical administration datetime and half-life in seconds."""
+    if not hasattr(ds, "RadiopharmaceuticalInformationSequence"):
+        return None, None
+
+    rp_seq = ds.RadiopharmaceuticalInformationSequence
+    if len(rp_seq) == 0:
+        return None, None
+
+    rp_info = rp_seq[0]
+    admin_dt = _parse_dicom_datetime(
+        getattr(rp_info, "RadiopharmaceuticalStartDateTime", None)
+    )
+    if admin_dt is None:
+        admin_date = getattr(rp_info, "RadiopharmaceuticalStartDate", None)
+        if admin_date is None:
+            admin_date = getattr(ds, "StudyDate", None)
+        admin_dt = _parse_dicom_date_time(
+            admin_date,
+            getattr(rp_info, "RadiopharmaceuticalStartTime", None),
+        )
+
+    half_life_seconds = None
+    half_life_val = getattr(rp_info, "RadionuclideHalfLife", None)
+    if half_life_val is not None:
+        try:
+            half_life_seconds = float(half_life_val)
+        except (TypeError, ValueError):
+            half_life_seconds = None
+
+    return admin_dt, half_life_seconds
+
+
 def apply_qspect_dcm_scaling(
     image: Image, dir: str, scale_factor: Optional[Tuple[float, float]] = None
 ) -> Image:
-    """Read dicom metadata to extract appropriate scaling for Image voxel values.
+    """Read DICOM metadata to scale quantitative NM/PT images and harmonize decay reference.
 
-    Apply scaling to original image and generate a new SimpleITK image object.
-
-    Args:
-        image (Image): Original SimpleITK image.
-        dir (str): Directory path containing DICOM files.
-        scale_factor (Optional[Tuple[float, float]], optional): Custom scale factor. Defaults to None.
-
-    Raises
-    ------
-    AssertionError
-        If wrong modality or multiple DICOM files found.
-
-    Returns
-    -------
-    Image
-        Scaled SimpleITK image.
+    NM images are converted using the Real World Value Mapping when available. NM and PT
+    images are then optionally converted from ADMIN-referenced decay correction to START.
     """
-    if scale_factor is None:
-        # We use pydicom to access the appropriate tag:
-        # First, find the SPECT dicom file:
-        path_dir = Path(dir)
-        nm_files = [files for files in path_dir.glob("*.dcm")]
-        dcm_data = pydicom.dcmread(str(nm_files[0]))
+    path_dir = Path(dir)
+    dicom_files = sorted(path_dir.glob("*.dcm"))
+    if len(dicom_files) == 0:
+        raise AssertionError(f"No Dicom data was found under {dir}")
 
-        if (
-            dcm_data.Modality == "PT"
-        ):  # PET modality stores individual dicom files for each slice, similar to CT.
-            # Its scaling is readed correctly from SimpleITK, so nothing to do here.
-            return image
+    dcm_data = pydicom.dcmread(str(dicom_files[0]), stop_before_pixels=True, force=True)
+    modality = getattr(dcm_data, "Modality", None)
 
-        if dcm_data.Modality != "NM":
-            raise AssertionError(
-                f"Wrong Modality, expecting NM for SPECT data, but got {dcm_data.Modality}"
-            )
+    if modality not in ["NM", "PT"]:
+        raise AssertionError(
+            f"Wrong Modality, expecting NM/PT quantitative data, but got {modality}"
+        )
 
-        if len(nm_files) != 1:
-            raise AssertionError(
-                f"Found more than 1 .dcm file inside {path_dir.name}, not sure which one is the right SPECT."
-            )
+    if modality == "NM" and scale_factor is None and len(dicom_files) != 1:
+        raise AssertionError(
+            f"Found more than 1 .dcm file inside {path_dir.name}, not sure which one is the right SPECT."
+        )
 
-        # If scale_factor is not provided by the user, we assume it is a Q-SPECT file.
-        slope = dcm_data.RealWorldValueMappingSequence[0].RealWorldValueSlope
-        intercept = dcm_data.RealWorldValueMappingSequence[0].RealWorldValueIntercept
+    image_array = numpy.squeeze(SimpleITK.GetArrayFromImage(image)).astype(
+        numpy.float32
+    )
+
+    if scale_factor is not None:
+        slope = float(scale_factor[0])
+        intercept = float(scale_factor[1])
+        logger.info(
+            "Applying user-provided quantitative scaling for %s: slope=%s intercept=%s.",
+            modality,
+            slope,
+            intercept,
+        )
+        image_array = slope * image_array + intercept
+    elif modality == "NM":
+        slope = float(dcm_data.RealWorldValueMappingSequence[0].RealWorldValueSlope)
+        intercept = float(
+            dcm_data.RealWorldValueMappingSequence[0].RealWorldValueIntercept
+        )
+        logger.info(
+            "Applying NM quantitative scaling obtained from DICOM "
+            "RealWorldValueMappingSequence: slope=%s intercept=%s.",
+            slope,
+            intercept,
+        )
+        image_array = slope * image_array + intercept
     else:
-        slope = scale_factor[0]
-        intercept = scale_factor[1]
+        logger.info(
+            "PT quantitative values are assumed to be scaled correctly by SimpleITK; no slope/intercept scaling applied."
+        )
 
-    # Re-scale voxel values
-    image_array = numpy.squeeze(SimpleITK.GetArrayFromImage(image))
-    image_array = slope * image_array.astype(numpy.float32) + intercept
+    decay_correction = str(getattr(dcm_data, "DecayCorrection", "") or "").upper()
+    logger.info(
+        "DICOM DecayCorrection for %s image is '%s'.",
+        modality,
+        decay_correction or "MISSING",
+    )
 
-    # Generate re-scaled SimpleITK.Image object by building a new Image from re_scaled array, and copying
-    # metadata from original image.
+    if decay_correction == "START":
+        logger.info(
+            "No additional decay normalization is needed because the image is already referenced to acquisition start."
+        )
+    elif decay_correction == "ADMIN":
+        acquisition_dt = _get_acquisition_start_datetime(dcm_data)
+        admin_dt, half_life_seconds = _get_radiopharm_admin_datetime_and_half_life(
+            dcm_data
+        )
+
+        if acquisition_dt is None:
+            logger.warning(
+                "DecayCorrection is ADMIN but acquisition start time could not be resolved. Skipping decay normalization to START."
+            )
+        elif admin_dt is None:
+            logger.warning(
+                "DecayCorrection is ADMIN but radiopharmaceutical administration time could not be resolved. Skipping decay normalization to START."
+            )
+        elif half_life_seconds is None or half_life_seconds <= 0:
+            logger.warning(
+                "DecayCorrection is ADMIN but RadionuclideHalfLife is missing or invalid (%s). Skipping decay normalization to START.",
+                half_life_seconds,
+            )
+        else:
+            delta_seconds = (acquisition_dt - admin_dt).total_seconds()
+            if delta_seconds < 0:
+                logger.warning(
+                    "DecayCorrection is ADMIN but acquisition start (%s) is earlier than administration time (%s). Skipping decay normalization to START.",
+                    acquisition_dt.isoformat(),
+                    admin_dt.isoformat(),
+                )
+            else:
+                decay_factor = math.exp(
+                    -math.log(2.0) * delta_seconds / half_life_seconds
+                )
+                logger.info(
+                    "Converting %s image from ADMIN to START decay reference using administration time %s, acquisition time %s, half-life %.6g s, elapsed time %.3f s, factor %.9g.",
+                    modality,
+                    admin_dt.isoformat(),
+                    acquisition_dt.isoformat(),
+                    half_life_seconds,
+                    delta_seconds,
+                    decay_factor,
+                )
+                image_array *= decay_factor
+    elif decay_correction:
+        logger.info(
+            "DecayCorrection '%s' is not explicitly handled. Image values are left unchanged.",
+            decay_correction,
+        )
+    else:
+        logger.info("DecayCorrection tag is missing. Image values are left unchanged.")
+
     return itk_image_from_array(array=image_array, ref_image=image)
 
 
@@ -394,7 +539,9 @@ def load_from_dicom_dir(
             )
 
         except AttributeError:
-            print("No calibration factor provided, Data might not be in BQ/ML ...")
+            logger.warning(
+                "No calibration factor provided, Data might not be in BQ/ML ..."
+            )
 
     # Load Meta Data using pydicom.
     meta = load_metadata(dir=dir, modality=modality)
@@ -403,7 +550,7 @@ def load_from_dicom_dir(
     image = force_orthogonality(image=image)
 
     # Display Origin and Orientation.
-    print(
+    logger.debug(
         f"Modality: {modality} -> Origin: {image.GetOrigin()}; Direction: {image.GetDirection()}"
     )
 
@@ -452,10 +599,12 @@ def force_orthogonality(image: SimpleITK.Image) -> SimpleITK.Image:
         Image with orthogonal orientation vectors.
     """
     if not are_vectors_orthogonal(image.GetDirection()):
-        print("Patient Orientation Vectors are NOT orthogonal. Forcing...")
+        logger.warning("Patient Orientation Vectors are NOT orthogonal. Forcing...")
         prev_origin = image.GetDirection()
         new_origin = [round(vec_element) for vec_element in prev_origin]
-        print(f">> Original Orientation: {prev_origin}, New Orientation: {new_origin} ")
+        logger.debug(
+            f">> Original Orientation: {prev_origin}, New Orientation: {new_origin} "
+        )
         image.SetDirection(new_origin)
     else:
         prev_origin = image.GetDirection()
@@ -586,7 +735,7 @@ def load_and_resample_RT_to_target(
     resampled_masks: Dict[str, SimpleITK.Image] = {}
 
     for mask_name, mask_image in ref_masks.items():
-        print(f"Resampling Masks: {mask_name} ...")
+        logger.debug(f"Resampling Masks: {mask_name} ...")
         resampled_masks[mask_name] = resample_mask_to_target(
             mask_img=mask_image, target_img=target_img
         )
@@ -627,7 +776,7 @@ def load_and_register_RT_to_target(
     resampled_masks: Dict[str, SimpleITK.Image] = {}
 
     for mask_name, mask_image in ref_masks.items():
-        print(f"Registering Masks: {mask_name} ...")
+        logger.debug(f"Registering Masks: {mask_name} ...")
         resampled_masks[mask_name] = transform_ct_mask_to_spect(
             mask=mask_image, spect=target_img, transform=transform
         )

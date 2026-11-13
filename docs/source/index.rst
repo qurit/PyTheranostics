@@ -1,95 +1,129 @@
-.. PyTheranostics documentation master file, created by
-   sphinx-quickstart on Thu May 23 12:47:39 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+:hide-toc:
 
+============================
 PyTheranostics Documentation
 ============================
 
-PyTheranostics is a comprehensive Python library for nuclear medicine image processing and dosimetry calculations. It provides a complete workflow from image processing to absorbed dose calculations in target organs.
+.. raw:: html
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Getting Started
+   <div class="pt-hero">
+     <p class="pt-tagline">From nuclear medicine scans to absorbed dose in target organs</p>
+     <p class="pt-badges">
+       <a href="https://pypi.org/project/pytheranostics"><img src="https://img.shields.io/pypi/v/pytheranostics" alt="PyPI version" height="20"></a>
+       <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+" height="20">
+       <a href="https://github.com/qurit/PyTheranostics/blob/main/LICENSE"><img src="https://img.shields.io/github/license/qurit/PyTheranostics?color=g" alt="MIT licence" height="20"></a>
+       <a href="https://www.qurit.ca/"><img src="https://img.shields.io/badge/built%20at-QURIT-0f766e" alt="Built at QURIT" height="20"></a>
+     </p>
+   </div>
 
-   intro/overview
-   intro/installation
-   usage/basic_usage
+PyTheranostics is a library of tools to process nuclear medicine scans and take
+them through the dosimetry workflow: organising a study's DICOM, making a SPECT
+quantitative, segmenting volumes of interest, fitting their time–activity
+curves, and calculating the absorbed dose in target organs.
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Tutorials
-
-   tutorials/index
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Reference
-
-   API/modules
-   changelog
-
-Features
---------
-
-* Image processing and analysis
-* Dosimetry calculations
-* DICOM handling and manipulation
-* Calibration tools
-* Quality control utilities
-* Registration and segmentation tools
-* Visualization and plotting capabilities
-
-Installation
-------------
-
-You can install PyTheranostics using pip:
+Install it with:
 
 .. code-block:: bash
 
    pip install pytheranostics
 
-For development installation:
+----
 
-.. code-block:: bash
+Start here
+==========
 
-   pip install -e ".[dev]"
+.. grid:: 1 1 2 2
+   :gutter: 3
 
-Quick Start
------------
+   .. grid-item-card:: :octicon:`rocket;1.2em` Overview
+      :link: intro/overview
+      :link-type: doc
 
-.. code-block:: python
+      What the library does and how the dosimetry workflow fits together.
+      **Read this first** if you are new to PyTheranostics.
 
-   import pytheranostics as pth
+   .. grid-item-card:: :octicon:`download;1.2em` Installation
+      :link: intro/installation
+      :link-type: doc
 
-   # Load and process images
-   image = pth.ImagingDS.load_dicom("path/to/dicom")
+      Supported Python versions, the dependencies, and the optional extras.
 
-   # Perform dosimetry calculations
-   dose = pth.dosimetry.calculate_absorbed_dose(image)
+   .. grid-item-card:: :octicon:`book;1.2em` Tutorials
+      :link: tutorials/index
+      :link-type: doc
 
-   # Visualize results
-   pth.plots.plot_dose_distribution(dose)
+      Runnable notebooks: project setup, DICOM organisation, data ingestion,
+      segmentation, qSPECT and ROI mapping.
 
-Indices and tables
+   .. grid-item-card:: :octicon:`code;1.2em` API reference
+      :link: API/modules
+      :link-type: doc
+
+      Every module, generated from the docstrings in the source.
+
+What is in it
+=============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Area
+     - Tools
+   * - Study organisation
+     - ``imaging_ds`` — DICOM ingestion, longitudinal studies, cycle loading,
+       ROI mapping
+   * - Quality control
+     - ``qc`` — radionuclide calibrator, planar and SPECT checks against a
+       stored protocol
+   * - Calibration
+     - ``calibrations`` — camera sensitivity and calibration factors
+   * - Quantitative imaging
+     - ``dicomtools`` — counts to Bq/mL, plus the header a viewer needs for SUV
+   * - Segmentation
+     - ``segmentation`` — RTStruct masks, and TotalSegmentator integration
+   * - Registration
+     - ``registration`` — aligning the series a study spans
+   * - Kinetics
+     - ``fits`` — mono-, bi- and tri-exponential time–activity curve fitting
+   * - Dosimetry
+     - ``dosimetry`` — dose kernels, Monte Carlo and organ-level S-values
+   * - Preclinical
+     - ``preclinical_dosimetry`` — the same workflow for small-animal studies
+   * - Visualisation
+     - ``plots`` — energy-window montages and time–activity curve figures
+
+.. toctree::
+   :hidden:
+   :caption: Getting Started
+
+   intro/overview
+   intro/installation
+   intro/logging
+   intro/dosimetry_config
+   tutorials/getting_started/basic_usage
+
+.. toctree::
+   :hidden:
+   :caption: Tutorials
+
+   tutorials/index
+
+.. toctree::
+   :hidden:
+   :caption: Reference
+
+   API/modules
+   changelog
+
+Citing and licence
 ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+PyTheranostics is developed at the `Quantitative Radiomolecular Imaging and
+Therapy Lab (QURIT) <https://www.qurit.ca/>`_ at BC Cancer Research Institute,
+and is released under the MIT licence — see
+`LICENSE <https://github.com/qurit/PyTheranostics/blob/main/LICENSE>`_.
 
-License
--------
-
-This project is licensed under the terms of the MIT license. See the `LICENSE <https://github.com/your-repo/LICENSE>`_ file for details.
-
-Acknowledgements
-----------------
-
-We would like to thank everyone who has contributed to PyTheranostics. Visit the
-`GitHub contributors graph <https://github.com/qurit/PyTheranostics/graphs/contributors>`_
-for the up-to-date list of collaborators.
-
-.. footer::
-
-   Made with 💖 by the Pytheranostics team.
+We would like to thank everyone who has contributed. The up-to-date list is on
+the `GitHub contributors graph
+<https://github.com/qurit/PyTheranostics/graphs/contributors>`_.

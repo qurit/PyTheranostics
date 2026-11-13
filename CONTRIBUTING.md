@@ -41,9 +41,22 @@ We love your input! We want to make contributing to PyTheranostics as easy and t
 
    This script will:
    - Verify you're in a virtual environment
-   - Install the package in editable mode
-   - Install all development dependencies (pytest, black, flake8, mypy, etc.)
+   - Install the package in editable mode with all development dependencies
+   - Install dependencies for segmentation tools (TotalSegmentator, torch, torchvision)
+   - Install testing, linting, and type checking tools (pytest, black, flake8, mypy, etc.)
    - Set up pre-commit hooks for automated code quality checks
+
+### Segmentation Support
+
+Developers can test segmentation features using TotalSegmentator. The development setup automatically includes the required dependencies (torch, torchvision, TotalSegmentator), so you can immediately work with and test segmentation tools:
+
+```python
+from pytheranostics.segmentation import run_full_pipeline
+
+# You can now use TotalSegmentator without additional installation
+```
+
+If you prefer a lightweight installation without segmentation support, manually install the package without the `dev` extras (though this is not recommended for development).
 
 ### Pre-commit Hooks
 
@@ -86,6 +99,9 @@ Once your environment is set up, you can use these commands:
 # Run all tests
 pytest
 
+# Run the external voxel dosimetry validation test before opening a PR
+pytest tests/test_voxel_dosimetry_validation.py -rs
+
 # Run only smoke tests (fast)
 pytest -m smoke
 
@@ -107,6 +123,13 @@ pre-commit run --all-files
 # Run quality checks (combination)
 pytest -m smoke && black --check . && isort --check-only . && flake8 && mypy pytheranostics
 ```
+
+The voxel dosimetry validation test downloads the SNMMI Deep Blue dataset and
+RT-STRUCT files from Zenodo. GitHub Actions may skip this test if Deep Blue
+rejects CI-hosted downloads, so contributors should run it locally before
+opening a pull request. Outside CI, SNMMI data-fetch failures are treated as
+test failures rather than skips. Zenodo RT-STRUCT download or validation
+failures are always test failures when the validation test runs.
 
 ### Type Checking with Mypy
 

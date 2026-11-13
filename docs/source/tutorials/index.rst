@@ -1,12 +1,15 @@
 Tutorials
 =========
 
-Hands-on walkthroughs that demonstrate common PyTheranostics workflows. The
-notebooks are rendered directly in the documentation via nbsphinx.
+Hands-on walkthroughs that demonstrate common PyTheranostics workflows. 
 
 .. toctree::
    :maxdepth: 1
 
-   SPECT2SUV/SPECT2SUV
-   ROI_Mapping_Tutorial/ROI_Mapping_Tutorial
+   getting_started/project_setup_tutorial
+   dicom_organization/dicom_organization
    Data_Ingestion_Examples/Data_Ingestion_Examples
+   segmentation/total_segmentator_tutorial
+   qSPECT/qSPECT_Tutorial
+   ROI_Mapping_Tutorial/ROI_Mapping_Tutorial
+   Dosimetry_Pipeline/voxel_based_dosimetry_with_lu177_dose_kernel

@@ -16,13 +16,14 @@
             "InjectionTime": "NA",
             "InjectedActivity": "NA",
             "Weight_g": "NA",
+            "Height_cm": "NA",
             "Level": "NA",
             "Method": "NA",
             "OutputFormat": "NA",
             "ScaleDoseByDensity": "NA",
             "ReferenceTimePoint": "NA",
             "TimePoints_h": "NA",
-            "rois": {},
+            "VOIs": {},
             "Organ-level_AD": {}
         }
     ],
@@ -35,13 +36,14 @@
             "InjectionTime": "NA",
             "InjectedActivity": "NA",
             "Weight_g": "NA",
+            "Height_cm": "NA",
             "Level": "NA",
             "Method": "NA",
             "OutputFormat": "NA",
             "ScaleDoseByDensity": "NA",
             "ReferenceTimePoint": "NA",
             "TimePoints_h": "NA",
-            "rois": {},
+            "VOIs": {},
             "Organ-level_AD": {}
         }
     ],
@@ -54,13 +56,14 @@
             "InjectionTime": "NA",
             "InjectedActivity": "NA",
             "Weight_g": "NA",
+            "Height_cm": "NA",
             "Level": "NA",
             "Method": "NA",
             "OutputFormat": "NA",
             "ScaleDoseByDensity": "NA",
             "ReferenceTimePoint": "NA",
             "TimePoints_h": "NA",
-            "rois": {},
+            "VOIs": {},
             "Organ-level_AD": {}
         }
     ],
@@ -73,13 +76,14 @@
             "InjectionTime": "NA",
             "InjectedActivity": "NA",
             "Weight_g": "NA",
+            "Height_cm": "NA",
             "Level": "NA",
             "Method": "NA",
             "OutputFormat": "NA",
             "ScaleDoseByDensity": "NA",
             "ReferenceTimePoint": "NA",
             "TimePoints_h": "NA",
-            "rois": {},
+            "VOIs": {},
             "Organ-level_AD": {}
         }
     ],
@@ -92,6 +96,7 @@
             "InjectionTime": "NA",
             "InjectedActivity": "NA",
             "Weight_g": "NA",
+            "Height_cm": "NA",
             "ApplyBiokineticsFromPreviousCycle": "NA",
             "Level": "NA",
             "Method": "NA",
@@ -99,7 +104,7 @@
             "ScaleDoseByDensity": "NA",
             "ReferenceTimePoint": "NA",
             "TimePoints_h": "NA",
-            "rois": {},
+            "VOIs": {},
             "Organ-level_AD": {}
         }
     ],
@@ -112,6 +117,7 @@
             "InjectionTime": "NA",
             "InjectedActivity": "NA",
             "Weight_g": "NA",
+            "Height_cm": "NA",
             "ApplyBiokineticsFromPreviousCycle": "NA",
             "Level": "NA",
             "Method": "NA",
@@ -119,7 +125,7 @@
             "ScaleDoseByDensity": "NA",
             "ReferenceTimePoint": "NA",
             "TimePoints_h": "NA",
-            "rois": {},
+            "VOIs": {},
             "Organ-level_AD": {}
         }
     ]

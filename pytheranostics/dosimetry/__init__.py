@@ -8,4 +8,8 @@ __all__ = [
     "organ_s_dosimetry",
     "voxel_s_dosimetry",
     "bone_marrow",
+    "config",
 ]
+
+# Convenience re-exports for users
+from .config import build_roi_fit_config  # noqa: F401

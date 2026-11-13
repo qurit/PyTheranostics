@@ -1,0 +1,11 @@
+{
+  "_description": "Apply bi-exponential fitting with uptake phase to all organs by default. Users can override these defaults for specific organs or ROIs by providing a custom configuration file.",
+  "organ_defaults": {
+    "fit_order": 2,
+    "with_uptake": true,
+    "param_init": {"A1": 100, "A2": 0.01},
+    "fixed_parameters": null,
+    "bounds": {"A2": [0.004345, 1.0]},
+    "washout_ratio": null
+  }
+}

@@ -1,0 +1,178 @@
+/* PyTheranostics documentation — small refinements on top of Furo. */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --pt-teal: #0f766e;
+  --pt-amber: #b45309;
+}
+
+body[data-theme="dark"] {
+  --pt-teal: #5eead4;
+  --pt-amber: #fbbf24;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) {
+    --pt-teal: #5eead4;
+    --pt-amber: #fbbf24;
+  }
+}
+
+/* The logo is a small square emblem; the project name sits under it. */
+.sidebar-logo {
+  max-width: 4.5rem;
+  margin: 0 auto 0.4rem;
+}
+
+/* Landing page hero ------------------------------------------------------ */
+
+.pt-hero {
+  text-align: center;
+  padding: 1.5rem 0 0.5rem;
+}
+
+.pt-hero .pt-tagline {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--color-foreground-secondary);
+  margin: 0.25rem 0 0.75rem;
+}
+
+.pt-badges img {
+  margin: 0 0.15rem;
+  vertical-align: middle;
+}
+
+/* Cards ------------------------------------------------------------------ */
+
+.sd-card {
+  border-radius: 0.6rem;
+  border: 1px solid var(--color-background-border);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.sd-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(15, 118, 110, 0.18);
+}
+
+.sd-card .sd-card-title {
+  font-weight: 600;
+  color: var(--color-brand-content);
+}
+
+/* Code ------------------------------------------------------------------- */
+
+div.highlight {
+  border-radius: 0.5rem;
+}
+
+code.literal {
+  border-radius: 0.3rem;
+}
+
+/* API signatures --------------------------------------------------------- */
+
+dl.py.class > dt,
+dl.py.method > dt,
+dl.py.function > dt,
+dl.py.attribute > dt {
+  border-left: 3px solid var(--pt-teal);
+  border-radius: 0 0.35rem 0.35rem 0;
+}
+
+/* Tables ----------------------------------------------------------------- */
+
+table.docutils {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+table.docutils th {
+  background: var(--color-background-secondary);
+  font-weight: 600;
+}
+
+/* QC verdict keywords, as they appear in a summary table. */
+
+.pt-ok {
+  color: #047857;
+  font-weight: 600;
+}
+
+.pt-verify {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.pt-fail {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+body[data-theme="dark"] .pt-ok {
+  color: #6ee7b7;
+}
+
+body[data-theme="dark"] .pt-verify {
+  color: #fcd34d;
+}
+
+body[data-theme="dark"] .pt-fail {
+  color: #fca5a5;
+}
+
+/* Diagrams: inline SVGs use currentColor so they follow the theme. */
+
+.pt-figure {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.pt-figure svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.pt-figure figcaption,
+.pt-figure .caption {
+  font-size: 0.85rem;
+  color: var(--color-foreground-secondary);
+  margin-top: 0.5rem;
+}
+
+/* Notebooks (nbsphinx) ---------------------------------------------------- */
+
+/* Furo and nbsphinx disagree about prompt colours; keep the In[ ]/Out[ ]
+   gutters quiet and let the code itself carry the contrast. */
+.nbinput .prompt,
+.nboutput .prompt {
+  color: var(--color-foreground-muted);
+  font-size: 0.78rem;
+}
+
+.nbinput div.input_area,
+.nboutput div.output_area {
+  border-radius: 0.5rem;
+}
+
+.nboutput div.output_area pre {
+  background: var(--color-background-secondary);
+  border-radius: 0.5rem;
+}
+
+/* Figures ---------------------------------------------------------------- */
+
+figure img,
+.figure img {
+  border-radius: 0.5rem;
+  max-width: 100%;
+  height: auto;
+}
+
+figure figcaption,
+.figure .caption {
+  font-size: 0.85rem;
+  color: var(--color-foreground-secondary);
+}

@@ -38,18 +38,25 @@ dependencies = [
 "Bug Tracker" = "https://github.com/qurit/PyTheranostics/issues"
 
 [project.optional-dependencies]
+totalsegmentator = [
+    "torch",
+    "torchvision",
+    "TotalSegmentator",
+    "nibabel",
+]
 test = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
 docs = [
     "sphinx>=7.0",
-    "sphinx-rtd-theme>=1.0",
+    "furo>=2024.1.29",
     "sphinx-autodoc-typehints>=2.0",
     "nbsphinx>=0.9",
     "nbconvert>=7.0",
     "myst-parser>=2.0",
     "sphinx-copybutton>=0.5",
+    "sphinx-design>=0.5.0",
     "sphinx-contributors>=0.1",
     "pandoc>=2.4",
     "ipython>=8.0",
@@ -65,17 +72,21 @@ dev = [
     "types-requests",
     "pre-commit>=3.0.0",
     "sphinx>=7.0",
-    "sphinx-rtd-theme>=1.0",
+    "furo>=2024.1.29",
     "sphinx-autodoc-typehints>=2.0",
     "nbsphinx>=0.9",
     "nbconvert>=7.0",
     "myst-parser>=2.0",
     "sphinx-copybutton>=0.5",
+    "sphinx-design>=0.5.0",
     "sphinx-contributors>=0.1",
     "pandoc>=2.4",
     "ipython>=8.0",
     "pydocstyle>=6.0",
-    "flake8-docstrings>=1.7"
+    "flake8-docstrings>=1.7",
+    "torch",
+    "torchvision",
+    "TotalSegmentator"
 ]
 
 [tool.hatch.build]
@@ -154,6 +165,7 @@ profile = "black"
 markers = [
     "smoke: marks tests as smoke tests (quick functionality checks)",
     "slow: marks tests as slow (heavy computation or large data)",
+    "integration: marks tests as integration tests spanning multiple subsystems",
 ]
 filterwarnings = [
     "ignore:.*SwigPy.*:DeprecationWarning",
