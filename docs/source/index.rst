@@ -10,7 +10,7 @@ PyTheranostics Documentation
      <p class="pt-tagline">From nuclear medicine scans to absorbed dose in target organs</p>
      <p class="pt-badges">
        <a href="https://pypi.org/project/pytheranostics"><img src="https://img.shields.io/pypi/v/pytheranostics" alt="PyPI version" height="20"></a>
-       <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+" height="20">
+       <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" height="20">
        <a href="https://github.com/qurit/PyTheranostics/blob/main/LICENSE"><img src="https://img.shields.io/github/license/qurit/PyTheranostics?color=g" alt="MIT licence" height="20"></a>
        <a href="https://www.qurit.ca/"><img src="https://img.shields.io/badge/built%20at-QURIT-0f766e" alt="Built at QURIT" height="20"></a>
      </p>
