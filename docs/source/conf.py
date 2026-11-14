@@ -75,7 +75,7 @@ html_theme_options = {
     "navigation_with_keys": True,
     "top_of_page_buttons": ["view", "edit"],
     "source_repository": "https://github.com/qurit/PyTheranostics/",
-    "source_branch": "dev",
+    "source_branch": "main",
     "source_directory": "docs/source/",
     "light_css_variables": {
         "color-brand-primary": "#0f766e",
@@ -128,6 +128,30 @@ napoleon_type_aliases = None
 nbsphinx_execute = "never"
 nbsphinx_allow_errors = False
 nbsphinx_codecell_lexer = "python"
+
+# Furo has no download button, so give every notebook page a link to its own
+# .ipynb. nbsphinx already copies that file next to the rendered HTML, so the
+# href is a plain relative filename and nothing is duplicated into _downloads.
+# nbsphinx_prolog is applied to notebooks only, so env.docname + ".ipynb" is
+# always the source file for the page being rendered.
+nbsphinx_prolog = """
+{% set nbpath = env.docname + '.ipynb' %}
+{% set nbfile = env.docname.split('/')|last|e + '.ipynb' %}
+
+.. raw:: html
+
+    <div class="admonition note nbsphinx-download">
+      <p class="admonition-title">Jupyter notebook</p>
+      <p>
+        This page was generated from
+        <a class="reference external"
+           href="https://github.com/qurit/PyTheranostics/blob/main/docs/source/{{ nbpath }}">{{ nbpath }}</a>.
+        <a class="reference download internal"
+           href="{{ nbfile }}" download>Download the notebook</a>
+        to run it on your own data.
+      </p>
+    </div>
+"""
 
 myst_enable_extensions = [
     "colon_fence",
