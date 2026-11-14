@@ -14,14 +14,14 @@ jobs:
   no-medical-images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Keep LFS files as pointers; the check flags those by path anyway
           # and we must not pull patient data onto the runner.
           lfs: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
