@@ -1,4 +1,0 @@
-include pytheranostics/kernels/*.hdr
-include pytheranostics/kernels/*.img
-include pytheranostics/kernels/*.dcm
-include pytheranostics/isotope_data/*.json
