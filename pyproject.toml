@@ -4,10 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pytheranostics"
-version = "0.2.0"
+# Keep in step with the git tag: the release workflow refuses to publish when
+# the tag and this version disagree.
+version = "0.3.0"
 description = "A library of tools to process nuclear medicine scans and take them through the dosimetry workflow to calculate the absorbed dose in target organs."
 readme = "README.md"
-requires-python = ">=3.8"
+# Matches the versions CI actually tests. Do not widen this without adding the
+# version to the test matrix in .github/workflows/ci.yml.
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
     { name = "Carlos Uribe, PhD, MCCPM", email = "curibe@bccrc.ca" },
@@ -15,9 +19,19 @@ authors = [
     { name = "Sara Kurkowska, MD, PhD" }
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Physics",
 ]
 # NOTE: When updating dependencies, also update .pre-commit-config.yaml pytest hook
 dependencies = [

@@ -1,0 +1,126 @@
+name: Release
+
+# Publishing is driven by GitHub Releases, so the release notes and the
+# published artefacts always describe the same thing. Pushing a bare tag does
+# not publish; create a release from the tag instead.
+#
+# Use the manual run to rehearse a release against TestPyPI before publishing
+# for real.
+#
+# Both publish jobs authenticate with PyPI's Trusted Publishing (OIDC). There
+# is no API token to store or rotate. See CONTRIBUTING.md for the one-time
+# setup each index needs.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish the built distributions
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - build-only
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the wheel and the sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Check the package metadata
+        run: |
+          python -m pip install --upgrade twine
+          twine check dist/*
+
+      # A release whose tag disagrees with the version in pyproject.toml would
+      # publish under the wrong number, so stop before anything is uploaded.
+      - name: Confirm the tag matches the declared version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          tag = os.environ["TAG"].removeprefix("v")
+          declared = tomllib.loads(
+              pathlib.Path("pyproject.toml").read_text()
+          )["project"]["version"]
+
+          if tag != declared:
+              raise SystemExit(
+                  f"Release tag {tag!r} does not match the version "
+                  f"{declared!r} in pyproject.toml. Bump the version, or "
+                  f"retag, before publishing."
+              )
+          print(f"Tag and declared version agree: {declared}")
+          PY
+
+      - name: Confirm no medical image data was packaged
+        run: python scripts/check_no_medical_images.py --all
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/pytheranostics
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # TestPyPI keeps earlier rehearsals of the same version.
+          skip-existing: true
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pytheranostics
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

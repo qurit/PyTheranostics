@@ -9,7 +9,7 @@ Installation Guide
 Supported Python versions
 =========================
 
-PyTheranostics requires Python 3.8 or higher.
+PyTheranostics requires Python 3.10 or higher.
 
 .. _intro-install-pytheranostics:
 

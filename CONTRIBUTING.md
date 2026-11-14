@@ -165,6 +165,46 @@ We use GitHub to host code, to track issues and feature requests, as well as acc
 2. Update the CHANGES.md with details of your changes.
 3. The PR will be merged once you have the sign-off of at least one other developer.
 
+## Releasing
+
+Releases are published to PyPI by `.github/workflows/release.yml`, which runs
+when a GitHub Release is published. Pushing a bare tag does not publish
+anything.
+
+### One-time setup
+
+Publishing uses PyPI's Trusted Publishing, so there is no API token to store
+or rotate. Each index needs to be told, once, that this workflow may publish:
+
+- On PyPI, under the project's *Publishing* settings, add a trusted publisher
+  with owner `qurit`, repository `PyTheranostics`, workflow `release.yml` and
+  environment `pypi`.
+- On TestPyPI, add the same with environment `testpypi` if you want to
+  rehearse releases.
+
+Create the matching `pypi` and `testpypi` environments under the repository's
+*Settings > Environments*. Restricting them to the maintainers who may
+release is worthwhile, since an environment is what gates the upload.
+
+### Making a release
+
+1. Update `CHANGES.md`: rename the unreleased section to the version being
+   released and date it.
+2. Bump `version` in `pyproject.toml` to the same number. The workflow
+   refuses to publish when the tag and this version disagree, so these two
+   must match.
+3. Merge both to `main`.
+4. Optionally rehearse: run the Release workflow manually with the target
+   `testpypi` and confirm the upload.
+5. Create a GitHub Release whose tag is the version, with or without a
+   leading `v` (`0.3.0` and `v0.3.0` are both accepted), targeting `main`.
+   Publishing it builds the distributions and uploads them to PyPI.
+6. Check that the new version appears on PyPI and that
+   `pip install pytheranostics==<version>` works in a clean environment.
+
+The documentation reads its version from the installed distribution, so no
+version number needs changing in `docs/`.
+
 ## Any contributions you make will be under the MIT Software License
 
 In short, when you submit code changes, your submissions are understood to be under the same [MIT License](http://choosealicense.com/licenses/mit/) that covers the project. Feel free to contact the maintainers if that's a concern.
